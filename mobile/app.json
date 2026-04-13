@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Match4Marriage Matrimony",
+    "slug": "match4marriage-matrimony",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "match4marriage",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FAF6EE"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.match4marriage.matrimony"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FAF6EE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.match4marriage.matrimony"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "915a3f6f-5556-4213-9c7b-5d4f8cf76e12"
+      }
+    }
+  }
+}

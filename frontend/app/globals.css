@@ -1,0 +1,167 @@
+/* ── Match4Marriage · Warm Matrimony Design System ── */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-warm: #fdfbf9;
+    --text-primary: #1a0a14;
+    --text-secondary: #555;
+    --accent-gold: #dc1e3c;
+    --accent-blue: #3b3fa0;
+    --card-bg: #fff8f9;
+    --border-gold: rgba(220, 30, 60, 0.12);
+    --shadow-warm: 0 4px 20px rgba(220, 30, 60, 0.06);
+
+    /* Font variables — used by all inner app pages */
+    --font-playfair: 'Playfair Display', Georgia, serif;
+    --font-poppins: 'Poppins', system-ui, sans-serif;
+    --font-lato: 'Lato', system-ui, sans-serif;
+    --font-great-vibes: 'Great Vibes', cursive;
+    --font-cinzel: 'Playfair Display', Georgia, serif;
+  }
+
+  html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-poppins);
+    background: linear-gradient(135deg, #fdfbf9 0%, #fff5f7 100%) fixed;
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-weight: 400;
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+
+  /* Great Vibes — for hero taglines, script accents */
+  .font-script {
+    font-family: var(--font-great-vibes);
+  }
+
+  :focus-visible {
+    outline: 2px solid #dc1e3c;
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ── Typography ────────────────────────────────────────────────────── */
+
+h1, h2, h3, h4 {
+  font-family: var(--font-playfair);
+  color: var(--text-primary);
+}
+
+/* Ensure font variables work in all inline styles */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Keyframes ─────────────────────────────────────────────────────── */
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Utilities ─────────────────────────────────────────────────────── */
+
+@layer utilities {
+  .font-playfair {
+    font-family: 'Playfair Display', serif;
+  }
+
+  .font-cinzel {
+    font-family: 'Cinzel Decorative', cursive;
+  }
+
+  .font-poppins {
+    font-family: 'Poppins', sans-serif;
+  }
+
+  .warm-card {
+    background: #ffffff;
+    border: 1px solid var(--border-gold);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-warm);
+    transition: transform 300ms ease, box-shadow 300ms ease;
+  }
+
+  .warm-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px rgba(102, 69, 28, 0.12);
+  }
+
+  .btn-gold {
+    background-color: var(--accent-gold);
+    color: #ffffff;
+    font-weight: 500;
+    border-radius: 9999px;
+    transition: background-color 200ms ease, transform 200ms ease;
+  }
+
+  .btn-gold:hover {
+    background-color: #a0153c;
+    transform: scale(1.02);
+  }
+
+  .btn-outline-gold {
+    border: 2px solid var(--accent-gold);
+    color: var(--accent-gold);
+    font-weight: 500;
+    border-radius: 9999px;
+    background: transparent;
+    transition: all 200ms ease;
+  }
+
+  .btn-outline-gold:hover {
+    background-color: var(--accent-gold);
+    color: #ffffff;
+    transform: scale(1.02);
+  }
+
+  .section-cream {
+    background-color: var(--card-bg);
+  }
+
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  .animate-fade-in-up {
+    animation: fadeInUp 0.6s ease-out forwards;
+  }
+}
+
+/* ── Masonry Hero Animations ──────────────────────────────────────── */
+
+@keyframes scrollName {
+  0% { transform: translateX(60%); }
+  100% { transform: translateX(-60%); }
+}
+
+.name-scroll {
+  display: inline-block;
+  animation: scrollName 3s linear infinite;
+  white-space: nowrap;
+  padding: 0 2rem;
+}
