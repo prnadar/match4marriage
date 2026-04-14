@@ -330,9 +330,10 @@ export default function MyProfilePage() {
     };
 
     const maritalMap: Record<string, string> = {
-      "Never married": "never_married", "Divorced": "divorced",
+      "Never married": "never_married", "Never Married": "never_married",
+      "Divorced": "divorced",
       "Widowed": "widowed", "Separated": "separated",
-      "Awaiting divorce": "awaiting_divorce",
+      "Awaiting divorce": "awaiting_divorce", "Awaiting Divorce": "awaiting_divorce",
     };
     const validMarital = new Set(Object.values(maritalMap));
     const religionMap: Record<string, string> = {
