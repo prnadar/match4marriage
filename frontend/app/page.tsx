@@ -73,12 +73,18 @@ export default function HomePage() {
   const helpRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("onboarding_completed") === "true") {
+      router.replace("/dashboard");
+      return;
+    }
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
       if (!user) return;
       try {
         const res = await profileApi.me();
-        const p = (res.data as any)?.data;
-        if (p && p.first_name && p.first_name.trim()) {
+        const raw: any = res.data;
+        const p = raw?.data ?? raw;
+        if (p && p.first_name && String(p.first_name).trim()) {
+          localStorage.setItem("onboarding_completed", "true");
           router.replace("/dashboard");
         }
       } catch { /* ignore */ }
