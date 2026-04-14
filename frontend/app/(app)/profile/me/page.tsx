@@ -210,13 +210,46 @@ export default function MyProfilePage() {
         setEducation((prev) => ({
           ...prev,
           educationLevel: p.education_level || prev.educationLevel,
+          educationDetail: p.education_field || prev.educationDetail,
           occupation: p.occupation || prev.occupation,
+          employedIn: p.employer || prev.employedIn,
           annualIncome: p.annual_income_inr ? String(p.annual_income_inr) : prev.annualIncome,
+        }));
+
+        // Physical + extras already in general
+        setGeneral((prev) => ({
+          ...prev,
+          complexion: p.complexion || prev.complexion,
+          bodyType: p.body_type || prev.bodyType,
         }));
 
         if (p.about_family) setFamily((prev) => ({ ...prev, aboutFamily: p.about_family }));
         if (p.family_details) setFamily((prev) => ({ ...prev, ...p.family_details }));
         if (p.partner_prefs) setPartner((prev) => ({ ...prev, ...p.partner_prefs }));
+
+        // Rehydrate from kundali_data JSON bucket
+        const k = p.kundali_data || {};
+        if (k && Object.keys(k).length > 0) {
+          setGeneral((prev) => ({
+            ...prev,
+            star: k.star || prev.star,
+            chovvaDosham: k.chovvaDosham || prev.chovvaDosham,
+            bloodGroup: k.bloodGroup || prev.bloodGroup,
+            physicalStatus: k.physicalStatus || prev.physicalStatus,
+            denomination: k.denomination || prev.denomination,
+            profileCreatedBy: k.profileCreatedBy || prev.profileCreatedBy,
+            residentialStatus: k.residentialStatus || prev.residentialStatus,
+            nativePlace: k.nativePlace || prev.nativePlace,
+            diet: k.diet || prev.diet,
+            smoke: k.smoke || prev.smoke,
+            drink: k.drink || prev.drink,
+          }));
+          if (k.interests) setInterests((prev) => ({ ...prev, ...k.interests }));
+          if (k.contact) setContact((prev) => ({ ...prev, ...k.contact }));
+          if (Array.isArray(k.schools) && k.schools.length) setSchools(k.schools);
+          if (Array.isArray(k.colleges) && k.colleges.length) setColleges(k.colleges);
+          if (Array.isArray(k.employment) && k.employment.length) setEmployment(k.employment);
+        }
       } catch (err) {
         console.warn("Failed to load profile:", err);
       }
@@ -287,22 +320,69 @@ export default function MyProfilePage() {
       ? `${general.dobYear}-${String(["January","February","March","April","May","June","July","August","September","October","November","December"].indexOf(general.dobMonth) + 1).padStart(2, "0")}-${String(general.dobDay).padStart(2, "0")}`
       : undefined;
 
+    // height "5ft 8in" -> cm
+    const parseHeightCm = (s: string): number | undefined => {
+      const m = s.match(/(\d+)\s*ft\s*(\d+)?/i);
+      if (!m) return undefined;
+      const ft = parseInt(m[1], 10); const inch = parseInt(m[2] || "0", 10);
+      return Math.round(ft * 30.48 + inch * 2.54);
+    };
+
+    const maritalMap: Record<string, string> = {
+      "Never married": "never_married", "Divorced": "divorced",
+      "Widowed": "widowed", "Separated": "separated",
+      "Awaiting divorce": "awaiting_divorce",
+    };
+
     const payload: Record<string, unknown> = {
+      // Basic
       first_name: nameParts[0] || undefined,
       last_name: nameParts.slice(1).join(" ") || undefined,
       gender: general.gender ? general.gender.toLowerCase() : undefined,
       date_of_birth: dobStr,
+      marital_status: general.maritalStatus ? (maritalMap[general.maritalStatus] || general.maritalStatus.toLowerCase().replace(/\s+/g, "_")) : undefined,
+      // Location
       country: general.countryLivingIn || undefined,
+      city: general.currentLocation || undefined,
+      // Community
       religion: general.religion ? general.religion.toLowerCase() : undefined,
       caste: general.subCaste || undefined,
       mother_tongue: general.motherTongue || undefined,
-      city: general.currentLocation || undefined,
+      // Physical
+      height_cm: general.height ? parseHeightCm(general.height) : undefined,
+      weight_kg: general.weight ? parseInt(general.weight, 10) || undefined : undefined,
+      complexion: general.complexion || undefined,
+      body_type: general.bodyType || undefined,
+      // Bio
       bio: general.aboutMe || undefined,
+      // Education/Career (flat cols)
       education_level: education.educationLevel || undefined,
+      education_field: education.educationDetail || undefined,
       occupation: education.occupation || undefined,
+      employer: education.employedIn || undefined,
       annual_income_inr: education.annualIncome ? parseInt(education.annualIncome, 10) || undefined : undefined,
+      // Family
       about_family: family.aboutFamily || undefined,
-      partner_prefs: Object.values(partner).some((v) => v) ? partner : undefined,
+      family_details: Object.values(family).some((v) => v && String(v).trim()) ? family : undefined,
+      // Partner prefs
+      partner_prefs: Object.values(partner).some((v) => v && String(v).trim()) ? partner : undefined,
+      // Kundali/Astro + lifestyle + contact go into kundali_data JSON blob
+      kundali_data: {
+        star: general.star || undefined,
+        chovvaDosham: general.chovvaDosham || undefined,
+        bloodGroup: general.bloodGroup || undefined,
+        physicalStatus: general.physicalStatus || undefined,
+        denomination: general.denomination || undefined,
+        profileCreatedBy: general.profileCreatedBy || undefined,
+        residentialStatus: general.residentialStatus || undefined,
+        nativePlace: general.nativePlace || undefined,
+        diet: general.diet || undefined,
+        smoke: general.smoke || undefined,
+        drink: general.drink || undefined,
+        interests,
+        contact,
+        schools, colleges, employment,
+      },
     };
 
     // Remove undefined values
@@ -316,7 +396,7 @@ export default function MyProfilePage() {
       console.error("Failed to save profile:", err);
       setSavedTab(null);
     }
-  }, [general, education, family, partner]);
+  }, [general, education, family, partner, interests, contact, schools, colleges, employment]);
 
   // ── Autosave: debounce any change to form state, then PATCH to Neon ────────
   useEffect(() => {
@@ -332,7 +412,7 @@ export default function MyProfilePage() {
       }
     }, 800);
     return () => clearTimeout(t);
-  }, [general, education, family, partner, contact, interests, handleSave]);
+  }, [general, education, family, partner, contact, interests, schools, colleges, employment, handleSave]);
 
   const upGeneral   = (f: string, v: string) => setGeneral  ((p) => ({ ...p, [f]: v }));
   const upEducation = (f: string, v: string) => setEducation((p) => ({ ...p, [f]: v }));
