@@ -82,6 +82,10 @@ class ProfileUpdate(BaseSchema):
     visa_status: str | None = None
     willing_to_relocate: bool | None = None
     photos: list[dict[str, Any]] | None = None
+    marital_status: MaritalStatus | None = None
+    complexion: str | None = None
+    body_type: str | None = None
+    kundali_data: dict[str, Any] | None = None
 
 
 class ProfileRead(TimestampedSchema):
@@ -109,6 +113,14 @@ class ProfileRead(TimestampedSchema):
     willing_to_relocate: bool
     verification_status: str = "draft"
     rejection_reason: str | None = None
+    complexion: str | None = None
+    body_type: str | None = None
+    weight_kg: int | None = None
+    education_field: str | None = None
+    employer: str | None = None
+    family_details: dict[str, Any] = {}
+    partner_prefs: dict[str, Any] = {}
+    kundali_data: dict[str, Any] = {}
 
 
 class ProfileCard(BaseSchema):

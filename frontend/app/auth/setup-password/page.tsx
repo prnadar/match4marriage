@@ -110,6 +110,13 @@ export default function SetupPasswordPage() {
         {loading ? "Saving..." : "Save and continue"}
       </button>
 
+      <button
+        type="button"
+        onClick={() => router.replace("/dashboard")}
+        style={{ width: "100%", marginTop: 10, padding: 10, background: "none", color: "#666", border: "1px solid #ddd", borderRadius: 6, cursor: "pointer" }}
+      >
+        Remind me later
+      </button>
     </div>
   );
 }
