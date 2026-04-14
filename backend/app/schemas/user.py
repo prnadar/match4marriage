@@ -107,6 +107,8 @@ class ProfileRead(TimestampedSchema):
     completeness_score: int
     is_manglik: bool | None
     willing_to_relocate: bool
+    verification_status: str = "draft"
+    rejection_reason: str | None = None
 
 
 class ProfileCard(BaseSchema):

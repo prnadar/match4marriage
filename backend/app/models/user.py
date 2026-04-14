@@ -12,6 +12,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     Date,
+    DateTime,
     Enum,
     ForeignKey,
     Integer,
@@ -179,6 +180,12 @@ class UserProfile(TenantModel):
 
     # Profile completeness (0-100)
     completeness_score: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+
+    # Verification workflow: draft | submitted | approved | rejected
+    verification_status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="profile")
