@@ -118,8 +118,18 @@ export default function DashboardPage() {
         ]);
 
         if (matchRes.status === "fulfilled") {
-          const data = matchRes.value.data;
-          const list = Array.isArray(data) ? data : data?.results ?? data?.matches ?? data?.data ?? [];
+          const data = matchRes.value.data as any;
+          const candidates = [
+            data,
+            data?.data,
+            data?.results,
+            data?.matches,
+            data?.items,
+            data?.data?.results,
+            data?.data?.matches,
+            data?.data?.items,
+          ];
+          const list = candidates.find((c) => Array.isArray(c)) ?? [];
           setMatches(list.map(mapMatch));
         }
 
