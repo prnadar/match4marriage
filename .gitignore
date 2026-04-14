@@ -74,3 +74,4 @@ coverage/
 .cache/
 .git_bak/
 .claude/
+.env.vercel
