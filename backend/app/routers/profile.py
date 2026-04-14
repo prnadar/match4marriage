@@ -478,6 +478,33 @@ async def admin_approve(
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
 
 
+@router.post("/admin/verifications/{user_id}/request-info", response_model=APIResponse[ProfileRead])
+async def admin_request_info(
+    user_id: uuid.UUID,
+    payload: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    roles = current_user.get("roles", []) or current_user.get("https://bandhan.in/roles", [])
+    if "admin" not in roles and "super_admin" not in roles:
+        raise HTTPException(status_code=403, detail="Admin required")
+    note = (payload or {}).get("note", "").strip()
+    if not note:
+        raise HTTPException(status_code=400, detail="note required")
+    res = await db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
+    profile = res.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    # Bounce back to draft so the user can edit + resubmit
+    profile.verification_status = "draft"
+    profile.rejection_reason = f"More info needed: {note}"
+    profile.reviewed_at = datetime.utcnow()
+    await db.flush()
+    await db.refresh(profile)
+    return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+
+
 @router.post("/admin/verifications/{user_id}/reject", response_model=APIResponse[ProfileRead])
 async def admin_reject(
     user_id: uuid.UUID,
