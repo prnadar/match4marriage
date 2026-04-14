@@ -109,6 +109,7 @@ async def browse_profiles(
             User.deleted_at.is_(None),
             User.is_active == True,  # noqa: E712
             UserProfile.user_id != caller_id,
+            UserProfile.verification_status == "approved",
         )
     )
 
@@ -348,6 +349,122 @@ async def set_primary_photo(
     if not found:
         raise HTTPException(status_code=404, detail="Photo not found")
     profile.photos = photos
+    await db.flush()
+    await db.refresh(profile)
+    return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+
+
+def _is_profile_complete(p: UserProfile) -> tuple[bool, list[str]]:
+    """Minimum required fields for submission."""
+    missing = []
+    if not p.first_name or not p.first_name.strip():
+        missing.append("first_name")
+    if not p.last_name or not p.last_name.strip():
+        missing.append("last_name")
+    if not p.date_of_birth:
+        missing.append("date_of_birth")
+    if not p.gender:
+        missing.append("gender")
+    if not p.religion:
+        missing.append("religion")
+    if not p.country:
+        missing.append("country")
+    if not p.mother_tongue:
+        missing.append("mother_tongue")
+    if not p.education_level:
+        missing.append("education_level")
+    if not p.occupation:
+        missing.append("occupation")
+    if not p.bio or len(p.bio.strip()) < 20:
+        missing.append("bio")
+    if not (p.photos and len(p.photos) > 0):
+        missing.append("photos")
+    return (len(missing) == 0, missing)
+
+
+@router.post("/me/submit", response_model=APIResponse[ProfileRead])
+async def submit_profile_for_review(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+    if profile.verification_status == "approved":
+        return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+    complete, missing = _is_profile_complete(profile)
+    if not complete:
+        raise HTTPException(status_code=400, detail={"message": "Profile incomplete", "missing": missing})
+    profile.verification_status = "submitted"
+    profile.rejection_reason = None
+    profile.submitted_at = datetime.utcnow()
+    await db.flush()
+    await db.refresh(profile)
+    return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+
+
+@router.get("/admin/verifications", response_model=APIResponse[list[dict]])
+async def admin_list_verifications(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+    status_filter: str = Query(default="submitted", description="submitted | approved | rejected | all"),
+):
+    roles = current_user.get("roles", []) or current_user.get("https://bandhan.in/roles", [])
+    if "admin" not in roles and "super_admin" not in roles:
+        raise HTTPException(status_code=403, detail="Admin required")
+    q = select(UserProfile).where(UserProfile.deleted_at.is_(None))
+    if status_filter != "all":
+        q = q.where(UserProfile.verification_status == status_filter)
+    q = q.order_by(UserProfile.submitted_at.desc().nullslast())
+    res = await db.execute(q)
+    profiles = res.scalars().all()
+    items = [ProfileRead.model_validate(p, from_attributes=True).model_dump(mode="json") for p in profiles]
+    return APIResponse(success=True, data=items)
+
+
+@router.post("/admin/verifications/{user_id}/approve", response_model=APIResponse[ProfileRead])
+async def admin_approve(
+    user_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    roles = current_user.get("roles", []) or current_user.get("https://bandhan.in/roles", [])
+    if "admin" not in roles and "super_admin" not in roles:
+        raise HTTPException(status_code=403, detail="Admin required")
+    res = await db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
+    profile = res.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    profile.verification_status = "approved"
+    profile.rejection_reason = None
+    profile.reviewed_at = datetime.utcnow()
+    await db.flush()
+    await db.refresh(profile)
+    return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+
+
+@router.post("/admin/verifications/{user_id}/reject", response_model=APIResponse[ProfileRead])
+async def admin_reject(
+    user_id: uuid.UUID,
+    payload: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    roles = current_user.get("roles", []) or current_user.get("https://bandhan.in/roles", [])
+    if "admin" not in roles and "super_admin" not in roles:
+        raise HTTPException(status_code=403, detail="Admin required")
+    reason = (payload or {}).get("reason", "").strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="reason required")
+    res = await db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
+    profile = res.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    profile.verification_status = "rejected"
+    profile.rejection_reason = reason
+    profile.reviewed_at = datetime.utcnow()
     await db.flush()
     await db.refresh(profile)
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))

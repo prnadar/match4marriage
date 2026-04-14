@@ -235,6 +235,51 @@ export default function MyProfilePage() {
     })();
   }, []);
 
+  // ── Verification status (draft | submitted | approved | rejected) ─────────
+  const [verifStatus, setVerifStatus] = useState<string>("draft");
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const loadedRef = useRef(false);
+
+  // Pick up status from first profile load
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await profileApi.me();
+        const p = (res.data as any)?.data ?? res.data;
+        if (p) {
+          setVerifStatus(p.verification_status || "draft");
+          setRejectionReason(p.rejection_reason || null);
+        }
+      } catch { /* ignore */ }
+      loadedRef.current = true;
+    })();
+  }, []);
+
+  const handleSubmitForReview = async () => {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await api.post("/api/v1/profile/me/submit", {});
+      const p = (res.data as any)?.data;
+      if (p) {
+        setVerifStatus(p.verification_status || "submitted");
+        setRejectionReason(p.rejection_reason || null);
+      }
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      if (detail?.missing) {
+        setSubmitError(`Missing required fields: ${detail.missing.join(", ")}`);
+      } else {
+        setSubmitError(detail?.message || detail || err?.message || "Could not submit.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSave = useCallback(async (tabId: string) => {
     // Map form state → backend fields
     const nameParts = general.name.trim().split(/\s+/);
@@ -273,6 +318,22 @@ export default function MyProfilePage() {
     }
   }, [general, education, family, partner]);
 
+  // ── Autosave: debounce any change to form state, then PATCH to Neon ────────
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    setAutoSaveState("saving");
+    const t = setTimeout(async () => {
+      try {
+        await handleSave("auto");
+        setAutoSaveState("saved");
+        setTimeout(() => setAutoSaveState("idle"), 1500);
+      } catch {
+        setAutoSaveState("error");
+      }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [general, education, family, partner, contact, interests, handleSave]);
+
   const upGeneral   = (f: string, v: string) => setGeneral  ((p) => ({ ...p, [f]: v }));
   const upEducation = (f: string, v: string) => setEducation((p) => ({ ...p, [f]: v }));
   const upFamily    = (f: string, v: string) => setFamily   ((p) => ({ ...p, [f]: v }));
@@ -297,6 +358,47 @@ export default function MyProfilePage() {
       }}>
         My Profile
       </h1>
+
+      {/* Verification status banner */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 12, padding: "12px 16px", borderRadius: 10, marginBottom: 16,
+        background: verifStatus === "approved" ? "#e8f5e9"
+                  : verifStatus === "submitted" ? "#fff4e0"
+                  : verifStatus === "rejected" ? "#ffe9ec"
+                  : "#f3f3f3",
+        border: "1px solid rgba(0,0,0,0.06)",
+        fontSize: 14,
+      }}>
+        <div>
+          {verifStatus === "approved" && <span>✅ <strong>Approved.</strong> Your profile is live and visible to matches.</span>}
+          {verifStatus === "submitted" && <span>⏳ <strong>Under review.</strong> We'll notify you once verified.</span>}
+          {verifStatus === "rejected" && <span>⚠️ <strong>Changes needed:</strong> {rejectionReason || "please update and resubmit."}</span>}
+          {verifStatus === "draft" && <span>📝 <strong>Draft.</strong> Complete all sections, then submit for verification.</span>}
+          <span style={{ marginLeft: 12, color: "#666", fontSize: 12 }}>
+            {autoSaveState === "saving" && "Saving…"}
+            {autoSaveState === "saved" && "Saved ✓"}
+            {autoSaveState === "error" && "Save failed"}
+          </span>
+        </div>
+        {(verifStatus === "draft" || verifStatus === "rejected") && (
+          <button
+            onClick={handleSubmitForReview}
+            disabled={submitting}
+            style={{
+              padding: "8px 16px", borderRadius: 6, border: "none",
+              background: "#7B2D3A", color: "#fff", cursor: "pointer", fontWeight: 600,
+            }}
+          >
+            {submitting ? "Submitting…" : "Submit for verification"}
+          </button>
+        )}
+      </div>
+      {submitError && (
+        <div style={{ padding: "10px 14px", background: "#ffe9ec", color: "#7B2D3A", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+          {submitError}
+        </div>
+      )}
 
       <div style={{
         display: "grid",

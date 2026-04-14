@@ -402,6 +402,7 @@ async def generate_daily_matches(
                 select(UserProfile).where(
                     UserProfile.user_id == cu.id,
                     UserProfile.deleted_at.is_(None),
+                    UserProfile.verification_status == "approved",
                 )
             )
             cp = cp_result.scalar_one_or_none()

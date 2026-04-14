@@ -26,9 +26,30 @@ configure_logging(debug=settings.DEBUG)
 logger = get_logger(__name__)
 
 
+async def _ensure_verification_columns() -> None:
+    """Idempotent: add verification workflow columns if missing (Vercel can't run alembic)."""
+    from sqlalchemy import text
+    stmts = [
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'draft'",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP",
+    ]
+    async with engine.begin() as conn:
+        for s in stmts:
+            try:
+                await conn.execute(text(s))
+            except Exception as e:
+                logger.warning("schema_guard_failed", stmt=s, error=str(e))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("startup", environment=settings.ENVIRONMENT, version=settings.APP_VERSION)
+    try:
+        await _ensure_verification_columns()
+    except Exception as e:
+        logger.warning("schema_guard_error", error=str(e))
     yield
     await close_redis()
     await engine.dispose()
