@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import uuid
 
-import boto3
 import cloudinary
 import cloudinary.api
 import cloudinary.uploader
-from botocore.exceptions import ClientError
+# boto3/S3 removed for Vercel launch — Cloudinary is the primary path.
+boto3 = None  # type: ignore[assignment]
+class ClientError(Exception):  # type: ignore[no-redef]
+    pass
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -104,12 +106,7 @@ def delete_photo(key: str) -> None:
 
 # Legacy S3 helpers kept for non-photo flows during migration.
 def _s3_client():
-    return boto3.client(
-        "s3",
-        region_name=settings.AWS_REGION,
-        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-    )
+    raise RuntimeError("S3 disabled at launch — use Cloudinary helpers above")
 
 
 def generate_upload_url(

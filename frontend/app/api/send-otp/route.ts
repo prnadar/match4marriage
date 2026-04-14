@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 
 const RESEND_KEY = process.env.RESEND_API_KEY!;
-const OTP_SECRET = process.env.SUPABASE_SERVICE_KEY!; // reuse as HMAC secret
+const OTP_SECRET = process.env.OTP_HMAC_SECRET || "dev-only-rotate-me";
 
 function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
