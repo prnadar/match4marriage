@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
-import { profileApi } from "@/lib/api";
+import { profileApi, api } from "@/lib/api";
 import {
   Heart, Phone, User, Brain, Shield, Sliders,
   Check, ArrowRight, ArrowLeft, Upload, Star,
@@ -224,7 +224,10 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(1);
   const [authChecked, setAuthChecked] = useState(false);
 
-  // If user is already signed in AND has a profile, skip onboarding entirely
+  // Auth guard + resume logic. Runs once on mount.
+  // - No user: start at step 1
+  // - User + complete profile: skip to dashboard
+  // - User + partial profile: prefill fields + jump to first incomplete step
   useEffect(() => {
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
       if (!user) {
@@ -234,13 +237,43 @@ export default function OnboardingPage() {
       try {
         const res = await profileApi.me();
         const p = (res.data as any)?.data;
-        if (p && p.first_name && p.first_name.trim().length > 0) {
-          localStorage.setItem("onboarding_completed", "true");
-          router.replace("/dashboard");
-          return;
+        if (p) {
+          const hasBasic = !!(p.first_name && p.first_name.trim());
+          const hasIdVerify = !!(p.id_verified);
+          if (hasBasic && hasIdVerify) {
+            localStorage.setItem("onboarding_completed", "true");
+            router.replace("/dashboard");
+            return;
+          }
+          // Prefill form from saved profile (resume)
+          if (hasBasic) {
+            const fullName = [p.first_name, p.last_name].filter(Boolean).join(" ");
+            const religionDisplay: Record<string, string> = {
+              hindu: "Hindu", muslim: "Muslim", christian: "Christian", sikh: "Sikh",
+              jain: "Jain", buddhist: "Buddhist", parsi: "Parsi / Zoroastrian",
+              jewish: "Jewish", other: "Other",
+            };
+            setForm((prev) => ({
+              ...prev,
+              name: fullName || prev.name,
+              dob: p.date_of_birth || prev.dob,
+              gender: p.gender ? (p.gender.charAt(0).toUpperCase() + p.gender.slice(1)) : prev.gender,
+              religion: p.religion ? (religionDisplay[p.religion] || p.religion) : prev.religion,
+              caste: p.caste || prev.caste,
+              country: p.country || prev.country,
+              motherTongue: p.mother_tongue || prev.motherTongue,
+              education: p.education_level || prev.education,
+              profession: p.occupation || prev.profession,
+            }));
+          }
+          // Phone is already verified (Firebase session exists) → skip step 2
+          setOtpVerified(true);
+          // If basic info present but ID not, jump to step 3
+          if (hasBasic && !hasIdVerify) setStep(3);
+          else if (!hasBasic) setStep(1);
         }
       } catch {
-        // backend unreachable or no profile — let them onboard
+        // backend unreachable — let them start fresh
       }
       setAuthChecked(true);
     });
@@ -258,6 +291,7 @@ export default function OnboardingPage() {
   // Firebase phone auth refs
   const confirmationRef = useRef<ConfirmationResult | null>(null);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
+  const saveBasicRef = useRef<(() => Promise<boolean>) | null>(null);
 
   const getRecaptchaVerifier = useCallback(() => {
     if (recaptchaRef.current) return recaptchaRef.current;
@@ -346,6 +380,10 @@ export default function OnboardingPage() {
       } catch {
         // No profile yet — continue onboarding
       }
+      // Flush step-1 form data to Neon now that Firebase session exists.
+      if (saveBasicRef.current) {
+        await saveBasicRef.current();
+      }
       setOtpVerified(true);
     } catch (err: unknown) {
       console.error("OTP verification error:", err);
@@ -392,47 +430,58 @@ export default function OnboardingPage() {
 
   const [saving, setSaving] = useState(false);
 
+  // Persist basic profile fields to Neon. Requires active Firebase session.
+  const saveBasicToBackend = useCallback(async () => {
+    if (!firebaseAuth.currentUser) return false;
+    if (!form.name) return false;
+    const nameParts = form.name.trim().split(/\s+/);
+    const religionMap: Record<string, string> = {
+      "Hindu": "hindu", "Muslim": "muslim", "Christian": "christian",
+      "Sikh": "sikh", "Jain": "jain", "Buddhist": "buddhist",
+      "Parsi / Zoroastrian": "parsi", "Jewish": "jewish",
+      "No Religion": "other", "Other": "other",
+    };
+    try {
+      await api.patch("/api/v1/profile/me", {
+        first_name: nameParts[0] || undefined,
+        last_name: nameParts.slice(1).join(" ") || undefined,
+        gender: form.gender ? form.gender.toLowerCase() : undefined,
+        date_of_birth: form.dob || undefined,
+        religion: form.religion ? (religionMap[form.religion] || form.religion.toLowerCase()) : undefined,
+        caste: form.caste || undefined,
+        country: form.country || undefined,
+        mother_tongue: form.motherTongue || undefined,
+        education_level: form.education || undefined,
+        occupation: form.profession || undefined,
+      });
+      return true;
+    } catch (err) {
+      console.error("Save basic profile failed:", err);
+      return false;
+    }
+  }, [form]);
+
+  useEffect(() => {
+    saveBasicRef.current = saveBasicToBackend;
+  }, [saveBasicToBackend]);
+
   const next = async () => {
     if (step === 1) {
-      // Save basic profile to backend before moving on
-      const userId = localStorage.getItem("backend_user_id") || localStorage.getItem("user_id") || "";
-      if (userId && form.name) {
-        setSaving(true);
-        try {
-          const nameParts = form.name.trim().split(/\s+/);
-          const firstName = nameParts[0] || "";
-          const lastName = nameParts.slice(1).join(" ") || "";
-          // Map display values to backend enum values
-          const religionMap: Record<string, string> = {
-            "Hindu": "hindu", "Muslim": "muslim", "Christian": "christian",
-            "Sikh": "sikh", "Jain": "jain", "Buddhist": "buddhist",
-            "Parsi / Zoroastrian": "parsi", "Jewish": "jewish",
-            "No Religion": "other", "Other": "other",
-          };
-          await profileApi.updateProfile(userId, {
-            first_name: firstName,
-            last_name: lastName,
-            gender: form.gender ? form.gender.toLowerCase() : undefined,
-            date_of_birth: form.dob || undefined,
-            religion: form.religion ? (religionMap[form.religion] || form.religion.toLowerCase()) : undefined,
-            caste: form.caste || undefined,
-            country: form.country || undefined,
-            mother_tongue: form.motherTongue || undefined,
-            education_level: form.education || undefined,
-            occupation: form.profession || undefined,
-          });
-        } catch (err) {
-          console.warn("Failed to save profile to backend:", err);
-          // Don't block — user can still proceed
-        } finally {
-          setSaving(false);
-        }
-      }
+      // Step 1 → Step 2: data kept in React state; flushed after OTP auth.
       setStep(2);
-    } else if (step < steps.length) {
-      setStep(step + 1);
-    } else {
-      // All 3 steps done — mark onboarding as complete
+    } else if (step === 2) {
+      // OTP already verified + saveBasicToBackend ran on verify success
+      setStep(3);
+    } else if (step === 3) {
+      setSaving(true);
+      try {
+        // Mark ID verified (stub for now — real KYC provider later)
+        await api.patch("/api/v1/profile/me", { visa_status: "id_uploaded" });
+      } catch (err) {
+        console.warn("ID verify persist failed:", err);
+      } finally {
+        setSaving(false);
+      }
       localStorage.setItem("onboarding_completed", "true");
       localStorage.removeItem("onboarding_step");
       router.push("/auth/setup-password");
