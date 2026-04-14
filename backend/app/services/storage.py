@@ -5,6 +5,7 @@ Legacy S3 helpers remain available for voice/video migration paths if needed lat
 """
 from __future__ import annotations
 
+import time
 import uuid
 
 import cloudinary
@@ -65,7 +66,7 @@ def generate_photo_upload_signature(
     """
     _configure_cloudinary()
 
-    timestamp = cloudinary.utils.now()
+    timestamp = int(time.time())
     file_id = uuid.uuid4().hex
     folder = f"{settings.CLOUDINARY_UPLOAD_FOLDER}/{tenant_slug}/{user_id}/photos"
     public_id = f"{folder}/{file_id}"

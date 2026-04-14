@@ -81,6 +81,7 @@ class ProfileUpdate(BaseSchema):
     is_manglik: bool | None = None
     visa_status: str | None = None
     willing_to_relocate: bool | None = None
+    photos: list[dict[str, Any]] | None = None
 
 
 class ProfileRead(TimestampedSchema):

@@ -204,6 +204,149 @@ async def browse_profiles(
     return PaginatedResponse.create(items=cards, total=total, page=page, limit=limit)
 
 
+async def _get_or_create_own_profile(
+    db: AsyncSession,
+    current_user: dict,
+    tenant_slug: str,
+) -> UserProfile:
+    from sqlalchemy import text as sa_text
+    user_id = uuid.UUID(current_user["sub"])
+    result = await db.execute(
+        select(UserProfile).where(
+            UserProfile.user_id == user_id,
+            UserProfile.deleted_at.is_(None),
+        )
+    )
+    profile = result.scalar_one_or_none()
+    if profile:
+        return profile
+
+    tenant_row = (await db.execute(
+        sa_text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"), {"slug": tenant_slug}
+    )).fetchone()
+    tenant_uuid = tenant_row[0] if tenant_row else None
+    await db.execute(
+        sa_text(
+            "INSERT INTO users (id, tenant_id, is_phone_verified, created_at, updated_at) "
+            "VALUES (:uid, :tid, true, NOW(), NOW()) ON CONFLICT (id) DO NOTHING"
+        ),
+        {"uid": str(user_id), "tid": str(tenant_uuid)},
+    )
+    await db.flush()
+    profile = UserProfile(
+        id=uuid.uuid4(),
+        tenant_id=tenant_uuid,
+        user_id=user_id,
+        first_name="",
+        last_name="",
+    )
+    db.add(profile)
+    await db.flush()
+    await db.refresh(profile)
+    return profile
+
+
+@router.get("/me", response_model=APIResponse[ProfileRead])
+async def get_my_profile(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+    return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+
+
+@router.patch("/me", response_model=APIResponse[ProfileRead])
+async def patch_my_profile(
+    payload: ProfileUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+    for key, value in payload.model_dump(exclude_none=True).items():
+        setattr(profile, key, value)
+    profile.completeness_score = compute_profile_completeness(profile)
+    await db.flush()
+    await db.refresh(profile)
+    return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+
+
+@router.post("/me/photos", response_model=APIResponse[ProfileRead])
+async def add_my_photo(
+    payload: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    """Append a photo {url, key, is_primary?} to the current user's profile."""
+    url = payload.get("url")
+    key = payload.get("key")
+    if not url or not key:
+        raise HTTPException(status_code=400, detail="url and key required")
+    profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+    photos = list(profile.photos or [])
+    is_primary = bool(payload.get("is_primary")) or len(photos) == 0
+    if is_primary:
+        for p in photos:
+            p["is_primary"] = False
+    photos.append({"url": url, "key": key, "is_primary": is_primary})
+    profile.photos = photos
+    profile.completeness_score = compute_profile_completeness(profile)
+    await db.flush()
+    await db.refresh(profile)
+    return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+
+
+@router.delete("/me/photos", response_model=APIResponse[ProfileRead])
+async def delete_my_photo(
+    key: str = Query(..., description="Cloudinary public_id of the photo to remove"),
+    db: Annotated[AsyncSession, Depends(get_db)] = None,
+    current_user: Annotated[dict, Depends(get_current_user)] = None,
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    from app.services.storage import delete_photo
+    profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+    photos = [p for p in (profile.photos or []) if p.get("key") != key]
+    if photos and not any(p.get("is_primary") for p in photos):
+        photos[0]["is_primary"] = True
+    profile.photos = photos
+    profile.completeness_score = compute_profile_completeness(profile)
+    try:
+        delete_photo(key)
+    except Exception as exc:
+        logger.warning("cloudinary_delete_soft_fail", error=str(exc), key=key)
+    await db.flush()
+    await db.refresh(profile)
+    return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+
+
+@router.post("/me/photos/primary", response_model=APIResponse[ProfileRead])
+async def set_primary_photo(
+    payload: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    key = payload.get("key")
+    if not key:
+        raise HTTPException(status_code=400, detail="key required")
+    profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+    photos = list(profile.photos or [])
+    found = False
+    for p in photos:
+        is_match = p.get("key") == key
+        p["is_primary"] = is_match
+        if is_match:
+            found = True
+    if not found:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    profile.photos = photos
+    await db.flush()
+    await db.refresh(profile)
+    return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+
+
 @router.get("/{user_id}", response_model=APIResponse[ProfileRead])
 async def get_profile(
     user_id: uuid.UUID,
