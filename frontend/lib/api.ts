@@ -17,10 +17,22 @@ async function request<T = any>(path: string, init: RequestInit = {}): Promise<A
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers });
   if (!res.ok) {
-    let detail = res.statusText;
+    let detail: string = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail || body.error || detail;
+      const d = body.detail ?? body.error;
+      if (Array.isArray(d)) {
+        detail = d
+          .map((e: any) => {
+            const loc = Array.isArray(e?.loc) ? e.loc.filter((x: any) => x !== "body").join(".") : "";
+            return loc ? `${loc}: ${e.msg || e.type || "invalid"}` : (e.msg || e.type || JSON.stringify(e));
+          })
+          .join("; ");
+      } else if (typeof d === "string") {
+        detail = d;
+      } else if (d) {
+        detail = JSON.stringify(d);
+      }
     } catch {}
     throw new Error(`${res.status}: ${detail}`);
   }

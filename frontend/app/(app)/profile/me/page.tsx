@@ -274,6 +274,7 @@ export default function MyProfilePage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState<string>("");
   const loadedRef = useRef(false);
 
   // Pick up status from first profile load
@@ -405,10 +406,13 @@ export default function MyProfilePage() {
     try {
       await api.patch("/api/v1/profile/me", payload);
       setSavedTab(tabId);
+      setSaveError("");
       setTimeout(() => setSavedTab(null), 2000);
-    } catch (err) {
+    } catch (err: any) {
+      const msg = err?.message || String(err);
       console.error("Failed to save profile:", err, "payload:", payload);
       setSavedTab(null);
+      setSaveError(msg);
       throw err;
     }
   }, [general, education, family, partner, interests, contact, schools, colleges, employment]);
@@ -474,7 +478,11 @@ export default function MyProfilePage() {
           <span style={{ marginLeft: 12, color: "#666", fontSize: 12 }}>
             {autoSaveState === "saving" && "Saving…"}
             {autoSaveState === "saved" && "Saved ✓"}
-            {autoSaveState === "error" && "Save failed"}
+            {autoSaveState === "error" && (
+              <span style={{ color: "#c00" }} title={saveError}>
+                Save failed{saveError ? `: ${saveError.slice(0, 160)}` : ""}
+              </span>
+            )}
           </span>
         </div>
         {(verifStatus === "draft" || verifStatus === "rejected") && (
