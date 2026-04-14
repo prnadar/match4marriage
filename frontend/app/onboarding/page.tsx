@@ -229,6 +229,11 @@ export default function OnboardingPage() {
   // - User + complete profile: skip to dashboard
   // - User + partial profile: prefill fields + jump to first incomplete step
   useEffect(() => {
+    // Fast-path: returning user flag set by previous successful onboarding
+    if (typeof window !== "undefined" && localStorage.getItem("onboarding_completed") === "true") {
+      router.replace("/dashboard");
+      return;
+    }
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
       if (!user) {
         setAuthChecked(true);
@@ -236,9 +241,11 @@ export default function OnboardingPage() {
       }
       try {
         const res = await profileApi.me();
-        const p = (res.data as any)?.data;
+        // Backend may return { data: profile } or profile directly
+        const raw: any = res.data;
+        const p = raw?.data ?? raw;
         if (p) {
-          const hasBasic = !!(p.first_name && p.first_name.trim());
+          const hasBasic = !!(p.first_name && String(p.first_name).trim());
           const hasIdVerify = !!(p.id_verified);
           if (hasBasic) {
             localStorage.setItem("onboarding_completed", "true");
