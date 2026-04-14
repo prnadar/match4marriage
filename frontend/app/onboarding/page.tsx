@@ -222,6 +222,19 @@ const COUNTRY_CODES = [
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // If user is already signed in, skip onboarding entirely
+  useEffect(() => {
+    const unsub = firebaseAuth.onAuthStateChanged((user) => {
+      if (user && localStorage.getItem("onboarding_completed") === "true") {
+        router.replace("/dashboard");
+        return;
+      }
+      setAuthChecked(true);
+    });
+    return unsub;
+  }, [router]);
   const [phone, setPhone] = useState("");
   const [countryCode, setCountryCode] = useState("+44");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -403,6 +416,8 @@ export default function OnboardingPage() {
     }
   };
   const back = () => step > 1 && setStep(step - 1);
+
+  if (!authChecked) return null;
 
   return (
     <div style={{
