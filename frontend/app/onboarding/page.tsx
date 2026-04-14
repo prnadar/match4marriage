@@ -399,7 +399,7 @@ export default function OnboardingPage() {
       // All 3 steps done — mark onboarding as complete
       localStorage.setItem("onboarding_completed", "true");
       localStorage.removeItem("onboarding_step");
-      router.push("/dashboard");
+      router.push("/auth/setup-password");
     }
   };
   const back = () => step > 1 && setStep(step - 1);
