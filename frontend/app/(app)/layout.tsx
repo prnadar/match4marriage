@@ -9,7 +9,8 @@ import {
   CreditCard, Home, Menu, X,
 } from "lucide-react";
 import { profileApi } from "@/lib/api";
-import { supabase } from "@/lib/supabase";
+import { firebaseAuth } from "@/lib/firebase";
+import { signOut } from "firebase/auth";
 
 const navItems = [
   { href: "/profile/me",   label: "My Profile",   icon: User            },
@@ -23,28 +24,20 @@ const navItems = [
 ];
 
 function VerificationBanner() {
-  // Check localStorage for verification status — defaults to unverified until backend confirms
   const [verified, setVerified] = useState(true);
   const [dismissed, setDismissed] = useState(false);
 
-  useState(() => {
-    if (typeof window !== "undefined") {
-      const session = localStorage.getItem("legallabs_session") || localStorage.getItem("auth_token");
-      // Check if id_verified flag is set
+  useEffect(() => {
+    (async () => {
       try {
-        const stored = localStorage.getItem("user_profile");
-        if (stored) {
-          const profile = JSON.parse(stored);
-          setVerified(!!profile.id_verified);
-        } else {
-          // No profile stored yet — treat as unverified
-          setVerified(false);
-        }
+        const res = await profileApi.me();
+        const p = (res.data as any)?.data;
+        setVerified(!!(p && p.completeness_score >= 60));
       } catch {
         setVerified(false);
       }
-    }
-  });
+    })();
+  }, []);
 
   if (verified || dismissed) return null;
 
@@ -84,52 +77,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarInitial, setSidebarInitial] = useState("");
   const [sidebarTrustScore, setSidebarTrustScore] = useState<number | null>(null);
 
-  // Redirect to onboarding if the 3 steps haven't been completed
+  // Auth guard: if Firebase says no user, send to onboarding.
+  // If user exists but has no backend profile, also send to onboarding.
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const onboardingDone = localStorage.getItem("onboarding_completed") === "true";
-      if (!onboardingDone) {
-        router.replace("/onboarding");
+    const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
+      if (!user) { router.replace("/onboarding"); return; }
+      try {
+        const res = await profileApi.me();
+        const p = (res.data as any)?.data;
+        if (!p || !p.first_name || !p.first_name.trim()) {
+          router.replace("/onboarding");
+        }
+      } catch {
+        // backend unreachable — leave user on page
       }
-    }
+    });
+    return unsub;
   }, [router]);
 
   useEffect(() => {
     async function loadSidebar() {
-      let userId = localStorage.getItem("backend_user_id") || localStorage.getItem("user_id") || "";
-
-      // Fallback: get user ID from Supabase if not in localStorage
-      if (!userId) {
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user?.id) {
-            userId = user.id;
-            localStorage.setItem("backend_user_id", userId);
-            if (!localStorage.getItem("auth_token")) {
-              localStorage.setItem("auth_token", `demo:${userId}`);
-            }
-          }
-        } catch (_e) { /* ignore */ }
-      }
-
-      if (!userId) return;
-      if (!localStorage.getItem("auth_token")) {
-        localStorage.setItem("auth_token", `demo:${userId}`);
-      }
-
       let resolvedName = "";
       try {
-        const res = await profileApi.getProfile(userId);
-        const p = res.data?.data ?? res.data;
+        const res = await profileApi.me();
+        const p = (res.data as any)?.data ?? res.data;
         resolvedName = p?.first_name
           ? `${p.first_name}${p.last_name ? ` ${p.last_name.charAt(0)}.` : ""}`
-          : p?.full_name || p?.name || "";
-      } catch (_e) { /* ignore */ }
+          : "";
+      } catch { /* ignore */ }
 
-      // Fallback: use locally stored name from registration if backend returned nothing
-      if (!resolvedName) {
-        resolvedName = localStorage.getItem("user_name") || "";
-      }
       if (resolvedName) {
         setSidebarName(resolvedName);
         setSidebarInitial(resolvedName.charAt(0).toUpperCase());
@@ -137,10 +113,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       try {
         const res = await profileApi.getTrustScore();
-        const d = res.data?.data ?? res.data;
+        const d = (res.data as any)?.data ?? res.data;
         if (d?.total !== undefined) setSidebarTrustScore(d.total);
         else if (d?.trust_score !== undefined) setSidebarTrustScore(d.trust_score);
-      } catch (_e) { /* ignore */ }
+      } catch { /* ignore */ }
     }
     loadSidebar();
   }, [pathname]);
@@ -317,17 +293,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             );
           })}
           <button
-            onClick={() => {
-              // Clear all auth tokens
-              localStorage.removeItem("auth_token");
-              localStorage.removeItem("backend_token");
-              localStorage.removeItem("backend_user_id");
-              localStorage.removeItem("user_id");
-              localStorage.removeItem("supabase_auth_token");
-              localStorage.removeItem("user_profile");
-              localStorage.removeItem("legallabs_session");
-              // Redirect to home
-              window.location.href = "/";
+            onClick={async () => {
+              try { await signOut(firebaseAuth); } catch {}
+              try {
+                localStorage.removeItem("onboarding_completed");
+                localStorage.removeItem("onboarding_step");
+                localStorage.removeItem("user_name");
+                localStorage.removeItem("user_gender");
+              } catch {}
+              window.location.href = "/auth/login";
             }}
             title={collapsed ? "Sign Out" : undefined}
             className="w-full flex items-center rounded-xl text-sm transition-colors"
