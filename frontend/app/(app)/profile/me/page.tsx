@@ -374,7 +374,8 @@ export default function MyProfilePage() {
           {verifStatus === "approved" && <span>✅ <strong>Approved.</strong> Your profile is live and visible to matches.</span>}
           {verifStatus === "submitted" && <span>⏳ <strong>Under review.</strong> We'll notify you once verified.</span>}
           {verifStatus === "rejected" && <span>⚠️ <strong>Changes needed:</strong> {rejectionReason || "please update and resubmit."}</span>}
-          {verifStatus === "draft" && <span>📝 <strong>Draft.</strong> Complete all sections, then submit for verification.</span>}
+          {verifStatus === "draft" && rejectionReason && <span>ℹ️ <strong>Admin request:</strong> {rejectionReason.replace(/^More info needed: /, "")} — update and resubmit.</span>}
+          {verifStatus === "draft" && !rejectionReason && <span>📝 <strong>Draft.</strong> Complete all sections, then submit for verification.</span>}
           <span style={{ marginLeft: 12, color: "#666", fontSize: 12 }}>
             {autoSaveState === "saving" && "Saving…"}
             {autoSaveState === "saved" && "Saved ✓"}

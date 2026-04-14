@@ -58,6 +58,20 @@ export default function AdminVerificationsPage() {
     }
   };
 
+  const requestInfo = async (id: string) => {
+    const note = (reasonDrafts[id] || "").trim();
+    if (!note) { alert("Enter what extra info you need"); return; }
+    setBusyId(id);
+    try {
+      await api.post(`/api/v1/profile/admin/verifications/${id}/request-info`, { note });
+      await load();
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || e?.message || "Request-info failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const reject = async (id: string) => {
     const reason = (reasonDrafts[id] || "").trim();
     if (!reason) { alert("Enter a rejection reason"); return; }
@@ -158,11 +172,18 @@ export default function AdminVerificationsPage() {
                       </button>
                       <input
                         type="text"
-                        placeholder="Rejection reason"
+                        placeholder="Reason / extra info needed"
                         value={reasonDrafts[p.user_id] || ""}
                         onChange={(e) => setReasonDrafts((r) => ({ ...r, [p.user_id]: e.target.value }))}
                         style={{ flex: 1, padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
                       />
+                      <button
+                        onClick={() => requestInfo(p.user_id)}
+                        disabled={busyId === p.user_id}
+                        style={{ padding: "8px 14px", background: "#ef6c00", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}
+                      >
+                        Request Info
+                      </button>
                       <button
                         onClick={() => reject(p.user_id)}
                         disabled={busyId === p.user_id}
