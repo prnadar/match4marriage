@@ -252,8 +252,14 @@ async def get_my_profile(
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
-    profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
-    return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+    try:
+        profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+        return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("get_my_profile_failed", error=str(exc), error_type=type(exc).__name__, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
 
 
 @router.patch("/me", response_model=APIResponse[ProfileRead])
