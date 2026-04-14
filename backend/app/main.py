@@ -50,7 +50,7 @@ app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(TenantMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins_list,
+    allow_origin_regex=r"https://([a-zA-Z0-9-]+\.)?(m4mweb|match4marriage)\.vercel\.app|http://localhost:3000|https://match4marriage\.com|https://www\.match4marriage\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
