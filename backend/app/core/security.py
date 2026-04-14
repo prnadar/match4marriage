@@ -4,6 +4,7 @@ Frontend signs the user in via Firebase (phone/email/google), sends the ID token
 as `Authorization: Bearer <idToken>`. We verify via firebase-admin and extract
 the uid to look up the user row.
 """
+import uuid
 from typing import Annotated, Any
 
 from fastapi import Depends, HTTPException, Security, status
@@ -14,6 +15,14 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 bearer_scheme = HTTPBearer()
+
+# Deterministic mapping: Firebase UID (string) -> UUID (stable across calls).
+# DB user_id/profile.user_id columns are UUID, Firebase UIDs aren't.
+_FIREBASE_NAMESPACE = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # RFC 4122 DNS namespace
+
+
+def firebase_uid_to_uuid(firebase_uid: str) -> uuid.UUID:
+    return uuid.uuid5(_FIREBASE_NAMESPACE, firebase_uid)
 
 
 def _decode_token(token: str) -> dict[str, Any]:
@@ -30,9 +39,11 @@ def _decode_token(token: str) -> dict[str, Any]:
     uid = claims.get("uid") or claims.get("sub")
     if not uid:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing uid")
-    # Normalize so existing routers that read user["user_id"] keep working.
-    claims["user_id"] = uid
-    claims["sub"] = uid
+    # Map Firebase UID (opaque string) to a deterministic UUID for DB columns.
+    db_uuid = str(firebase_uid_to_uuid(uid))
+    claims["firebase_uid"] = uid
+    claims["user_id"] = db_uuid
+    claims["sub"] = db_uuid
     return claims
 
 
