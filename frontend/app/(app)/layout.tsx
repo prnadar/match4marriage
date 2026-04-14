@@ -82,6 +82,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
       if (!user) { router.replace("/onboarding"); return; }
+      // Mandatory: email/password must be linked so the user can sign back in.
+      const hasPassword = user.providerData.some((p) => p.providerId === "password");
+      if (!hasPassword) { router.replace("/auth/setup-password"); return; }
       try {
         const res = await profileApi.me();
         const p = (res.data as any)?.data;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { EmailAuthProvider, linkWithCredential, updateEmail } from "firebase/auth";
+import { EmailAuthProvider, linkWithCredential } from "firebase/auth";
 import { firebaseAuth } from "@/lib/firebase";
 
 export default function SetupPasswordPage() {
@@ -59,15 +59,13 @@ export default function SetupPasswordPage() {
     }
   };
 
-  const handleSkip = () => router.replace("/dashboard");
-
   if (!ready) return null;
 
   return (
     <div style={{ maxWidth: 420, margin: "48px auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ fontSize: 26, marginBottom: 8 }}>Set a password</h1>
+      <h1 style={{ fontSize: 26, marginBottom: 8 }}>Set your email & password</h1>
       <p style={{ color: "#666", marginBottom: 24 }}>
-        Add an email + password so you can sign in again from any device.
+        Required so you can sign back in from any device. You can still sign in with phone OTP too.
       </p>
 
       <label style={{ display: "block", marginBottom: 12 }}>
@@ -112,13 +110,6 @@ export default function SetupPasswordPage() {
         {loading ? "Saving..." : "Save and continue"}
       </button>
 
-      <button
-        type="button"
-        onClick={handleSkip}
-        style={{ width: "100%", marginTop: 10, padding: 10, background: "none", color: "#666", border: "1px solid #ddd", borderRadius: 6, cursor: "pointer" }}
-      >
-        Skip for now
-      </button>
     </div>
   );
 }
