@@ -224,12 +224,23 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(1);
   const [authChecked, setAuthChecked] = useState(false);
 
-  // If user is already signed in, skip onboarding entirely
+  // If user is already signed in AND has a profile, skip onboarding entirely
   useEffect(() => {
-    const unsub = firebaseAuth.onAuthStateChanged((user) => {
-      if (user && localStorage.getItem("onboarding_completed") === "true") {
-        router.replace("/dashboard");
+    const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        setAuthChecked(true);
         return;
+      }
+      try {
+        const res = await profileApi.me();
+        const p = (res.data as any)?.data;
+        if (p && p.first_name && p.first_name.trim().length > 0) {
+          localStorage.setItem("onboarding_completed", "true");
+          router.replace("/dashboard");
+          return;
+        }
+      } catch {
+        // backend unreachable or no profile — let them onboard
       }
       setAuthChecked(true);
     });
@@ -323,6 +334,18 @@ export default function OnboardingPage() {
     setOtpError("");
     try {
       await confirmationRef.current.confirm(otpCode);
+      // Existing user? Skip onboarding — go straight to dashboard.
+      try {
+        const res = await profileApi.me();
+        const p = (res.data as any)?.data;
+        if (p && p.first_name && p.first_name.trim().length > 0) {
+          localStorage.setItem("onboarding_completed", "true");
+          router.replace("/dashboard");
+          return;
+        }
+      } catch {
+        // No profile yet — continue onboarding
+      }
       setOtpVerified(true);
     } catch (err: unknown) {
       console.error("OTP verification error:", err);
@@ -330,7 +353,7 @@ export default function OnboardingPage() {
     } finally {
       setOtpLoading(false);
     }
-  }, [otp]);
+  }, [otp, router]);
   const [form, setForm] = useState({ name: "", dob: "", gender: "", religion: "", caste: "", country: "", motherTongue: "", education: "", profession: "" });
 
   // Pre-fill name & gender from registration data stored in localStorage
