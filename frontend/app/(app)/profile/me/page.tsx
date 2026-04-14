@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { profileApi } from "@/lib/api";
+import { profileApi, api } from "@/lib/api";
 import {
   Shield, CheckCircle, AlertCircle, Camera, Upload,
   Plus, X, Edit3, Heart, Star, Users, Briefcase, GraduationCap,
@@ -1423,20 +1423,16 @@ function PhotosTab() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load existing photos on mount
+  // Load existing photos from backend profile
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase.storage.from("profiles").list(`${user.id}/photos`);
-      if (!data) return;
-      const loaded = await Promise.all(
-        data.map(async (file, idx) => {
-          const { data: urlData } = supabase.storage.from("profiles").getPublicUrl(`${user.id}/photos/${file.name}`);
-          return { id: file.id || file.name, url: urlData.publicUrl, path: `${user.id}/photos/${file.name}`, isPrimary: idx === 0 };
-        })
-      );
-      setPhotos(loaded);
+      try {
+        const { data } = await api.get<{ success: boolean; data: { photos?: { url: string; key: string; is_primary?: boolean }[] } }>("/api/v1/profile/me");
+        const list = data?.data?.photos || [];
+        setPhotos(list.map((p) => ({ id: p.key, url: p.url, path: p.key, isPrimary: !!p.is_primary })));
+      } catch (err) {
+        console.warn("Failed to load photos", err);
+      }
     })();
   }, []);
 
@@ -1444,44 +1440,65 @@ function PhotosTab() {
     if (!files || files.length === 0) return;
     setUploading(true);
     setUploadError(null);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setUploadError("Please log in to upload photos."); setUploading(false); return; }
 
     const toUpload = Array.from(files).slice(0, 6 - photos.length);
     const uploaded: typeof photos = [];
 
     for (const file of toUpload) {
-      // Validate type + size
       if (!file.type.startsWith("image/")) continue;
       if (file.size > 5 * 1024 * 1024) { setUploadError("Each photo must be under 5MB."); continue; }
 
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${user.id}/photos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      try {
+        // 1. Get signed Cloudinary params from backend
+        const sig = await api.post<{ success: boolean; data: { upload_url: string; api_key: string; timestamp: number; signature: string; folder: string; public_id: string; resource_type: string; url: string; key: string } }>(
+          `/api/v1/profile/photos/upload-url?content_type=${encodeURIComponent(file.type)}`
+        );
+        const params = sig.data.data;
 
-      const { error } = await supabase.storage.from("profiles").upload(path, file, {
-        cacheControl: "3600",
-        upsert: false,
-        contentType: file.type,
-      });
+        // 2. POST multipart to Cloudinary
+        const form = new FormData();
+        form.append("file", file);
+        form.append("api_key", params.api_key);
+        form.append("timestamp", String(params.timestamp));
+        form.append("signature", params.signature);
+        form.append("folder", params.folder);
+        form.append("public_id", params.public_id);
+        form.append("overwrite", "false");
 
-      if (error) { setUploadError(`Upload failed: ${error.message}`); continue; }
+        const cldRes = await fetch(params.upload_url, { method: "POST", body: form });
+        if (!cldRes.ok) {
+          const txt = await cldRes.text();
+          throw new Error(`Cloudinary upload failed: ${txt}`);
+        }
+        const cld = await cldRes.json() as { secure_url: string; public_id: string };
 
-      const { data: urlData } = supabase.storage.from("profiles").getPublicUrl(path);
-      uploaded.push({ id: path, url: urlData.publicUrl, path, isPrimary: photos.length === 0 && uploaded.length === 0 });
+        // 3. Save to backend profile
+        await api.post("/api/v1/profile/me/photos", { url: cld.secure_url, key: cld.public_id });
+
+        uploaded.push({ id: cld.public_id, url: cld.secure_url, path: cld.public_id, isPrimary: photos.length === 0 && uploaded.length === 0 });
+      } catch (err) {
+        setUploadError(err instanceof Error ? err.message : "Upload failed");
+      }
     }
 
     setPhotos((prev) => [...prev, ...uploaded]);
     setUploading(false);
   };
 
-  const makePrimary = (id: string) => {
-    setPhotos((prev) => prev.map((p) => ({ ...p, isPrimary: p.id === id })));
+  const makePrimary = async (id: string) => {
+    try {
+      await api.post("/api/v1/profile/me/photos/primary", { key: id });
+      setPhotos((prev) => prev.map((p) => ({ ...p, isPrimary: p.id === id })));
+    } catch (err) {
+      console.warn("Failed to set primary", err);
+    }
   };
 
   const removePhoto = async (id: string) => {
-    const photo = photos.find((p) => p.id === id);
-    if (photo?.path) {
-      await supabase.storage.from("profiles").remove([photo.path]);
+    try {
+      await api.delete(`/api/v1/profile/me/photos?key=${encodeURIComponent(id)}`);
+    } catch (err) {
+      console.warn("Delete failed", err);
     }
     setPhotos((prev) => {
       const filtered = prev.filter((p) => p.id !== id);
