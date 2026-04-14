@@ -240,11 +240,12 @@ export default function OnboardingPage() {
         if (p) {
           const hasBasic = !!(p.first_name && p.first_name.trim());
           const hasIdVerify = !!(p.id_verified);
-          if (hasBasic && hasIdVerify) {
+          if (hasBasic) {
             localStorage.setItem("onboarding_completed", "true");
             router.replace("/dashboard");
             return;
           }
+          if (hasIdVerify) { /* noop: kept for type */ }
           // Prefill form from saved profile (resume)
           if (hasBasic) {
             const fullName = [p.first_name, p.last_name].filter(Boolean).join(" ");
@@ -490,6 +491,14 @@ export default function OnboardingPage() {
   const back = () => step > 1 && setStep(step - 1);
 
   if (!authChecked) return null;
+
+  if (!authChecked) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#fdfbf9", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-poppins, sans-serif)", color: "#7B2D3A" }}>
+        Loading…
+      </div>
+    );
+  }
 
   return (
     <div style={{

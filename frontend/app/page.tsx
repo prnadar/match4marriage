@@ -2,6 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { firebaseAuth } from "@/lib/firebase";
+import { profileApi } from "@/lib/api";
 
 /* ── Data ──────────────────────────────────────────────────────────── */
 
@@ -64,9 +67,24 @@ const filterTabs = ["All", "Hindu", "Christian", "Sikh", "Muslim"];
 /* ── Component ─────────────────────────────────────────────────────── */
 
 export default function HomePage() {
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const helpRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
+      if (!user) return;
+      try {
+        const res = await profileApi.me();
+        const p = (res.data as any)?.data;
+        if (p && p.first_name && p.first_name.trim()) {
+          router.replace("/dashboard");
+        }
+      } catch { /* ignore */ }
+    });
+    return unsub;
+  }, [router]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {

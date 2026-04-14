@@ -333,19 +333,33 @@ export default function MyProfilePage() {
       "Widowed": "widowed", "Separated": "separated",
       "Awaiting divorce": "awaiting_divorce",
     };
+    const validMarital = new Set(Object.values(maritalMap));
+    const religionMap: Record<string, string> = {
+      "Hindu": "hindu", "Muslim": "muslim", "Christian": "christian",
+      "Sikh": "sikh", "Jain": "jain", "Buddhist": "buddhist",
+      "Parsi / Zoroastrian": "parsi", "Parsi": "parsi", "Zoroastrian": "parsi",
+      "Jewish": "jewish", "No Religion": "other", "Other": "other",
+    };
+    const genderMap: Record<string, string> = {
+      "Male": "male", "Female": "female", "Other": "other",
+    };
 
     const payload: Record<string, unknown> = {
       // Basic
       first_name: nameParts[0] || undefined,
       last_name: nameParts.slice(1).join(" ") || undefined,
-      gender: general.gender ? general.gender.toLowerCase() : undefined,
+      gender: general.gender ? (genderMap[general.gender] || undefined) : undefined,
       date_of_birth: dobStr,
-      marital_status: general.maritalStatus ? (maritalMap[general.maritalStatus] || general.maritalStatus.toLowerCase().replace(/\s+/g, "_")) : undefined,
+      marital_status: (() => {
+        if (!general.maritalStatus) return undefined;
+        const mapped = maritalMap[general.maritalStatus];
+        return mapped && validMarital.has(mapped) ? mapped : undefined;
+      })(),
       // Location
       country: general.countryLivingIn || undefined,
       city: general.currentLocation || undefined,
       // Community
-      religion: general.religion ? general.religion.toLowerCase() : undefined,
+      religion: general.religion ? (religionMap[general.religion] || undefined) : undefined,
       caste: general.subCaste || undefined,
       mother_tongue: general.motherTongue || undefined,
       // Physical
@@ -393,8 +407,9 @@ export default function MyProfilePage() {
       setSavedTab(tabId);
       setTimeout(() => setSavedTab(null), 2000);
     } catch (err) {
-      console.error("Failed to save profile:", err);
+      console.error("Failed to save profile:", err, "payload:", payload);
       setSavedTab(null);
+      throw err;
     }
   }, [general, education, family, partner, interests, contact, schools, colleges, employment]);
 
