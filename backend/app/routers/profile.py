@@ -355,30 +355,64 @@ async def set_primary_photo(
 
 
 def _is_profile_complete(p: UserProfile) -> tuple[bool, list[str]]:
-    """Minimum required fields for submission."""
-    missing = []
-    if not p.first_name or not p.first_name.strip():
-        missing.append("first_name")
-    if not p.last_name or not p.last_name.strip():
-        missing.append("last_name")
-    if not p.date_of_birth:
-        missing.append("date_of_birth")
-    if not p.gender:
-        missing.append("gender")
-    if not p.religion:
-        missing.append("religion")
-    if not p.country:
-        missing.append("country")
-    if not p.mother_tongue:
-        missing.append("mother_tongue")
-    if not p.education_level:
-        missing.append("education_level")
-    if not p.occupation:
-        missing.append("occupation")
-    if not p.bio or len(p.bio.strip()) < 20:
-        missing.append("bio")
-    if not (p.photos and len(p.photos) > 0):
-        missing.append("photos")
+    """Require every profile field to be filled before submission."""
+    missing: list[str] = []
+
+    def need(cond: bool, name: str) -> None:
+        if not cond:
+            missing.append(name)
+
+    # Basic identity
+    need(bool(p.first_name and p.first_name.strip()), "first_name")
+    need(bool(p.last_name and p.last_name.strip()), "last_name")
+    need(p.date_of_birth is not None, "date_of_birth")
+    need(p.gender is not None, "gender")
+    need(p.marital_status is not None, "marital_status")
+
+    # Location
+    need(bool(p.city and p.city.strip()), "city")
+    need(bool(p.state and p.state.strip()), "state")
+    need(bool(p.country and p.country.strip()), "country")
+
+    # Religious / community
+    need(p.religion is not None, "religion")
+    need(bool(p.caste and p.caste.strip()), "caste")
+    need(bool(p.mother_tongue and p.mother_tongue.strip()), "mother_tongue")
+    need(bool(p.languages and len(p.languages) > 0), "languages")
+
+    # Physical
+    need(p.height_cm is not None, "height_cm")
+    need(p.weight_kg is not None, "weight_kg")
+    need(bool(p.complexion and p.complexion.strip()), "complexion")
+    need(bool(p.body_type and p.body_type.strip()), "body_type")
+
+    # Education & career
+    need(bool(p.education_level and p.education_level.strip()), "education_level")
+    need(bool(p.education_field and p.education_field.strip()), "education_field")
+    need(bool(p.college and p.college.strip()), "college")
+    need(bool(p.occupation and p.occupation.strip()), "occupation")
+    need(bool(p.employer and p.employer.strip()), "employer")
+    need(p.annual_income_inr is not None, "annual_income_inr")
+
+    # Bio
+    need(bool(p.bio and len(p.bio.strip()) >= 20), "bio")
+    need(bool(p.about_family and p.about_family.strip()), "about_family")
+
+    # Media
+    need(bool(p.photos and len(p.photos) > 0), "photos")
+
+    # Partner preferences + family details (non-empty JSON)
+    need(bool(p.partner_prefs and len(p.partner_prefs) > 0), "partner_prefs")
+    need(bool(p.family_details and len(p.family_details) > 0), "family_details")
+
+    # Kundali
+    need(bool(p.birth_time and p.birth_time.strip()), "birth_time")
+    need(bool(p.birth_place and p.birth_place.strip()), "birth_place")
+    need(p.is_manglik is not None, "is_manglik")
+
+    # NRI
+    need(bool(p.visa_status and p.visa_status.strip()), "visa_status")
+
     return (len(missing) == 0, missing)
 
 
