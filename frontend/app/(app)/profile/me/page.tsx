@@ -180,32 +180,12 @@ export default function MyProfilePage() {
     photos:    { filled: 0, total: 6 },
   };
 
-  // Load profile from backend on mount
+  // Load profile from backend on mount (uses Firebase auth token via profileApi.me)
   useEffect(() => {
     (async () => {
-      let userId = localStorage.getItem("backend_user_id") || localStorage.getItem("user_id") || "";
-
-      // Fallback: get user ID from Supabase session if not in localStorage
-      if (!userId) {
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user?.id) {
-            userId = user.id;
-            localStorage.setItem("backend_user_id", userId);
-          }
-        } catch (e) { console.warn("Supabase getUser failed:", e); }
-      }
-
-      if (!userId) return;
-
-      // Ensure auth_token exists for backend API calls
-      if (!localStorage.getItem("auth_token")) {
-        localStorage.setItem("auth_token", `demo:${userId}`);
-      }
-
       try {
-        const res = await profileApi.getProfile(userId);
-        const p = res.data?.data ?? res.data;
+        const res = await profileApi.me();
+        const p = (res.data as any)?.data ?? res.data;
         if (!p) return;
 
         const dob = p.date_of_birth ? new Date(p.date_of_birth) : null;
@@ -256,11 +236,6 @@ export default function MyProfilePage() {
   }, []);
 
   const handleSave = useCallback(async (tabId: string) => {
-    const userId = typeof window !== "undefined"
-      ? localStorage.getItem("backend_user_id") || localStorage.getItem("user_id") || ""
-      : "";
-    if (!userId) return;
-
     // Map form state → backend fields
     const nameParts = general.name.trim().split(/\s+/);
     const dobStr = general.dobYear && general.dobMonth && general.dobDay
@@ -289,7 +264,7 @@ export default function MyProfilePage() {
     Object.keys(payload).forEach((k) => { if (payload[k] === undefined) delete payload[k]; });
 
     try {
-      await profileApi.updateProfile(userId, payload);
+      await api.patch("/api/v1/profile/me", payload);
       setSavedTab(tabId);
       setTimeout(() => setSavedTab(null), 2000);
     } catch (err) {
