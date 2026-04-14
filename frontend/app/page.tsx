@@ -96,6 +96,25 @@ export default function HomePage() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Scroll reveal: any element with class "reveal" fades up when visible
+  useEffect(() => {
+    const els = document.querySelectorAll<HTMLElement>(".reveal");
+    if (!els.length || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add("in");
+            io.unobserve(e.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+
 
   return (
     <div className="min-h-screen overflow-x-hidden font-poppins">
@@ -291,6 +310,8 @@ export default function HomePage() {
                 height: "100%",
                 objectFit: "cover",
                 objectPosition: "center 20%",
+                animation: "kenBurns 20s ease-in-out infinite",
+                transformOrigin: idx % 2 === 0 ? "center 30%" : "30% center",
               }}
             />
           </div>
@@ -316,8 +337,32 @@ export default function HomePage() {
           }}
         />
 
+        {/* Drifting petals */}
+        {[
+          { left: "8%",  delay: "0s",    dur: "14s", scale: 1 },
+          { left: "22%", delay: "3s",    dur: "17s", scale: 0.7 },
+          { left: "38%", delay: "6s",    dur: "13s", scale: 1.2 },
+          { left: "55%", delay: "1.5s",  dur: "19s", scale: 0.9 },
+          { left: "72%", delay: "8s",    dur: "15s", scale: 1.1 },
+          { left: "88%", delay: "4.5s",  dur: "18s", scale: 0.8 },
+          { left: "15%", delay: "10s",   dur: "16s", scale: 0.6 },
+          { left: "65%", delay: "12s",   dur: "14s", scale: 1 },
+        ].map((p, i) => (
+          <span
+            key={i}
+            className="petal"
+            style={{
+              left: p.left,
+              animationDuration: p.dur,
+              animationDelay: p.delay,
+              transform: `scale(${p.scale})`,
+            }}
+          />
+        ))}
+
         {/* Content overlay */}
         <div
+          className="hero-reveal"
           style={{
             position: "absolute",
             inset: 0,
@@ -362,7 +407,7 @@ export default function HomePage() {
             }}
           >
             Where Two Families<br />
-            <span style={{ color: "#ffd87a", fontFamily: "var(--font-great-vibes)", fontSize: "clamp(48px, 7vw, 88px)", fontWeight: 400 }}>Become One</span>
+            <span className="gold-shimmer" style={{ fontFamily: "var(--font-great-vibes)", fontSize: "clamp(48px, 7vw, 88px)", fontWeight: 400, display: "inline-block" }}>Become One</span>
           </h1>
 
           <p
@@ -426,8 +471,8 @@ export default function HomePage() {
 
               <a
                 href="/auth/register"
-                className="w-full py-2.5 text-sm font-semibold rounded-lg text-white text-center transition-all duration-200 hover:opacity-90 block"
-                style={{ background: "linear-gradient(135deg, #dc1e3c, #a0153c)" }}
+                className="sheen-btn w-full py-2.5 text-sm font-semibold rounded-lg text-white text-center block"
+                style={{ background: "linear-gradient(135deg, #dc1e3c, #a0153c)", letterSpacing: "0.04em" }}
               >
                 Find Your Match
               </a>
@@ -536,6 +581,99 @@ export default function HomePage() {
             75%, 97% { background: #fff; transform: scale(1.3); }
             100% { background: rgba(255,255,255,0.35); transform: scale(1); }
           }
+
+          /* Cinematic Ken Burns zoom on hero images */
+          @keyframes kenBurns {
+            0%   { transform: scale(1.08) translate3d(0,0,0); filter: saturate(1.05); }
+            50%  { transform: scale(1.18) translate3d(-1%, -1%, 0); filter: saturate(1.12); }
+            100% { transform: scale(1.08) translate3d(0,0,0); filter: saturate(1.05); }
+          }
+
+          /* Staggered reveal for hero content */
+          .hero-reveal > * {
+            opacity: 0;
+            transform: translateY(24px);
+            animation: heroRise 1.1s cubic-bezier(.2,.7,.2,1) forwards;
+          }
+          .hero-reveal > *:nth-child(1) { animation-delay: 0.05s; }
+          .hero-reveal > *:nth-child(2) { animation-delay: 0.25s; }
+          .hero-reveal > *:nth-child(3) { animation-delay: 0.45s; }
+          .hero-reveal > *:nth-child(4) { animation-delay: 0.65s; }
+          .hero-reveal > *:nth-child(5) { animation-delay: 0.85s; }
+          @keyframes heroRise {
+            to { opacity: 1; transform: translateY(0); }
+          }
+
+          /* Shimmering gold script text */
+          .gold-shimmer {
+            background: linear-gradient(100deg, #ffd87a 20%, #fff3c2 45%, #ffb347 55%, #ffd87a 80%);
+            background-size: 200% 100%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: goldSweep 5.5s ease-in-out infinite;
+            filter: drop-shadow(0 2px 18px rgba(255,200,100,0.35));
+          }
+          @keyframes goldSweep {
+            0%, 100% { background-position: 0% 50%; }
+            50%      { background-position: 100% 50%; }
+          }
+
+          /* Drifting petals */
+          .petal {
+            position: absolute;
+            top: -40px;
+            width: 14px; height: 14px;
+            background: radial-gradient(circle at 30% 30%, #ffb5c5, #d4607a 70%, transparent 72%);
+            border-radius: 80% 0 80% 0;
+            opacity: 0;
+            animation: petalFall linear infinite;
+            pointer-events: none;
+            z-index: 3;
+            filter: blur(0.3px);
+          }
+          @keyframes petalFall {
+            0%   { opacity: 0; transform: translate3d(0,0,0) rotate(0deg); }
+            10%  { opacity: 0.85; }
+            90%  { opacity: 0.75; }
+            100% { opacity: 0; transform: translate3d(80px, 110vh, 0) rotate(540deg); }
+          }
+
+          /* Button sheen */
+          .sheen-btn { position: relative; overflow: hidden; isolation: isolate; }
+          .sheen-btn::after {
+            content: "";
+            position: absolute; inset: 0;
+            background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.45) 50%, transparent 70%);
+            transform: translateX(-120%);
+            transition: transform 0.9s cubic-bezier(.2,.7,.2,1);
+            pointer-events: none;
+          }
+          .sheen-btn:hover::after { transform: translateX(120%); }
+          .sheen-btn:hover { transform: translateY(-1px); box-shadow: 0 14px 32px rgba(220,30,60,0.35); }
+          .sheen-btn { transition: transform .3s ease, box-shadow .3s ease; }
+
+          /* Lift-on-hover cards */
+          .lift-card { transition: transform .5s cubic-bezier(.2,.7,.2,1), box-shadow .5s ease; }
+          .lift-card:hover { transform: translateY(-6px) rotate(-0.3deg); box-shadow: 0 24px 48px rgba(160,21,60,0.18); }
+
+          /* Fade-up on scroll (IntersectionObserver adds .in) */
+          .reveal { opacity: 0; transform: translateY(32px); transition: opacity 1s ease, transform 1s cubic-bezier(.2,.7,.2,1); }
+          .reveal.in { opacity: 1; transform: translateY(0); }
+
+          /* Custom scrollbar */
+          html { scrollbar-color: #dc1e3c #fdf1ea; scrollbar-width: thin; }
+          ::-webkit-scrollbar { width: 10px; }
+          ::-webkit-scrollbar-track { background: #fdf1ea; }
+          ::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #dc1e3c, #a0153c);
+            border-radius: 10px; border: 2px solid #fdf1ea;
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .hero-reveal > *, .petal, .gold-shimmer, .sheen-btn::after { animation: none !important; }
+            .hero-reveal > * { opacity: 1; transform: none; }
+          }
         `}</style>
       </section>
 
@@ -562,7 +700,7 @@ export default function HomePage() {
       </section>
 
       {/* ── 4. How It Works ──────────────────────────────────────────── */}
-      <section id="how-it-works" style={{ padding: "96px 24px", background: "#fdfbf9", position: "relative", overflow: "hidden" }}>
+      <section id="how-it-works" className="reveal" style={{ padding: "96px 24px", background: "#fdfbf9", position: "relative", overflow: "hidden" }}>
         {/* Subtle background motif */}
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "700px", height: "700px", borderRadius: "50%", background: "radial-gradient(circle, rgba(220,30,60,0.03) 0%, transparent 70%)", pointerEvents: "none" }} />
 
@@ -629,7 +767,7 @@ export default function HomePage() {
       </section>
 
       {/* ── 5b. Featured Profiles Teaser ─────────────────────────────── */}
-      <section style={{ padding: "80px 24px", background: "#fff" }}>
+      <section className="reveal" style={{ padding: "80px 24px", background: "#fff" }}>
         <div className="max-w-5xl mx-auto">
           <div style={{ textAlign: "center", marginBottom: "48px" }}>
             <span style={{ fontSize: "12px", fontWeight: 700, color: "#dc1e3c", textTransform: "uppercase", letterSpacing: "0.15em" }}>Exclusively Curated</span>
@@ -714,7 +852,7 @@ export default function HomePage() {
       </section>
 
       {/* ── 6. Success Stories ────────────────────────────────────────── */}
-      <section id="success-stories" className="py-20 px-4 sm:px-6 bg-white">
+      <section id="success-stories" className="reveal py-20 px-4 sm:px-6 bg-white">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <span className="text-sm font-medium tracking-wide uppercase" style={{ color: "#dc1e3c" }}>Real Love Stories</span>
@@ -752,7 +890,7 @@ export default function HomePage() {
       </section>
 
       {/* ── 7. Why Us / Features ──────────────────────────────────────── */}
-      <section className="py-20 px-4 sm:px-6 section-cream">
+      <section className="reveal py-20 px-4 sm:px-6 section-cream">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <span className="text-sm font-medium tracking-wide uppercase" style={{ color: "#dc1e3c" }}>Why We Are Different</span>
@@ -810,7 +948,7 @@ export default function HomePage() {
       </section>
 
       {/* ── 8c. FAQ ──────────────────────────────────────────────────── */}
-      <section id="faq" style={{ padding: "80px 24px", background: "#fff" }}>
+      <section id="faq" className="reveal" style={{ padding: "80px 24px", background: "#fff" }}>
         <div className="max-w-3xl mx-auto">
           <div style={{ textAlign: "center", marginBottom: "56px" }}>
             <span style={{ fontSize: "12px", fontWeight: 700, color: "#dc1e3c", textTransform: "uppercase", letterSpacing: "0.15em" }}>Common Questions</span>
@@ -864,7 +1002,7 @@ export default function HomePage() {
 
 
       {/* ── 8d. Contact / Enquiry ────────────────────────────────────── */}
-      <section id="contact" style={{ padding: "80px 24px", background: "#fdfbf9" }}>
+      <section id="contact" className="reveal" style={{ padding: "80px 24px", background: "#fdfbf9" }}>
         <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           <div>
             <span style={{ fontSize: "12px", fontWeight: 700, color: "#dc1e3c", textTransform: "uppercase", letterSpacing: "0.15em" }}>Get in Touch</span>
@@ -963,7 +1101,7 @@ export default function HomePage() {
       </section>
 
       {/* ── 10. CTA Section ──────────────────────────────────────────── */}
-      <section className="py-24 px-4 sm:px-6 section-cream text-center relative overflow-hidden">
+      <section className="reveal py-24 px-4 sm:px-6 section-cream text-center relative overflow-hidden">
         {/* Decorative rings */}
         <div className="absolute top-10 left-10 w-32 h-32 rounded-full border-2 opacity-10 pointer-events-none" style={{ borderColor: "#dc1e3c" }} />
         <div className="absolute bottom-10 right-10 w-48 h-48 rounded-full border-2 opacity-10 pointer-events-none" style={{ borderColor: "#dc1e3c" }} />
