@@ -74,6 +74,9 @@ async def _ensure_verification_columns() -> None:
         # NRI
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS visa_status VARCHAR(100)",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS willing_to_relocate BOOLEAN NOT NULL DEFAULT FALSE",
+        # Legacy users.phone was NOT NULL, but Firebase-created rows may not have phone at creation time
+        "ALTER TABLE users ALTER COLUMN phone DROP NOT NULL",
+        "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
     ]
     async with engine.begin() as conn:
         for s in stmts:
