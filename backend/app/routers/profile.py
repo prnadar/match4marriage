@@ -244,16 +244,20 @@ async def _get_or_create_own_profile(
         if not tenant_row:
             raise HTTPException(status_code=500, detail=f"Could not provision tenant {tenant_slug!r}")
     tenant_uuid = tenant_row[0]
-    phone = current_user.get("phone_number") or current_user.get("phone")
-    email = current_user.get("email")
-    await db.execute(
-        sa_text(
-            "INSERT INTO users (id, tenant_id, phone, email, is_phone_verified, created_at, updated_at) "
-            "VALUES (:uid, :tid, :phone, :email, true, NOW(), NOW()) ON CONFLICT (id) DO NOTHING"
-        ),
-        {"uid": str(user_id), "tid": str(tenant_uuid), "phone": phone, "email": email},
-    )
-    await db.flush()
+    # Use ORM insert so all NOT NULL columns get their model defaults
+    existing = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not existing:
+        phone = current_user.get("phone_number") or current_user.get("phone")
+        email = current_user.get("email")
+        new_user = User(
+            id=user_id,
+            tenant_id=tenant_uuid,
+            phone=phone,
+            email=email,
+            is_phone_verified=True,
+        )
+        db.add(new_user)
+        await db.flush()
     profile = UserProfile(
         id=uuid.uuid4(),
         tenant_id=tenant_uuid,
