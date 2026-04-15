@@ -4,8 +4,9 @@ All router registration, middleware, and lifespan events here.
 """
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.middleware.gzip import GZipMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -30,10 +31,34 @@ async def _ensure_verification_columns() -> None:
     """Idempotent: add verification workflow columns if missing (Vercel can't run alembic)."""
     from sqlalchemy import text
     stmts = [
+        # Verification workflow
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'draft'",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP",
+        # Physical
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS weight_kg SMALLINT",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS complexion VARCHAR(50)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS body_type VARCHAR(50)",
+        # Education / career extras
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS education_field VARCHAR(200)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS college VARCHAR(200)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS employer VARCHAR(200)",
+        # Community extras
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sub_caste VARCHAR(200)",
+        # Bio / family
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS about_family TEXT",
+        # Kundali JSON bucket (stores lifestyle/astro/interests/contact/schools/colleges/employment)
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS kundali_data JSONB NOT NULL DEFAULT '{}'::jsonb",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birth_time VARCHAR(10)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birth_place VARCHAR(200)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_manglik BOOLEAN",
+        # Media extras
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS intro_videos JSONB NOT NULL DEFAULT '[]'::jsonb",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS voice_note_key VARCHAR(500)",
+        # NRI
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS visa_status VARCHAR(100)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS willing_to_relocate BOOLEAN NOT NULL DEFAULT FALSE",
     ]
     async with engine.begin() as conn:
         for s in stmts:
@@ -79,6 +104,23 @@ app.add_middleware(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    """Ensure 500s carry CORS headers so the browser shows the real error, not 'CORS blocked'."""
+    logger.error("unhandled_exception", path=str(request.url.path), error=str(exc), error_type=type(exc).__name__)
+    origin = request.headers.get("origin", "")
+    headers = {}
+    if origin:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Vary"] = "Origin"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {exc}"},
+        headers=headers,
+    )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 PREFIX = settings.API_PREFIX
