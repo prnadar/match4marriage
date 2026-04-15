@@ -225,7 +225,9 @@ async def _get_or_create_own_profile(
     tenant_row = (await db.execute(
         sa_text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"), {"slug": tenant_slug}
     )).fetchone()
-    tenant_uuid = tenant_row[0] if tenant_row else None
+    if not tenant_row:
+        raise HTTPException(status_code=400, detail=f"Unknown tenant slug: {tenant_slug!r}")
+    tenant_uuid = tenant_row[0]
     await db.execute(
         sa_text(
             "INSERT INTO users (id, tenant_id, is_phone_verified, created_at, updated_at) "
