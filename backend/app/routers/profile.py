@@ -226,7 +226,23 @@ async def _get_or_create_own_profile(
         sa_text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"), {"slug": tenant_slug}
     )).fetchone()
     if not tenant_row:
-        raise HTTPException(status_code=400, detail=f"Unknown tenant slug: {tenant_slug!r}")
+        # Auto-provision default tenant on first request (Vercel lifespan
+        # isn't guaranteed to run before the first request lands).
+        await db.execute(
+            sa_text(
+                "INSERT INTO tenants (id, slug, name, created_at, updated_at) "
+                "VALUES (gen_random_uuid(), :slug, :name, NOW(), NOW()) "
+                "ON CONFLICT (slug) DO NOTHING"
+            ),
+            {"slug": tenant_slug, "name": tenant_slug.capitalize()},
+        )
+        await db.flush()
+        tenant_row = (await db.execute(
+            sa_text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"),
+            {"slug": tenant_slug},
+        )).fetchone()
+        if not tenant_row:
+            raise HTTPException(status_code=500, detail=f"Could not provision tenant {tenant_slug!r}")
     tenant_uuid = tenant_row[0]
     await db.execute(
         sa_text(
