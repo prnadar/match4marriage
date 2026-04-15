@@ -27,6 +27,21 @@ configure_logging(debug=settings.DEBUG)
 logger = get_logger(__name__)
 
 
+async def _ensure_default_tenant() -> None:
+    """Idempotent: ensure the default tenant row exists so requests don't 400."""
+    from sqlalchemy import text
+    slug = settings.DEFAULT_TENANT_SLUG
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text(
+                "INSERT INTO tenants (id, slug, name, created_at, updated_at) "
+                "VALUES (gen_random_uuid(), :slug, :name, NOW(), NOW()) "
+                "ON CONFLICT (slug) DO NOTHING"
+            ), {"slug": slug, "name": slug.capitalize()})
+        except Exception as e:
+            logger.warning("default_tenant_seed_failed", error=str(e))
+
+
 async def _ensure_verification_columns() -> None:
     """Idempotent: add verification workflow columns if missing (Vercel can't run alembic)."""
     from sqlalchemy import text
@@ -75,6 +90,10 @@ async def lifespan(app: FastAPI):
         await _ensure_verification_columns()
     except Exception as e:
         logger.warning("schema_guard_error", error=str(e))
+    try:
+        await _ensure_default_tenant()
+    except Exception as e:
+        logger.warning("tenant_seed_error", error=str(e))
     yield
     await close_redis()
     await engine.dispose()
