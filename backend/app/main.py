@@ -34,8 +34,8 @@ async def _ensure_default_tenant() -> None:
     async with engine.begin() as conn:
         try:
             await conn.execute(text(
-                "INSERT INTO tenants (id, slug, name, created_at, updated_at) "
-                "VALUES (gen_random_uuid(), :slug, :name, NOW(), NOW()) "
+                "INSERT INTO tenants (id, slug, name, branding, features, plan, max_users, is_active, created_at, updated_at) "
+                "VALUES (gen_random_uuid(), :slug, :name, '{}'::jsonb, '{}'::jsonb, 'starter', 10000, true, NOW(), NOW()) "
                 "ON CONFLICT (slug) DO NOTHING"
             ), {"slug": slug, "name": slug.capitalize()})
         except Exception as e:

@@ -230,8 +230,8 @@ async def _get_or_create_own_profile(
         # isn't guaranteed to run before the first request lands).
         await db.execute(
             sa_text(
-                "INSERT INTO tenants (id, slug, name, created_at, updated_at) "
-                "VALUES (gen_random_uuid(), :slug, :name, NOW(), NOW()) "
+                "INSERT INTO tenants (id, slug, name, branding, features, plan, max_users, is_active, created_at, updated_at) "
+                "VALUES (gen_random_uuid(), :slug, :name, '{}'::jsonb, '{}'::jsonb, 'starter', 10000, true, NOW(), NOW()) "
                 "ON CONFLICT (slug) DO NOTHING"
             ),
             {"slug": tenant_slug, "name": tenant_slug.capitalize()},
