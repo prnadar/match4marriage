@@ -29,6 +29,61 @@ from app.services.trust_score import compute_profile_completeness, compute_trust
 router = APIRouter(prefix="/profile", tags=["profile"])
 logger = get_logger(__name__)
 
+# Module-level flag so we only run the schema guard once per cold-boot.
+_schema_guard_ran = False
+
+
+async def _run_schema_guard_once(db: AsyncSession) -> None:
+    """Idempotent schema alignment. Runs once per process on first use."""
+    global _schema_guard_ran
+    if _schema_guard_ran:
+        return
+    from sqlalchemy import text as sa_text
+    stmts = [
+        # users: drop legacy NOT NULLs and add missing defaults
+        "ALTER TABLE users ALTER COLUMN phone DROP NOT NULL",
+        "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
+        "ALTER TABLE users ALTER COLUMN trust_score SET DEFAULT 0",
+        "ALTER TABLE users ALTER COLUMN subscription_tier SET DEFAULT 'free'",
+        "ALTER TABLE users ALTER COLUMN interests_remaining SET DEFAULT 10",
+        "ALTER TABLE users ALTER COLUMN contact_unlocks_remaining SET DEFAULT 0",
+        "ALTER TABLE users ALTER COLUMN is_active SET DEFAULT true",
+        "ALTER TABLE users ALTER COLUMN is_phone_verified SET DEFAULT false",
+        "ALTER TABLE users ALTER COLUMN is_email_verified SET DEFAULT false",
+        "ALTER TABLE users ALTER COLUMN is_profile_complete SET DEFAULT false",
+        # profiles: verification + new fields
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'draft'",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS weight_kg SMALLINT",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS complexion VARCHAR(50)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS body_type VARCHAR(50)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS education_field VARCHAR(200)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS college VARCHAR(200)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS employer VARCHAR(200)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sub_caste VARCHAR(200)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS about_family TEXT",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS kundali_data JSONB NOT NULL DEFAULT '{}'::jsonb",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birth_time VARCHAR(10)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birth_place VARCHAR(200)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_manglik BOOLEAN",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS intro_videos JSONB NOT NULL DEFAULT '[]'::jsonb",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS voice_note_key VARCHAR(500)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS visa_status VARCHAR(100)",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS willing_to_relocate BOOLEAN NOT NULL DEFAULT FALSE",
+    ]
+    for s in stmts:
+        try:
+            await db.execute(sa_text(s))
+        except Exception as e:
+            logger.warning("schema_guard_stmt_failed", stmt=s, error=str(e))
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+    _schema_guard_ran = True
+
 
 @router.get("/trust-score", response_model=APIResponse[dict])
 async def get_trust_score(
@@ -211,6 +266,7 @@ async def _get_or_create_own_profile(
     tenant_slug: str,
 ) -> UserProfile:
     from sqlalchemy import text as sa_text
+    await _run_schema_guard_once(db)
     user_id = uuid.UUID(current_user["sub"])
     result = await db.execute(
         select(UserProfile).where(
