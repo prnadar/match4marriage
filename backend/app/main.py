@@ -86,9 +86,20 @@ async def _ensure_verification_columns() -> None:
                 logger.warning("schema_guard_failed", stmt=s, error=str(e))
 
 
+async def _ensure_schema() -> None:
+    """Create any missing tables/columns from the ORM models."""
+    from app.models.base import Base
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("startup", environment=settings.ENVIRONMENT, version=settings.APP_VERSION)
+    try:
+        await _ensure_schema()
+    except Exception as e:
+        logger.warning("create_all_error", error=str(e))
     try:
         await _ensure_verification_columns()
     except Exception as e:
