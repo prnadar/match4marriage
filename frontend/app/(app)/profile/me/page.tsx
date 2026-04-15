@@ -404,6 +404,21 @@ export default function MyProfilePage() {
     // Remove undefined values
     Object.keys(payload).forEach((k) => { if (payload[k] === undefined) delete payload[k]; });
 
+    // Defensive: ensure int fields are numbers or omitted (never "Year", "", NaN)
+    const intFields = ["height_cm", "weight_kg", "annual_income_inr"];
+    for (const f of intFields) {
+      const v = payload[f];
+      if (v === undefined || v === null) continue;
+      const n = typeof v === "number" ? v : parseInt(String(v), 10);
+      if (!Number.isFinite(n)) delete payload[f];
+      else payload[f] = n;
+    }
+
+    // Defensive: drop invalid date_of_birth (must be YYYY-MM-DD with numeric parts)
+    if (payload.date_of_birth && !/^\d{4}-\d{2}-\d{2}$/.test(String(payload.date_of_birth))) {
+      delete payload.date_of_birth;
+    }
+
     try {
       await api.patch("/api/v1/profile/me", payload);
       setSavedTab(tabId);
