@@ -441,6 +441,7 @@ export default function MyProfilePage() {
       try {
         await handleSave("auto");
         setAutoSaveState("saved");
+        setSaveError("");
         setTimeout(() => setAutoSaveState("idle"), 1500);
       } catch {
         setAutoSaveState("error");
