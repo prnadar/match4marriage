@@ -1,0 +1,25 @@
+{
+  "name": "Match4Marriage",
+  "short_name": "Match4Marriage",
+  "description": "UK's most trusted Indian matrimonial service. Connect with verified, compatible profiles from families who share your values.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fdfbf9",
+  "theme_color": "#dc1e3c",
+  "icons": [
+    {
+      "src": "/images/logo.jpeg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/logo.jpeg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
