@@ -59,14 +59,15 @@ const VERIFICATIONS = [
   { label: "LinkedIn",          done: false, pts: 10 },
 ];
 
+// Totals are computed dynamically from state shape (see tabCounts below).
 const TABS = [
-  { id: "general",   label: "General Info",         total: 25 },
-  { id: "education", label: "Education & Career",   total: 8  },
-  { id: "family",    label: "My Family",            total: 12 },
-  { id: "interests", label: "Interests",            total: 6  },
-  { id: "partner",   label: "Partner Preferences",  total: 10 },
-  { id: "contact",   label: "Contact Details",      total: 11 },
-  { id: "photos",    label: "My Photos",            total: 6  },
+  { id: "general",   label: "General Info"        },
+  { id: "education", label: "Education & Career"  },
+  { id: "family",    label: "My Family"           },
+  { id: "interests", label: "Interests"           },
+  { id: "partner",   label: "Partner Preferences" },
+  { id: "contact",   label: "Contact Details"     },
+  { id: "photos",    label: "My Photos"           },
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -166,17 +167,27 @@ export default function MyProfilePage() {
     address1: "", address2: "", city: "", country: "", postcode: "",
   });
 
-  // Completion counts
+  // Completion counts. Totals are derived from state shape so they never
+  // drift from the keys that actually exist in each tab.
   const countFilled = (obj: Record<string, string>) =>
     Object.values(obj).filter((v) => v.trim() !== "").length;
+  const anyFilledRow = (rows: Array<Record<string, unknown>>) =>
+    rows.some((r) => Object.values(r).some((v) => typeof v === "string" && v.trim() !== "")) ? 1 : 0;
+
+  // Education tab = the 5 scalar fields + 3 "section completed" bits
+  // (schools, colleges, employment). Totals computed dynamically.
+  const educationFilled = countFilled(education)
+    + anyFilledRow(schools as unknown as Array<Record<string, unknown>>)
+    + anyFilledRow(colleges as unknown as Array<Record<string, unknown>>)
+    + anyFilledRow(employment as unknown as Array<Record<string, unknown>>);
 
   const tabCounts: Record<string, { filled: number; total: number }> = {
-    general:   { filled: countFilled(general),   total: 25 },
-    education: { filled: countFilled(education), total: 8  },
-    family:    { filled: countFilled(family),    total: 12 },
-    interests: { filled: Object.values(interests).filter((a) => a.length > 0).length, total: 6 },
-    partner:   { filled: countFilled(partner),   total: 10 },
-    contact:   { filled: countFilled(contact),   total: 11 },
+    general:   { filled: countFilled(general),   total: Object.keys(general).length },
+    education: { filled: educationFilled,         total: Object.keys(education).length + 3 },
+    family:    { filled: countFilled(family),    total: Object.keys(family).length },
+    interests: { filled: Object.values(interests).filter((a) => a.length > 0).length, total: Object.keys(interests).length },
+    partner:   { filled: countFilled(partner),   total: Object.keys(partner).length },
+    contact:   { filled: countFilled(contact),   total: Object.keys(contact).length },
     photos:    { filled: 0, total: 6 },
   };
 
