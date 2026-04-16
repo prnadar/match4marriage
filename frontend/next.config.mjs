@@ -44,6 +44,23 @@ const nextConfig = {
           },
         ],
       },
+      {
+        // Admin + auth pages must never be served from a stale cache — an
+        // outdated login bundle (e.g. our earlier hardcoded-creds version)
+        // would silently lock admins out after a deploy.
+        source: "/admin/:path*",
+        headers: [
+          { key: "Cache-Control", value: "no-store, no-cache, must-revalidate" },
+          { key: "Pragma", value: "no-cache" },
+        ],
+      },
+      {
+        source: "/auth/:path*",
+        headers: [
+          { key: "Cache-Control", value: "no-store, no-cache, must-revalidate" },
+          { key: "Pragma", value: "no-cache" },
+        ],
+      },
     ];
   },
 
