@@ -243,6 +243,49 @@ async def firebase_verify_endpoint(
     )
 
 
+@router.get("/me", response_model=APIResponse[dict])
+async def auth_me(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """
+    Return the authenticated caller's identity + roles, derived from their
+    Firebase ID token. Used by the admin login page to confirm the user
+    holds the `admin` role before routing to the admin UI.
+    """
+    from app.core.security import _roles_from_claims
+
+    user_id = current_user.get("sub") or current_user.get("user_id")
+    roles = _roles_from_claims(current_user)
+
+    # Also look up the DB user so we can return email/phone if the token
+    # didn't include them (e.g. phone-only sign-ins).
+    email = current_user.get("email")
+    phone = current_user.get("phone")
+    try:
+        import uuid as _uuid
+        db_user = (await db.execute(
+            select(User).where(User.id == _uuid.UUID(str(user_id)))
+        )).scalar_one_or_none()
+        if db_user:
+            email = email or db_user.email
+            phone = phone or db_user.phone
+    except Exception:
+        pass
+
+    return APIResponse(
+        success=True,
+        data={
+            "user_id": str(user_id) if user_id else None,
+            "email": email,
+            "phone": phone,
+            "roles": roles,
+            "is_admin": "admin" in roles or "super_admin" in roles,
+            "is_super_admin": "super_admin" in roles,
+        },
+    )
+
+
 @router.post("/resend-otp", response_model=APIResponse[None])
 async def resend_otp(
     payload: RegisterRequest,
