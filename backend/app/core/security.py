@@ -106,59 +106,68 @@ async def _find_or_link_user(
 
     # 1. Firebase UID already linked.
     # We use a raw JSONB containment query on Postgres; SQLite falls back to
-    # a scan. Either way the hot path (repeat logins) is one indexed lookup.
+    # a scan. Wrap in a SAVEPOINT so a missing-column or dialect error here
+    # does not poison the caller's request transaction.
     try:
-        rows = (await db.execute(
-            sa_text(
-                "SELECT id FROM users "
-                "WHERE firebase_uids @> :uid::jsonb "
-                "AND deleted_at IS NULL LIMIT 1"
-            ),
-            {"uid": f'["{firebase_uid}"]'},
-        )).fetchone()
+        async with db.begin_nested():
+            rows = (await db.execute(
+                sa_text(
+                    "SELECT id FROM users "
+                    "WHERE firebase_uids @> :uid::jsonb "
+                    "AND deleted_at IS NULL LIMIT 1"
+                ),
+                {"uid": f'["{firebase_uid}"]'},
+            )).fetchone()
         if rows:
             return rows[0]
-    except Exception:
-        # SQLite (tests) or JSONB op unavailable — fall back to full scan.
-        result = await db.execute(
-            select(User).where(User.deleted_at.is_(None))
-        )
-        for row in result.scalars().all():
-            if firebase_uid in (row.firebase_uids or []):
-                return row.id
+    except Exception as exc:
+        # JSONB op unavailable or column not yet migrated — keep going.
+        logger.debug("firebase_uid_jsonb_lookup_skipped", error=str(exc))
 
-    # 2. Match on phone or email
+    # 2. Match on phone or email — same savepoint pattern so a stale schema
+    # doesn't poison the request transaction.
     norm_phone = _normalize_phone(phone)
     match_user: User | None = None
-    if norm_phone or email:
-        clauses = []
-        if norm_phone:
-            clauses.append(User.phone == norm_phone)
-        if email:
-            clauses.append(func.lower(User.email) == email.lower())
-        result = await db.execute(
-            select(User).where(
-                or_(*clauses),
-                User.deleted_at.is_(None),
-            ).limit(1)
-        )
-        match_user = result.scalar_one_or_none()
+    try:
+        async with db.begin_nested():
+            if norm_phone or email:
+                clauses = []
+                if norm_phone:
+                    clauses.append(User.phone == norm_phone)
+                if email:
+                    clauses.append(func.lower(User.email) == email.lower())
+                result = await db.execute(
+                    select(User).where(
+                        or_(*clauses),
+                        User.deleted_at.is_(None),
+                    ).limit(1)
+                )
+                match_user = result.scalar_one_or_none()
 
-    # 3. Legacy: user previously bootstrapped with deterministic UUID from UID
-    if match_user is None:
-        legacy_id = firebase_uid_to_uuid(firebase_uid)
-        result = await db.execute(
-            select(User).where(User.id == legacy_id, User.deleted_at.is_(None))
-        )
-        match_user = result.scalar_one_or_none()
+            # 3. Legacy: user previously bootstrapped with deterministic UUID from UID
+            if match_user is None:
+                legacy_id = firebase_uid_to_uuid(firebase_uid)
+                result = await db.execute(
+                    select(User).where(User.id == legacy_id, User.deleted_at.is_(None))
+                )
+                match_user = result.scalar_one_or_none()
+    except Exception as exc:
+        logger.warning("identity_lookup_failed", error=str(exc))
+        match_user = None
 
     if match_user is not None:
-        # Link this Firebase UID to the existing user
-        uids = list(match_user.firebase_uids or [])
-        if firebase_uid not in uids:
-            uids.append(firebase_uid)
-            match_user.firebase_uids = uids
-            await db.flush()
+        # Link this Firebase UID to the existing user. Savepoint so a write
+        # failure here (e.g. firebase_uids column missing) cannot abort the
+        # outer transaction — we'll link on a later request.
+        try:
+            async with db.begin_nested():
+                uids = list(getattr(match_user, "firebase_uids", None) or [])
+                if firebase_uid not in uids:
+                    uids.append(firebase_uid)
+                    match_user.firebase_uids = uids
+                    await db.flush()
+        except Exception as exc:
+            logger.debug("firebase_uid_link_skipped", error=str(exc))
         return match_user.id
 
     # 4. No user yet — return the legacy deterministic UUID as a placeholder.
