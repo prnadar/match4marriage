@@ -37,77 +37,87 @@ _MERGE_JSON_KEYS = {"partner_prefs", "family_details", "kundali_data"}
 # Module-level flag so we only run the schema guard once per cold-boot.
 _schema_guard_ran = False
 
+# DDL statements run at cold-boot on a fresh AUTOCOMMIT connection off the
+# engine — NOT on the request-scoped session. A failure here cannot poison an
+# active request transaction. Every statement is individually idempotent.
+_SCHEMA_GUARD_DDL = [
+    # users: drop legacy NOT NULLs and add missing defaults
+    "ALTER TABLE users ALTER COLUMN phone DROP NOT NULL",
+    "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
+    "ALTER TABLE users ALTER COLUMN trust_score SET DEFAULT 0",
+    "ALTER TABLE users ALTER COLUMN subscription_tier SET DEFAULT 'free'",
+    "ALTER TABLE users ALTER COLUMN interests_remaining SET DEFAULT 10",
+    "ALTER TABLE users ALTER COLUMN contact_unlocks_remaining SET DEFAULT 0",
+    "ALTER TABLE users ALTER COLUMN is_active SET DEFAULT true",
+    "ALTER TABLE users ALTER COLUMN is_phone_verified SET DEFAULT false",
+    "ALTER TABLE users ALTER COLUMN is_email_verified SET DEFAULT false",
+    "ALTER TABLE users ALTER COLUMN is_profile_complete SET DEFAULT false",
+    # firebase_uids column (added as part of identity unification)
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uids JSONB NOT NULL DEFAULT '[]'::jsonb",
+    # profiles: verification + new fields
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'draft'",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_rejection_reason TEXT",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS weight_kg SMALLINT",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS complexion VARCHAR(50)",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS body_type VARCHAR(50)",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS education_field VARCHAR(200)",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS college VARCHAR(200)",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS employer VARCHAR(200)",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sub_caste VARCHAR(200)",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS about_family TEXT",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS kundali_data JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birth_time VARCHAR(10)",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birth_place VARCHAR(200)",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_manglik BOOLEAN",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS intro_videos JSONB NOT NULL DEFAULT '[]'::jsonb",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS voice_note_key VARCHAR(500)",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS visa_status VARCHAR(100)",
+    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS willing_to_relocate BOOLEAN NOT NULL DEFAULT FALSE",
+]
+
+# ALTER TYPE ADD VALUE cannot run inside a transaction block, so it runs
+# separately on an autocommit connection.
+_SCHEMA_GUARD_ENUM_ADDITIONS = [
+    ("maritalstatus", "awaiting_divorce"),
+]
+
 
 async def _run_schema_guard_once(db: AsyncSession) -> None:
-    """Idempotent schema alignment. Runs once per process on first use."""
+    """
+    Idempotent schema alignment. Runs once per process, on a dedicated
+    AUTOCOMMIT connection off the engine — NOT on `db` — so a DDL error
+    cannot poison the caller's request transaction.
+
+    The `db` parameter is kept for API compatibility but unused.
+    """
     global _schema_guard_ran
     if _schema_guard_ran:
         return
-    # Set the flag FIRST so concurrent calls don't all try to run ALTERs.
     _schema_guard_ran = True
-    stmts = [
-        # users: drop legacy NOT NULLs and add missing defaults
-        "ALTER TABLE users ALTER COLUMN phone DROP NOT NULL",
-        "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
-        "ALTER TABLE users ALTER COLUMN trust_score SET DEFAULT 0",
-        "ALTER TABLE users ALTER COLUMN subscription_tier SET DEFAULT 'free'",
-        "ALTER TABLE users ALTER COLUMN interests_remaining SET DEFAULT 10",
-        "ALTER TABLE users ALTER COLUMN contact_unlocks_remaining SET DEFAULT 0",
-        "ALTER TABLE users ALTER COLUMN is_active SET DEFAULT true",
-        "ALTER TABLE users ALTER COLUMN is_phone_verified SET DEFAULT false",
-        "ALTER TABLE users ALTER COLUMN is_email_verified SET DEFAULT false",
-        "ALTER TABLE users ALTER COLUMN is_profile_complete SET DEFAULT false",
-        # firebase_uids column (added as part of identity unification)
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uids JSONB NOT NULL DEFAULT '[]'::jsonb",
-        # profiles: verification + new fields
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'draft'",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_rejection_reason TEXT",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS weight_kg SMALLINT",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS complexion VARCHAR(50)",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS body_type VARCHAR(50)",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS education_field VARCHAR(200)",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS college VARCHAR(200)",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS employer VARCHAR(200)",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sub_caste VARCHAR(200)",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS about_family TEXT",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS kundali_data JSONB NOT NULL DEFAULT '{}'::jsonb",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birth_time VARCHAR(10)",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birth_place VARCHAR(200)",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_manglik BOOLEAN",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS intro_videos JSONB NOT NULL DEFAULT '[]'::jsonb",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS voice_note_key VARCHAR(500)",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS visa_status VARCHAR(100)",
-        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS willing_to_relocate BOOLEAN NOT NULL DEFAULT FALSE",
-        # Add 'awaiting_divorce' to the marital_status enum if it's not already there.
-        # ALTER TYPE ... ADD VALUE is idempotent with IF NOT EXISTS on PG 9.6+.
-        "ALTER TYPE maritalstatus ADD VALUE IF NOT EXISTS 'awaiting_divorce'",
-    ]
-    for s in stmts:
-        # ALTER TYPE ADD VALUE cannot run inside a transaction on Postgres.
-        # Commit whatever is pending before attempting it.
-        if s.startswith("ALTER TYPE"):
-            try:
-                await db.commit()
-            except Exception:
-                await db.rollback()
-        try:
-            await db.execute(sa_text(s))
-            if s.startswith("ALTER TYPE"):
-                await db.commit()
-        except Exception as e:
-            logger.warning("schema_guard_stmt_failed", stmt=s, error=str(e))
-            try:
-                await db.rollback()
-            except Exception:
-                pass
+
+    from app.core.database import engine
+
     try:
-        await db.commit()
-    except Exception:
-        await db.rollback()
+        async with engine.connect() as conn:
+            await conn.execution_options(isolation_level="AUTOCOMMIT")
+            for s in _SCHEMA_GUARD_DDL:
+                try:
+                    await conn.execute(sa_text(s))
+                except Exception as e:
+                    logger.warning("schema_guard_stmt_failed", stmt=s, error=str(e))
+            for type_name, value in _SCHEMA_GUARD_ENUM_ADDITIONS:
+                try:
+                    await conn.execute(sa_text(
+                        f"ALTER TYPE {type_name} ADD VALUE IF NOT EXISTS '{value}'"
+                    ))
+                except Exception as e:
+                    logger.warning("schema_guard_enum_failed", type_name=type_name, value=value, error=str(e))
+    except Exception as e:
+        logger.error("schema_guard_connect_failed", error=str(e))
 
 
 @router.get("/trust-score", response_model=APIResponse[dict])
