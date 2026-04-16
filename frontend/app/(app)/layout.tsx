@@ -9,7 +9,7 @@ import {
   CreditCard, Home, Menu, X,
 } from "lucide-react";
 import { profileApi } from "@/lib/api";
-import { firebaseAuth } from "@/lib/firebase";
+import { clearClientState, firebaseAuth, rememberSessionUid } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 
 const navItems = [
@@ -82,6 +82,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
       if (!user) { router.replace("/onboarding"); return; }
+      rememberSessionUid(user.uid);
       const hasPassword = user.providerData.some((p) => p.providerId === "password");
       try {
         const res = await profileApi.me();
@@ -300,12 +301,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <button
             onClick={async () => {
               try { await signOut(firebaseAuth); } catch {}
-              try {
-                localStorage.removeItem("onboarding_completed");
-                localStorage.removeItem("onboarding_step");
-                localStorage.removeItem("user_name");
-                localStorage.removeItem("user_gender");
-              } catch {}
+              clearClientState();
               window.location.href = "/auth/login";
             }}
             title={collapsed ? "Sign Out" : undefined}

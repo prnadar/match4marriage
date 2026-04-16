@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { EmailAuthProvider, linkWithCredential } from "firebase/auth";
-import { firebaseAuth } from "@/lib/firebase";
+import { firebaseAuth, rememberSessionUid } from "@/lib/firebase";
 
 export default function SetupPasswordPage() {
   const router = useRouter();
@@ -20,6 +20,7 @@ export default function SetupPasswordPage() {
         router.replace("/onboarding");
         return;
       }
+      rememberSessionUid(user.uid);
       // If email already linked, skip
       const hasEmail = user.providerData.some((p) => p.providerId === "password");
       if (hasEmail) {

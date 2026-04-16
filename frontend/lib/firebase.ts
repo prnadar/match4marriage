@@ -1,6 +1,6 @@
 "use client";
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
+import { getAuth, signOut, type Auth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
@@ -16,8 +16,47 @@ export const firebaseApp: FirebaseApp =
 
 export const firebaseAuth: Auth = getAuth(firebaseApp);
 
-export async function getIdToken(): Promise<string | null> {
+export async function getIdToken(forceRefresh = false): Promise<string | null> {
   const user = firebaseAuth.currentUser;
   if (!user) return null;
-  return user.getIdToken();
+  try {
+    return await user.getIdToken(forceRefresh);
+  } catch (err: any) {
+    // Refresh failed — surface as auth invalidation.
+    // eslint-disable-next-line no-console
+    console.warn("[firebase] getIdToken failed, signing out", err?.code || err);
+    try { await signOut(firebaseAuth); } catch {}
+    return null;
+  }
+}
+
+/** Keys written by the app that must be purged when a user signs out or a different user signs in. */
+const APP_STATE_KEYS = [
+  "onboarding_completed",
+  "onboarding_step",
+  "user_name",
+  "user_gender",
+];
+
+export function clearClientState() {
+  if (typeof window === "undefined") return;
+  try {
+    for (const k of APP_STATE_KEYS) localStorage.removeItem(k);
+    sessionStorage.removeItem("skip_password_prompt");
+    sessionStorage.removeItem("m4m_session_uid");
+  } catch {}
+}
+
+/**
+ * Remember the currently signed-in Firebase UID so that we can detect when a
+ * different user signs in on the same device and purge the previous user's
+ * cached localStorage fragments.
+ */
+export function rememberSessionUid(uid: string) {
+  if (typeof window === "undefined") return;
+  const prev = sessionStorage.getItem("m4m_session_uid");
+  if (prev && prev !== uid) {
+    clearClientState();
+  }
+  sessionStorage.setItem("m4m_session_uid", uid);
 }

@@ -204,7 +204,12 @@ export default function MyProfilePage() {
           countryLivingIn: p.country || prev.countryLivingIn,
           currentLocation: p.city || prev.currentLocation,
           aboutMe: p.bio || prev.aboutMe,
-          maritalStatus: p.marital_status ? p.marital_status.charAt(0).toUpperCase() + p.marital_status.slice(1).replace(/_/g, " ") : prev.maritalStatus,
+          maritalStatus: p.marital_status
+            ? String(p.marital_status)
+                .split("_")
+                .map((s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s))
+                .join(" ")
+            : prev.maritalStatus,
         }));
 
         setEducation((prev) => ({
@@ -276,8 +281,17 @@ export default function MyProfilePage() {
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string>("");
   const loadedRef = useRef(false);
+  // Optimistic-lock version. Updated on every successful load/save.
+  const versionRef = useRef<number>(0);
+  // Completeness score as reported by the backend (source of truth).
+  const [completenessScore, setCompletenessScore] = useState<number>(0);
+  // Saturation guard for autosave: only one save in flight at a time; a
+  // trailing save fires once the current one resolves if form state changed
+  // while it was pending.
+  const saveInFlight = useRef<boolean>(false);
+  const saveDirty = useRef<boolean>(false);
 
-  // Pick up status from first profile load
+  // Pick up status + version + completeness from first profile load
   useEffect(() => {
     (async () => {
       try {
@@ -286,6 +300,8 @@ export default function MyProfilePage() {
         if (p) {
           setVerifStatus(p.verification_status || "draft");
           setRejectionReason(p.rejection_reason || null);
+          setCompletenessScore(typeof p.completeness_score === "number" ? p.completeness_score : 0);
+          versionRef.current = typeof p.version === "number" ? p.version : 0;
         }
       } catch { /* ignore */ }
       loadedRef.current = true;
@@ -296,6 +312,8 @@ export default function MyProfilePage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
+      // Make sure any pending edits are flushed before submitting.
+      try { await handleSave("submit"); } catch { /* show the save error inline, but try to submit anyway */ }
       const res = await api.post("/api/v1/profile/me/submit", {});
       const p = (res.data as any)?.data;
       if (p) {
@@ -303,86 +321,116 @@ export default function MyProfilePage() {
         setRejectionReason(p.rejection_reason || null);
       }
     } catch (err: any) {
-      const detail = err?.response?.data?.detail;
-      if (detail?.missing) {
-        setSubmitError(`Missing required fields: ${detail.missing.join(", ")}`);
+      // ApiError carries a `detail` which may be a dict with `missing`
+      const detail = (err as any)?.detail ?? err?.response?.data?.detail;
+      if (detail && typeof detail === "object" && Array.isArray(detail.missing)) {
+        const pretty = (detail.missing as string[])
+          .map((f) => f.replace(/_/g, " "))
+          .join(", ");
+        setSubmitError(`Please complete these fields before submitting: ${pretty}`);
+      } else if (typeof detail === "string") {
+        setSubmitError(detail);
+      } else if (detail && typeof detail === "object" && detail.message) {
+        setSubmitError(detail.message);
       } else {
-        setSubmitError(detail?.message || detail || err?.message || "Could not submit.");
+        setSubmitError(err?.message || "Could not submit.");
       }
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleSave = useCallback(async (tabId: string) => {
-    // Map form state → backend fields
+  // Parsers / mappers — pure, so they can be used by both autosave and buildPayload.
+  const MONTHS_ORDERED = [
+    "January","February","March","April","May","June",
+    "July","August","September","October","November","December",
+  ];
+  const maritalMap: Record<string, string> = {
+    "never married": "never_married",
+    "never_married": "never_married",
+    "divorced": "divorced",
+    "widowed": "widowed",
+    "separated": "separated",
+    "awaiting divorce": "awaiting_divorce",
+    "awaiting_divorce": "awaiting_divorce",
+  };
+  const religionMap: Record<string, string> = {
+    "hindu": "hindu", "muslim": "muslim", "christian": "christian",
+    "sikh": "sikh", "jain": "jain", "buddhist": "buddhist",
+    "parsi / zoroastrian": "parsi", "parsi": "parsi", "zoroastrian": "parsi",
+    "jewish": "jewish", "no religion": "other", "other": "other",
+  };
+  const genderMap: Record<string, string> = {
+    "male": "male", "female": "female", "other": "other",
+  };
+
+  const buildDobStr = (day: string, month: string, year: string): string | undefined => {
+    const d = parseInt(day, 10);
+    const y = parseInt(year, 10);
+    const mIdx = MONTHS_ORDERED.indexOf(month);
+    if (!Number.isFinite(d) || d < 1 || d > 31) return undefined;
+    if (!Number.isFinite(y) || y < 1900 || y > 2100) return undefined;
+    if (mIdx < 0) return undefined;
+    const mm = String(mIdx + 1).padStart(2, "0");
+    const dd = String(d).padStart(2, "0");
+    const iso = `${year}-${mm}-${dd}`;
+    const dt = new Date(iso);
+    if (Number.isNaN(dt.getTime())) return undefined;
+    return iso;
+  };
+
+  const parseHeightCm = (s: string): number | undefined => {
+    const m = s.match(/(\d+)\s*ft\s*(\d+)?/i);
+    if (!m) return undefined;
+    const ft = parseInt(m[1], 10); const inch = parseInt(m[2] || "0", 10);
+    if (!Number.isFinite(ft)) return undefined;
+    return Math.round(ft * 30.48 + (Number.isFinite(inch) ? inch : 0) * 2.54);
+  };
+
+  const parsePositiveInt = (s: string): number | undefined => {
+    if (!s) return undefined;
+    const n = parseInt(String(s).replace(/[^0-9-]/g, ""), 10);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  };
+
+  const buildPayload = useCallback((): Record<string, unknown> => {
     const nameParts = general.name.trim().split(/\s+/);
-    const dobStr = general.dobYear && general.dobMonth && general.dobDay
-      ? `${general.dobYear}-${String(["January","February","March","April","May","June","July","August","September","October","November","December"].indexOf(general.dobMonth) + 1).padStart(2, "0")}-${String(general.dobDay).padStart(2, "0")}`
-      : undefined;
+    const dobStr = buildDobStr(general.dobDay, general.dobMonth, general.dobYear);
 
-    // height "5ft 8in" -> cm
-    const parseHeightCm = (s: string): number | undefined => {
-      const m = s.match(/(\d+)\s*ft\s*(\d+)?/i);
-      if (!m) return undefined;
-      const ft = parseInt(m[1], 10); const inch = parseInt(m[2] || "0", 10);
-      return Math.round(ft * 30.48 + inch * 2.54);
-    };
+    const maritalKey = (general.maritalStatus || "").trim().toLowerCase();
+    const maritalVal = maritalMap[maritalKey];
 
-    const maritalMap: Record<string, string> = {
-      "Never married": "never_married", "Never Married": "never_married",
-      "Divorced": "divorced",
-      "Widowed": "widowed", "Separated": "separated",
-      "Awaiting divorce": "awaiting_divorce", "Awaiting Divorce": "awaiting_divorce",
-    };
-    const validMarital = new Set(Object.values(maritalMap));
-    const religionMap: Record<string, string> = {
-      "Hindu": "hindu", "Muslim": "muslim", "Christian": "christian",
-      "Sikh": "sikh", "Jain": "jain", "Buddhist": "buddhist",
-      "Parsi / Zoroastrian": "parsi", "Parsi": "parsi", "Zoroastrian": "parsi",
-      "Jewish": "jewish", "No Religion": "other", "Other": "other",
-    };
-    const genderMap: Record<string, string> = {
-      "Male": "male", "Female": "female", "Other": "other",
-    };
+    const religionKey = (general.religion || "").trim().toLowerCase();
+    const religionVal = religionMap[religionKey];
+
+    const genderKey = (general.gender || "").trim().toLowerCase();
+    const genderVal = genderMap[genderKey];
 
     const payload: Record<string, unknown> = {
-      // Basic
       first_name: nameParts[0] || undefined,
       last_name: nameParts.slice(1).join(" ") || undefined,
-      gender: general.gender ? (genderMap[general.gender] || undefined) : undefined,
+      gender: genderVal,
       date_of_birth: dobStr,
-      marital_status: (() => {
-        if (!general.maritalStatus) return undefined;
-        const mapped = maritalMap[general.maritalStatus];
-        return mapped && validMarital.has(mapped) ? mapped : undefined;
-      })(),
-      // Location
+      marital_status: maritalVal,
       country: general.countryLivingIn || undefined,
       city: general.currentLocation || undefined,
-      // Community
-      religion: general.religion ? (religionMap[general.religion] || undefined) : undefined,
-      caste: general.subCaste || undefined,
+      religion: religionVal,
+      caste: general.subCaste || general.denomination || undefined,
+      sub_caste: general.subCaste || undefined,
       mother_tongue: general.motherTongue || undefined,
-      // Physical
       height_cm: general.height ? parseHeightCm(general.height) : undefined,
-      weight_kg: general.weight ? parseInt(general.weight, 10) || undefined : undefined,
+      weight_kg: parsePositiveInt(general.weight),
       complexion: general.complexion || undefined,
       body_type: general.bodyType || undefined,
-      // Bio
       bio: general.aboutMe || undefined,
-      // Education/Career (flat cols)
       education_level: education.educationLevel || undefined,
       education_field: education.educationDetail || undefined,
       occupation: education.occupation || undefined,
       employer: education.employedIn || undefined,
-      annual_income_inr: education.annualIncome ? parseInt(education.annualIncome, 10) || undefined : undefined,
-      // Family
+      annual_income_inr: parsePositiveInt(education.annualIncome),
       about_family: family.aboutFamily || undefined,
-      family_details: Object.values(family).some((v) => v && String(v).trim()) ? family : undefined,
-      // Partner prefs
-      partner_prefs: Object.values(partner).some((v) => v && String(v).trim()) ? partner : undefined,
-      // Kundali/Astro + lifestyle + contact go into kundali_data JSON blob
+      family_details: Object.values(family).some((v) => v && String(v).trim()) ? { ...family } : undefined,
+      partner_prefs: Object.values(partner).some((v) => v && String(v).trim()) ? { ...partner } : undefined,
       kundali_data: {
         star: general.star || undefined,
         chovvaDosham: general.chovvaDosham || undefined,
@@ -401,26 +449,23 @@ export default function MyProfilePage() {
       },
     };
 
-    // Remove undefined values
-    Object.keys(payload).forEach((k) => { if (payload[k] === undefined) delete payload[k]; });
+    Object.keys(payload).forEach((k) => {
+      if (payload[k] === undefined) delete payload[k];
+    });
+    return payload;
+  }, [general, education, family, partner, interests, contact, schools, colleges, employment]);
 
-    // Defensive: ensure int fields are numbers or omitted (never "Year", "", NaN)
-    const intFields = ["height_cm", "weight_kg", "annual_income_inr"];
-    for (const f of intFields) {
-      const v = payload[f];
-      if (v === undefined || v === null) continue;
-      const n = typeof v === "number" ? v : parseInt(String(v), 10);
-      if (!Number.isFinite(n)) delete payload[f];
-      else payload[f] = n;
-    }
-
-    // Defensive: drop invalid date_of_birth (must be YYYY-MM-DD with numeric parts)
-    if (payload.date_of_birth && !/^\d{4}-\d{2}-\d{2}$/.test(String(payload.date_of_birth))) {
-      delete payload.date_of_birth;
-    }
-
+  const handleSave = useCallback(async (tabId: string) => {
+    const payload = buildPayload();
     try {
-      await api.patch("/api/v1/profile/me", payload);
+      const res = await api.patch("/api/v1/profile/me", payload);
+      const p = (res.data as any)?.data;
+      if (p) {
+        if (typeof p.version === "number") versionRef.current = p.version;
+        if (typeof p.completeness_score === "number") setCompletenessScore(p.completeness_score);
+        if (p.verification_status) setVerifStatus(p.verification_status);
+        setRejectionReason(p.rejection_reason || null);
+      }
       setSavedTab(tabId);
       setSaveError("");
       setTimeout(() => setSavedTab(null), 2000);
@@ -431,22 +476,35 @@ export default function MyProfilePage() {
       setSaveError(msg);
       throw err;
     }
-  }, [general, education, family, partner, interests, contact, schools, colleges, employment]);
+  }, [buildPayload]);
 
-  // ── Autosave: debounce any change to form state, then PATCH to Neon ────────
+  // ── Autosave: debounced, with strict single-in-flight + coalescing. ────────
+  // One save runs at a time. If form state changes while a save is pending,
+  // a trailing save fires once the current one resolves. Prevents "last write
+  // wins" from clobbering updates that happened mid-flight.
   useEffect(() => {
     if (!loadedRef.current) return;
+    // Mark as dirty so the in-flight save will be followed by a trailing save.
+    saveDirty.current = true;
     setAutoSaveState("saving");
-    const t = setTimeout(async () => {
-      try {
-        await handleSave("auto");
-        setAutoSaveState("saved");
-        setSaveError("");
-        setTimeout(() => setAutoSaveState("idle"), 1500);
-      } catch {
-        setAutoSaveState("error");
+    const runSave = async () => {
+      if (saveInFlight.current) return;
+      saveInFlight.current = true;
+      while (saveDirty.current) {
+        saveDirty.current = false;
+        try {
+          await handleSave("auto");
+          setAutoSaveState("saved");
+          setSaveError("");
+          setTimeout(() => setAutoSaveState("idle"), 1500);
+        } catch {
+          setAutoSaveState("error");
+          break;
+        }
       }
-    }, 800);
+      saveInFlight.current = false;
+    };
+    const t = setTimeout(runSave, 800);
     return () => clearTimeout(t);
   }, [general, education, family, partner, contact, interests, schools, colleges, employment, handleSave]);
 
@@ -531,7 +589,7 @@ export default function MyProfilePage() {
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <PhotoCard name={general.name || "Your Name"} />
           <TrustScoreCard score={40} />
-          <CompletenessCard completeness={68} />
+          <CompletenessCard completeness={completenessScore} />
         </div>
 
         {/* ── Right: Tab Panel ── */}
@@ -692,7 +750,7 @@ function GeneralTab({
           </Field>
           <Field label="Marital Status" required>
             <FSelect value={form.maritalStatus} onChange={(v) => update("maritalStatus", v)} placeholder="Select">
-              {["Never Married","Divorced","Widowed","Awaiting Divorce"].map((o) => <option key={o} value={o}>{o}</option>)}
+              {["Never Married","Divorced","Widowed","Separated","Awaiting Divorce"].map((o) => <option key={o} value={o}>{o}</option>)}
             </FSelect>
           </Field>
         </TwoCol>

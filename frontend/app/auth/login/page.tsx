@@ -10,7 +10,7 @@ import {
   signInWithPhoneNumber,
   type ConfirmationResult,
 } from "firebase/auth";
-import { firebaseAuth } from "@/lib/firebase";
+import { firebaseAuth, rememberSessionUid } from "@/lib/firebase";
 import { profileApi } from "@/lib/api";
 import { Heart, Phone, Mail, Eye, EyeOff, Sparkles, ArrowRight } from "lucide-react";
 
@@ -37,7 +37,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     const unsub = firebaseAuth.onAuthStateChanged((user) => {
-      if (user) router.replace("/dashboard");
+      if (user) {
+        rememberSessionUid(user.uid);
+        router.replace("/dashboard");
+      }
     });
     return unsub;
   }, [router]);
