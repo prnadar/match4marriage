@@ -144,14 +144,15 @@ async def firebase_verify_endpoint(
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
     """
-    Verify a Firebase ID token (from phone auth) and return a backend session token.
-    Upserts the user record by phone number extracted from the decoded token.
-
-    The existing Twilio OTP endpoints remain available as a fallback.
+    Verify a Firebase ID token and return a backend session summary.
+    Upserts the user by Firebase UID first, then phone/email — so a user who
+    previously signed in with email then switches to phone auth is recognised
+    as the same person.
     """
     from app.core.firebase import verify_firebase_id_token
+    from app.core.security import _find_or_link_user, _normalize_phone
+    from sqlalchemy import text
 
-    # 1. Verify the Firebase ID token
     try:
         decoded_token = verify_firebase_id_token(payload.id_token)
     except ValueError as exc:
@@ -166,68 +167,80 @@ async def firebase_verify_endpoint(
             detail="Invalid or expired Firebase token",
         )
 
-    # 2. Extract phone number — Firebase phone tokens always include `phone_number`
-    phone_number: str | None = decoded_token.get("phone_number")
-    if not phone_number:
+    firebase_uid = decoded_token.get("uid") or decoded_token.get("sub")
+    if not firebase_uid:
+        raise HTTPException(status_code=401, detail="Firebase token missing uid")
+
+    phone_raw: str | None = decoded_token.get("phone_number")
+    email: str | None = (decoded_token.get("email") or "").strip().lower() or None
+    normalized_phone = _normalize_phone(phone_raw)
+
+    if not normalized_phone and not email:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Firebase token does not contain a phone number",
+            detail="Firebase token contains neither phone number nor email",
         )
 
-    # Strip leading + and country code to get local digits
-    # Store the full E.164 number to match existing user records
-    phone_e164 = phone_number  # e.g. "+919999999999"
-    # Normalise to 10-digit local if possible (matches existing User.phone format)
-    local_phone = phone_e164.lstrip("+")
-    if local_phone.startswith("91") and len(local_phone) == 12:
-        local_phone = local_phone[2:]  # strip 91 country code → 10 digits
-    elif local_phone.startswith("44") and len(local_phone) == 12:
-        local_phone = local_phone[2:]  # strip 44 country code → 10 digits
+    # Resolve / link user
+    user_id = await _find_or_link_user(db, firebase_uid, phone_raw, email, tenant_slug)
 
-    # 3. Upsert user by phone (same logic as verify_otp_endpoint)
-    result = await db.execute(
-        select(User).where(
-            User.phone == local_phone,
-            User.deleted_at.is_(None),
-        )
-    )
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     is_new = user is None
 
     if is_new:
-        from sqlalchemy import text
-        tenant_result = await db.execute(
-            text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"),
-            {"slug": tenant_slug},
-        )
-        tenant_row = tenant_result.fetchone()
-        tenant_uuid = tenant_row[0] if tenant_row else None
+        from app.routers.profile import _resolve_tenant_uuid
+        tenant_uuid = await _resolve_tenant_uuid(db, tenant_slug)
 
         user = User(
+            id=user_id,
             tenant_id=tenant_uuid,
-            phone=local_phone,
-            is_phone_verified=True,
+            phone=normalized_phone,
+            email=email,
+            firebase_uids=[firebase_uid],
+            is_phone_verified=bool(normalized_phone),
+            is_email_verified=bool(decoded_token.get("email_verified")),
         )
         db.add(user)
-        await db.flush()
-        logger.info("firebase_new_user_created", user_id=str(user.id), tenant=tenant_slug)
+        try:
+            await db.flush()
+        except Exception:
+            await db.rollback()
+            user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        logger.info("firebase_new_user_created", user_id=str(user_id), tenant=tenant_slug)
     else:
-        user.is_phone_verified = True
+        changed = False
+        if normalized_phone and not user.phone:
+            user.phone = normalized_phone
+            changed = True
+        if email and not user.email:
+            user.email = email
+            changed = True
+        if normalized_phone:
+            user.is_phone_verified = True
+            changed = True
+        if decoded_token.get("email_verified"):
+            user.is_email_verified = True
+            changed = True
+        if changed:
+            await db.flush()
 
-    # 4. Issue session token (demo token until Auth0 is wired)
     if not settings.AUTH0_DOMAIN:
-        access_token = f"demo:{str(user.id)}"
+        access_token = f"demo:{str(user_id)}"
     else:
         access_token = "__placeholder_implement_auth0_exchange__"
 
-    token_data = TokenResponse(
-        access_token=access_token,
-        expires_in=86400,
-        user_id=str(user.id),
-        is_new_user=is_new,
+    return APIResponse(
+        success=True,
+        data=TokenResponse(
+            access_token=access_token,
+            expires_in=86400,
+            user_id=str(user_id),
+            is_new_user=is_new,
+            email=email,
+            phone=normalized_phone,
+        ),
     )
-
-    return APIResponse(success=True, data=token_data)
 
 
 @router.post("/resend-otp", response_model=APIResponse[None])
@@ -274,62 +287,74 @@ async def email_register_endpoint(
     user = result.scalar_one_or_none()
     is_new = user is None
 
-    if is_new:
-        from sqlalchemy import text
-        tenant_result = await db.execute(
-            text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"),
-            {"slug": tenant_slug},
-        )
-        tenant_row = tenant_result.fetchone()
-        tenant_uuid = tenant_row[0] if tenant_row else None
-
-        user = User(
-            tenant_id=tenant_uuid,
-            email=email,
-            is_email_verified=True,
-        )
-        db.add(user)
-        await db.flush()
-        logger.info("web_email_user_created", user_id=str(user.id), tenant=tenant_slug)
-
-        # Bootstrap profile with name & gender from registration
-        from app.models.user import Gender, UserProfile
-        name_parts = (payload.name or "").strip().split(None, 1)
-        first_name = name_parts[0] if name_parts else ""
-        last_name = name_parts[1] if len(name_parts) > 1 else ""
-        gender_enum = None
-        if payload.gender:
-            _g = payload.gender.lower()
-            gender_enum = {"male": Gender.MALE, "female": Gender.FEMALE, "other": Gender.OTHER}.get(_g)
-
-        profile = UserProfile(
-            tenant_id=tenant_uuid,
-            user_id=user.id,
-            first_name=first_name,
-            last_name=last_name,
-            gender=gender_enum,
-        )
-        db.add(profile)
-        await db.flush()
-        logger.info("web_email_profile_bootstrapped", user_id=str(user.id))
-    else:
+    if not is_new:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists. Please log in instead.",
         )
+
+    from app.models.user import Gender, UserProfile
+    from app.routers.profile import _resolve_tenant_uuid
+
+    tenant_uuid = await _resolve_tenant_uuid(db, tenant_slug)
+    if tenant_uuid is None:
+        raise HTTPException(status_code=500, detail=f"Tenant not provisioned: {tenant_slug}")
+
+    name_parts = (payload.name or "").strip().split(None, 1)
+    first_name = name_parts[0] if name_parts else ""
+    last_name = name_parts[1] if len(name_parts) > 1 else ""
+    gender_enum = None
+    if payload.gender:
+        _g = payload.gender.lower()
+        gender_enum = {"male": Gender.MALE, "female": Gender.FEMALE, "other": Gender.OTHER}.get(_g)
+
+    # Create User + UserProfile atomically. If profile insert fails, user is
+    # rolled back too — no orphaned auth rows.
+    user = User(
+        tenant_id=tenant_uuid,
+        email=email,
+        is_email_verified=True,
+    )
+    db.add(user)
+    try:
+        await db.flush()
+    except Exception as exc:
+        await db.rollback()
+        logger.error("email_user_create_failed", error=str(exc))
+        raise HTTPException(status_code=500, detail="Could not create account")
+
+    profile = UserProfile(
+        tenant_id=tenant_uuid,
+        user_id=user.id,
+        first_name=first_name,
+        last_name=last_name,
+        gender=gender_enum,
+    )
+    db.add(profile)
+    try:
+        await db.flush()
+    except Exception as exc:
+        await db.rollback()
+        logger.error("email_profile_create_failed", error=str(exc), user_id=str(user.id))
+        raise HTTPException(status_code=500, detail="Could not create profile")
+
+    logger.info("web_email_user_created", user_id=str(user.id), tenant=tenant_slug)
 
     if not settings.AUTH0_DOMAIN:
         access_token = f"demo:{str(user.id)}"
     else:
         access_token = "__placeholder_implement_auth0_exchange__"
 
-    token_data = TokenResponse(
-        access_token=access_token,
-        expires_in=86400,
-        user_id=str(user.id),
-        is_new_user=is_new,
+    return APIResponse(
+        success=True,
+        data=TokenResponse(
+            access_token=access_token,
+            expires_in=86400,
+            user_id=str(user.id),
+            is_new_user=is_new,
+            email=email,
+        ),
     )
-    return APIResponse(success=True, data=token_data)
 
 
 # ── Email existence check ────────────────────────────────────────────────────

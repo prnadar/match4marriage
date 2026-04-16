@@ -12,13 +12,15 @@ from datetime import date, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text as sa_text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.logging import get_logger
 from app.core.rate_limit import BROWSE_LIMIT, limiter
-from app.core.security import get_current_user
+from app.core.security import get_current_user, has_admin_role
 from app.core.tenancy import get_current_tenant_slug
 from app.models.user import MaritalStatus, Religion, User, UserProfile
 from app.schemas.common import APIResponse, PaginatedResponse
@@ -29,6 +31,9 @@ from app.services.trust_score import compute_profile_completeness, compute_trust
 router = APIRouter(prefix="/profile", tags=["profile"])
 logger = get_logger(__name__)
 
+# JSON columns that must be merged (not replaced) on PATCH.
+_MERGE_JSON_KEYS = {"partner_prefs", "family_details", "kundali_data"}
+
 # Module-level flag so we only run the schema guard once per cold-boot.
 _schema_guard_ran = False
 
@@ -38,7 +43,8 @@ async def _run_schema_guard_once(db: AsyncSession) -> None:
     global _schema_guard_ran
     if _schema_guard_ran:
         return
-    from sqlalchemy import text as sa_text
+    # Set the flag FIRST so concurrent calls don't all try to run ALTERs.
+    _schema_guard_ran = True
     stmts = [
         # users: drop legacy NOT NULLs and add missing defaults
         "ALTER TABLE users ALTER COLUMN phone DROP NOT NULL",
@@ -51,11 +57,15 @@ async def _run_schema_guard_once(db: AsyncSession) -> None:
         "ALTER TABLE users ALTER COLUMN is_phone_verified SET DEFAULT false",
         "ALTER TABLE users ALTER COLUMN is_email_verified SET DEFAULT false",
         "ALTER TABLE users ALTER COLUMN is_profile_complete SET DEFAULT false",
+        # firebase_uids column (added as part of identity unification)
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uids JSONB NOT NULL DEFAULT '[]'::jsonb",
         # profiles: verification + new fields
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'draft'",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_rejection_reason TEXT",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS weight_kg SMALLINT",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS complexion VARCHAR(50)",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS body_type VARCHAR(50)",
@@ -72,17 +82,32 @@ async def _run_schema_guard_once(db: AsyncSession) -> None:
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS voice_note_key VARCHAR(500)",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS visa_status VARCHAR(100)",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS willing_to_relocate BOOLEAN NOT NULL DEFAULT FALSE",
+        # Add 'awaiting_divorce' to the marital_status enum if it's not already there.
+        # ALTER TYPE ... ADD VALUE is idempotent with IF NOT EXISTS on PG 9.6+.
+        "ALTER TYPE maritalstatus ADD VALUE IF NOT EXISTS 'awaiting_divorce'",
     ]
     for s in stmts:
+        # ALTER TYPE ADD VALUE cannot run inside a transaction on Postgres.
+        # Commit whatever is pending before attempting it.
+        if s.startswith("ALTER TYPE"):
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
         try:
             await db.execute(sa_text(s))
+            if s.startswith("ALTER TYPE"):
+                await db.commit()
         except Exception as e:
             logger.warning("schema_guard_stmt_failed", stmt=s, error=str(e))
+            try:
+                await db.rollback()
+            except Exception:
+                pass
     try:
         await db.commit()
     except Exception:
         await db.rollback()
-    _schema_guard_ran = True
 
 
 @router.get("/trust-score", response_model=APIResponse[dict])
@@ -90,16 +115,7 @@ async def get_trust_score(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
 ):
-    """
-    Returns the current user's trust score (0-100) and a per-signal breakdown.
-
-    Breakdown signals:
-      - email:   email verified (+20 pts)
-      - mobile:  phone verified (+20 pts)
-      - id:      Aadhaar or PAN verified (+30 pts)
-      - profile: profile ≥80% complete (+20 pts)
-      - linkedin: LinkedIn verified (+10 pts)
-    """
+    """Returns the current user's trust score (0-100) and a per-signal breakdown."""
     result = await compute_trust_score(current_user, db)
     return APIResponse(success=True, data=result)
 
@@ -111,41 +127,20 @@ async def browse_profiles(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_slug: str = Depends(get_current_tenant_slug),
-    # Age range
     min_age: int | None = Query(default=None, ge=18, le=100),
     max_age: int | None = Query(default=None, ge=18, le=100),
-    # Filters
     religion: Religion | None = Query(default=None),
-    location: str | None = Query(default=None, description="City or state (case-insensitive)"),
-    education: str | None = Query(default=None, description="Partial match on education_level"),
+    location: str | None = Query(default=None),
+    education: str | None = Query(default=None),
     marital_status: MaritalStatus | None = Query(default=None),
-    has_photo: bool | None = Query(default=None, description="If true, return only profiles with at least one photo"),
-    # Pagination
+    has_photo: bool | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
 ):
-    """
-    Browse / search active profiles.
-
-    - Filtered by caller's tenant.
-    - Excludes caller's own profile.
-    - Excludes soft-deleted profiles.
-    - Ordered by created_at DESC (newest first).
-    - Returns a minimal ProfileCard per result.
-    """
-    from sqlalchemy import text as sa_text
-
-    # Resolve tenant UUID from slug
-    tenant_result = await db.execute(
-        sa_text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"),
-        {"slug": tenant_slug},
-    )
-    tenant_row = tenant_result.fetchone()
-    if not tenant_row:
+    tenant_uuid = await _resolve_tenant_uuid(db, tenant_slug)
+    if tenant_uuid is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    tenant_uuid = tenant_row[0]
 
-    # Resolve calling user's UUID
     raw_sub = current_user.get("sub") or current_user.get("user_id", "")
     try:
         caller_id = uuid.UUID(str(raw_sub))
@@ -153,8 +148,6 @@ async def browse_profiles(
         raise HTTPException(status_code=401, detail="Invalid user identity in token")
 
     offset = (page - 1) * limit
-
-    # Build base query — join UserProfile → User to get trust_score
     base_q = (
         select(UserProfile, User)
         .join(User, User.id == UserProfile.user_id)
@@ -168,7 +161,6 @@ async def browse_profiles(
         )
     )
 
-    # Age range — computed from date_of_birth
     today = date.today()
     if min_age is not None:
         max_dob = date(today.year - min_age, today.month, today.day)
@@ -177,13 +169,11 @@ async def browse_profiles(
         min_dob = date(today.year - max_age - 1, today.month, today.day)
         base_q = base_q.where(UserProfile.date_of_birth >= min_dob)
 
-    # Enum filters
     if religion is not None:
         base_q = base_q.where(UserProfile.religion == religion)
     if marital_status is not None:
         base_q = base_q.where(UserProfile.marital_status == marital_status)
 
-    # Text filters (case-insensitive partial match)
     if location:
         loc_lower = f"%{location.lower()}%"
         from sqlalchemy import or_, func as sqlfunc
@@ -199,24 +189,14 @@ async def browse_profiles(
             sqlfunc.lower(UserProfile.education_level).like(f"%{education.lower()}%")
         )
 
-    # Photo filter — photos is a JSON array; non-empty means has_photo
     if has_photo is True:
-        # JSON array length > 0 — works in PostgreSQL
-        from sqlalchemy import cast, Integer, text as sa_text2
-        base_q = base_q.where(
-            sa_text2("jsonb_array_length(profiles.photos::jsonb) > 0")
-        )
+        base_q = base_q.where(sa_text("jsonb_array_length(profiles.photos::jsonb) > 0"))
     elif has_photo is False:
-        from sqlalchemy import text as sa_text3
-        base_q = base_q.where(
-            sa_text3("jsonb_array_length(profiles.photos::jsonb) = 0")
-        )
+        base_q = base_q.where(sa_text("jsonb_array_length(profiles.photos::jsonb) = 0"))
 
-    # Total count
     count_q = select(func.count()).select_from(base_q.subquery())
     total: int = (await db.execute(count_q)).scalar_one()
 
-    # Paginated rows
     rows_q = base_q.order_by(UserProfile.created_at.desc()).offset(offset).limit(limit)
     rows = (await db.execute(rows_q)).all()
 
@@ -250,14 +230,37 @@ async def browse_profiles(
             )
         )
 
-    logger.info(
-        "profiles_browsed",
-        caller_id=str(caller_id),
-        tenant=tenant_slug,
-        total=total,
-        page=page,
-    )
+    logger.info("profiles_browsed", caller_id=str(caller_id), tenant=tenant_slug, total=total, page=page)
     return PaginatedResponse.create(items=cards, total=total, page=page, limit=limit)
+
+
+async def _resolve_tenant_uuid(db: AsyncSession, tenant_slug: str) -> uuid.UUID | None:
+    """Look up a tenant UUID; auto-provision the row if missing (idempotent)."""
+    row = (await db.execute(
+        sa_text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"), {"slug": tenant_slug}
+    )).fetchone()
+    if row:
+        return row[0]
+
+    # Auto-provision. ON CONFLICT makes this safe under concurrent requests.
+    try:
+        await db.execute(
+            sa_text(
+                "INSERT INTO tenants (id, slug, name, branding, features, plan, max_users, is_active, created_at, updated_at) "
+                "VALUES (gen_random_uuid(), :slug, :name, '{}'::jsonb, '{}'::jsonb, 'starter', 10000, true, NOW(), NOW()) "
+                "ON CONFLICT (slug) DO NOTHING"
+            ),
+            {"slug": tenant_slug, "name": tenant_slug.capitalize()},
+        )
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.warning("tenant_autoprovision_failed", error=str(e), slug=tenant_slug)
+
+    row = (await db.execute(
+        sa_text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"), {"slug": tenant_slug}
+    )).fetchone()
+    return row[0] if row else None
 
 
 async def _get_or_create_own_profile(
@@ -265,9 +268,15 @@ async def _get_or_create_own_profile(
     current_user: dict,
     tenant_slug: str,
 ) -> UserProfile:
-    from sqlalchemy import text as sa_text
+    """
+    Idempotent: finds the caller's profile, or creates User + UserProfile rows
+    on first request. Safe under concurrent requests (advisory lock + commit).
+    """
     await _run_schema_guard_once(db)
     user_id = uuid.UUID(current_user["sub"])
+    firebase_uid: str | None = current_user.get("firebase_uid")
+
+    # Fast path: profile exists
     result = await db.execute(
         select(UserProfile).where(
             UserProfile.user_id == user_id,
@@ -278,42 +287,70 @@ async def _get_or_create_own_profile(
     if profile:
         return profile
 
-    tenant_row = (await db.execute(
-        sa_text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"), {"slug": tenant_slug}
-    )).fetchone()
-    if not tenant_row:
-        # Auto-provision default tenant on first request (Vercel lifespan
-        # isn't guaranteed to run before the first request lands).
-        await db.execute(
-            sa_text(
-                "INSERT INTO tenants (id, slug, name, branding, features, plan, max_users, is_active, created_at, updated_at) "
-                "VALUES (gen_random_uuid(), :slug, :name, '{}'::jsonb, '{}'::jsonb, 'starter', 10000, true, NOW(), NOW()) "
-                "ON CONFLICT (slug) DO NOTHING"
-            ),
-            {"slug": tenant_slug, "name": tenant_slug.capitalize()},
+    # Serialize creation across concurrent requests with a Postgres advisory
+    # lock keyed on the user_id. Ignored on SQLite (tests).
+    try:
+        lock_key = int(user_id.int & ((1 << 63) - 1))
+        await db.execute(sa_text("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key})
+    except Exception:
+        pass
+
+    # Re-check after acquiring the lock
+    result = await db.execute(
+        select(UserProfile).where(
+            UserProfile.user_id == user_id,
+            UserProfile.deleted_at.is_(None),
         )
-        await db.flush()
-        tenant_row = (await db.execute(
-            sa_text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"),
-            {"slug": tenant_slug},
-        )).fetchone()
-        if not tenant_row:
-            raise HTTPException(status_code=500, detail=f"Could not provision tenant {tenant_slug!r}")
-    tenant_uuid = tenant_row[0]
-    # Use ORM insert so all NOT NULL columns get their model defaults
-    existing = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-    if not existing:
-        phone = current_user.get("phone_number") or current_user.get("phone")
+    )
+    profile = result.scalar_one_or_none()
+    if profile:
+        return profile
+
+    tenant_uuid = await _resolve_tenant_uuid(db, tenant_slug)
+    if tenant_uuid is None:
+        raise HTTPException(status_code=500, detail=f"Could not provision tenant {tenant_slug!r}")
+
+    # Upsert User row
+    existing_user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not existing_user:
+        phone = current_user.get("phone") or current_user.get("phone_number")
         email = current_user.get("email")
+        uids = [firebase_uid] if firebase_uid else []
         new_user = User(
             id=user_id,
             tenant_id=tenant_uuid,
             phone=phone,
             email=email,
-            is_phone_verified=True,
+            firebase_uids=uids,
+            is_phone_verified=bool(phone),
+            is_email_verified=bool(current_user.get("email_verified")),
         )
-        db.add(new_user)
-        await db.flush()
+        # Nest in a SAVEPOINT so race-condition retries don't blow away the
+        # outer transaction (and unrelated linking work done in get_current_user).
+        try:
+            async with db.begin_nested():
+                db.add(new_user)
+                await db.flush()
+        except IntegrityError:
+            existing_user = (
+                await db.execute(select(User).where(User.id == user_id))
+            ).scalar_one_or_none()
+    else:
+        # Keep firebase_uids and verification flags fresh
+        changed = False
+        if firebase_uid and firebase_uid not in (existing_user.firebase_uids or []):
+            existing_user.firebase_uids = [*(existing_user.firebase_uids or []), firebase_uid]
+            changed = True
+        if current_user.get("email_verified") and not existing_user.is_email_verified:
+            existing_user.is_email_verified = True
+            changed = True
+        if current_user.get("phone") and not existing_user.is_phone_verified:
+            existing_user.is_phone_verified = True
+            changed = True
+        if changed:
+            await db.flush()
+
+    # Create the empty profile (nested savepoint to survive unique races).
     profile = UserProfile(
         id=uuid.uuid4(),
         tenant_id=tenant_uuid,
@@ -321,10 +358,23 @@ async def _get_or_create_own_profile(
         first_name="",
         last_name="",
     )
-    db.add(profile)
-    await db.flush()
-    await db.refresh(profile)
-    return profile
+    try:
+        async with db.begin_nested():
+            db.add(profile)
+            await db.flush()
+    except IntegrityError:
+        profile = (await db.execute(
+            select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.deleted_at.is_(None))
+        )).scalar_one_or_none()
+        if profile is None:
+            raise
+    # Commit so the new row is durable and visible to concurrent requests
+    # that are blocked on the advisory lock.
+    await db.commit()
+    result = await db.execute(
+        select(UserProfile).where(UserProfile.user_id == user_id, UserProfile.deleted_at.is_(None))
+    )
+    return result.scalar_one()
 
 
 @router.get("/me", response_model=APIResponse[ProfileRead])
@@ -335,6 +385,8 @@ async def get_my_profile(
 ):
     try:
         profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+        # Refresh email verification from Firebase claims (fix #9)
+        await _sync_verification_flags(db, current_user)
         return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
     except HTTPException:
         raise
@@ -343,17 +395,83 @@ async def get_my_profile(
         raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
 
 
+async def _sync_verification_flags(db: AsyncSession, current_user: dict) -> None:
+    """Refresh is_email_verified / is_phone_verified from current Firebase claims."""
+    try:
+        user_id = uuid.UUID(current_user["sub"])
+    except (KeyError, ValueError):
+        return
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user:
+        return
+    changed = False
+    if current_user.get("email_verified") and not user.is_email_verified:
+        user.is_email_verified = True
+        changed = True
+    if current_user.get("phone") and not user.is_phone_verified:
+        user.is_phone_verified = True
+        changed = True
+    if changed:
+        await db.flush()
+
+
+def _merge_json(existing: dict | None, incoming: dict | None) -> dict:
+    """Shallow-merge two JSON dicts. Keys with None in incoming are removed."""
+    merged = dict(existing or {})
+    if not incoming:
+        return merged
+    for k, v in incoming.items():
+        if v is None:
+            merged.pop(k, None)
+        else:
+            merged[k] = v
+    return merged
+
+
+def _apply_profile_patch(profile: UserProfile, payload: dict) -> None:
+    """Apply a partial update. JSON fields are merged, scalars replaced."""
+    for key, value in payload.items():
+        if key in _MERGE_JSON_KEYS and isinstance(value, dict):
+            current = getattr(profile, key, None) or {}
+            setattr(profile, key, _merge_json(current, value))
+        else:
+            setattr(profile, key, value)
+
+
 @router.patch("/me", response_model=APIResponse[ProfileRead])
 async def patch_my_profile(
     payload: ProfileUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
+    request: Request,
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
     profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
-    for key, value in payload.model_dump(exclude_none=True).items():
-        setattr(profile, key, value)
+
+    # Optimistic locking via If-Match header (value = current version). Optional.
+    if_match = request.headers.get("If-Match") or request.headers.get("if-match")
+    current_version = getattr(profile, "version", 0) or 0
+    if if_match:
+        try:
+            client_version = int(if_match.strip('"'))
+        except ValueError:
+            client_version = -1
+        if client_version != current_version:
+            raise HTTPException(
+                status_code=status.HTTP_412_PRECONDITION_FAILED,
+                detail={
+                    "message": "Profile was modified by another session",
+                    "current_version": current_version,
+                },
+            )
+
+    update_data = payload.model_dump(exclude_unset=True)
+    _apply_profile_patch(profile, update_data)
     profile.completeness_score = compute_profile_completeness(profile)
+    try:
+        setattr(profile, "version", current_version + 1)
+    except Exception:
+        pass
     await db.flush()
     await db.refresh(profile)
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
@@ -435,7 +553,15 @@ async def set_primary_photo(
 
 
 def _is_profile_complete(p: UserProfile) -> tuple[bool, list[str]]:
-    """Require every profile field to be filled before submission."""
+    """
+    Require all *core* fields before submission.
+
+    Alignment with the frontend (match4marriage/frontend/app/(app)/profile/me/page.tsx):
+    - Fields not required during draft: `about_family`, `is_manglik`, `visa_status`,
+      `birth_time`, `birth_place` (kept optional for v1 launch).
+    - `bio` is required but only min 10 chars (matches the onboarding bio hint).
+    - `partner_prefs` / `family_details` must be populated with at least 3 keys each.
+    """
     missing: list[str] = []
 
     def need(cond: bool, name: str) -> None:
@@ -451,47 +577,34 @@ def _is_profile_complete(p: UserProfile) -> tuple[bool, list[str]]:
 
     # Location
     need(bool(p.city and p.city.strip()), "city")
-    need(bool(p.state and p.state.strip()), "state")
     need(bool(p.country and p.country.strip()), "country")
 
-    # Religious / community
+    # Community
     need(p.religion is not None, "religion")
     need(bool(p.caste and p.caste.strip()), "caste")
     need(bool(p.mother_tongue and p.mother_tongue.strip()), "mother_tongue")
-    need(bool(p.languages and len(p.languages) > 0), "languages")
 
     # Physical
     need(p.height_cm is not None, "height_cm")
-    need(p.weight_kg is not None, "weight_kg")
-    need(bool(p.complexion and p.complexion.strip()), "complexion")
-    need(bool(p.body_type and p.body_type.strip()), "body_type")
 
     # Education & career
     need(bool(p.education_level and p.education_level.strip()), "education_level")
-    need(bool(p.education_field and p.education_field.strip()), "education_field")
-    need(bool(p.college and p.college.strip()), "college")
     need(bool(p.occupation and p.occupation.strip()), "occupation")
-    need(bool(p.employer and p.employer.strip()), "employer")
-    need(p.annual_income_inr is not None, "annual_income_inr")
 
     # Bio
-    need(bool(p.bio and len(p.bio.strip()) >= 20), "bio")
-    need(bool(p.about_family and p.about_family.strip()), "about_family")
+    need(bool(p.bio and len(p.bio.strip()) >= 10), "bio")
 
     # Media
     need(bool(p.photos and len(p.photos) > 0), "photos")
 
-    # Partner preferences + family details (non-empty JSON)
-    need(bool(p.partner_prefs and len(p.partner_prefs) > 0), "partner_prefs")
-    need(bool(p.family_details and len(p.family_details) > 0), "family_details")
+    # Partner prefs + family details — at least 3 meaningful keys each
+    def _nonempty_keys(d: dict | None) -> int:
+        if not d:
+            return 0
+        return sum(1 for v in d.values() if v not in (None, "", [], {}))
 
-    # Kundali
-    need(bool(p.birth_time and p.birth_time.strip()), "birth_time")
-    need(bool(p.birth_place and p.birth_place.strip()), "birth_place")
-    need(p.is_manglik is not None, "is_manglik")
-
-    # NRI
-    need(bool(p.visa_status and p.visa_status.strip()), "visa_status")
+    need(_nonempty_keys(p.partner_prefs) >= 3, "partner_prefs")
+    need(_nonempty_keys(p.family_details) >= 3, "family_details")
 
     return (len(missing) == 0, missing)
 
@@ -508,6 +621,13 @@ async def submit_profile_for_review(
     complete, missing = _is_profile_complete(profile)
     if not complete:
         raise HTTPException(status_code=400, detail={"message": "Profile incomplete", "missing": missing})
+    # Preserve prior rejection reason as `last_rejection_reason` so admin keeps context
+    prior = profile.rejection_reason
+    if prior:
+        try:
+            setattr(profile, "last_rejection_reason", prior)
+        except Exception:
+            pass
     profile.verification_status = "submitted"
     profile.rejection_reason = None
     profile.submitted_at = datetime.utcnow()
@@ -516,17 +636,30 @@ async def submit_profile_for_review(
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
 
 
+# ── Admin endpoints ──────────────────────────────────────────────────────────
+
+
+def _require_admin(current_user: dict) -> None:
+    if not has_admin_role(current_user):
+        raise HTTPException(status_code=403, detail="Admin required")
+
+
 @router.get("/admin/verifications", response_model=APIResponse[list[dict]])
 async def admin_list_verifications(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_slug: str = Depends(get_current_tenant_slug),
-    status_filter: str = Query(default="submitted", description="submitted | approved | rejected | all"),
+    status_filter: str = Query(default="submitted"),
 ):
-    roles = current_user.get("roles", []) or current_user.get("https://bandhan.in/roles", [])
-    if "admin" not in roles and "super_admin" not in roles:
-        raise HTTPException(status_code=403, detail="Admin required")
-    q = select(UserProfile).where(UserProfile.deleted_at.is_(None))
+    _require_admin(current_user)
+    tenant_uuid = await _resolve_tenant_uuid(db, tenant_slug)
+    if tenant_uuid is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    q = select(UserProfile).where(
+        UserProfile.tenant_id == tenant_uuid,
+        UserProfile.deleted_at.is_(None),
+    )
     if status_filter != "all":
         q = q.where(UserProfile.verification_status == status_filter)
     q = q.order_by(UserProfile.submitted_at.desc().nullslast())
@@ -536,6 +669,20 @@ async def admin_list_verifications(
     return APIResponse(success=True, data=items)
 
 
+async def _admin_load_profile(db: AsyncSession, tenant_uuid: uuid.UUID, user_id: uuid.UUID) -> UserProfile:
+    res = await db.execute(
+        select(UserProfile).where(
+            UserProfile.user_id == user_id,
+            UserProfile.tenant_id == tenant_uuid,
+            UserProfile.deleted_at.is_(None),
+        )
+    )
+    profile = res.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return profile
+
+
 @router.post("/admin/verifications/{user_id}/approve", response_model=APIResponse[ProfileRead])
 async def admin_approve(
     user_id: uuid.UUID,
@@ -543,13 +690,11 @@ async def admin_approve(
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
-    roles = current_user.get("roles", []) or current_user.get("https://bandhan.in/roles", [])
-    if "admin" not in roles and "super_admin" not in roles:
-        raise HTTPException(status_code=403, detail="Admin required")
-    res = await db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
-    profile = res.scalar_one_or_none()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
+    _require_admin(current_user)
+    tenant_uuid = await _resolve_tenant_uuid(db, tenant_slug)
+    if tenant_uuid is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    profile = await _admin_load_profile(db, tenant_uuid, user_id)
     profile.verification_status = "approved"
     profile.rejection_reason = None
     profile.reviewed_at = datetime.utcnow()
@@ -566,17 +711,14 @@ async def admin_request_info(
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
-    roles = current_user.get("roles", []) or current_user.get("https://bandhan.in/roles", [])
-    if "admin" not in roles and "super_admin" not in roles:
-        raise HTTPException(status_code=403, detail="Admin required")
+    _require_admin(current_user)
+    tenant_uuid = await _resolve_tenant_uuid(db, tenant_slug)
+    if tenant_uuid is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
     note = (payload or {}).get("note", "").strip()
     if not note:
         raise HTTPException(status_code=400, detail="note required")
-    res = await db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
-    profile = res.scalar_one_or_none()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    # Bounce back to draft so the user can edit + resubmit
+    profile = await _admin_load_profile(db, tenant_uuid, user_id)
     profile.verification_status = "draft"
     profile.rejection_reason = f"More info needed: {note}"
     profile.reviewed_at = datetime.utcnow()
@@ -593,16 +735,14 @@ async def admin_reject(
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
-    roles = current_user.get("roles", []) or current_user.get("https://bandhan.in/roles", [])
-    if "admin" not in roles and "super_admin" not in roles:
-        raise HTTPException(status_code=403, detail="Admin required")
+    _require_admin(current_user)
+    tenant_uuid = await _resolve_tenant_uuid(db, tenant_slug)
+    if tenant_uuid is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
     reason = (payload or {}).get("reason", "").strip()
     if not reason:
         raise HTTPException(status_code=400, detail="reason required")
-    res = await db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
-    profile = res.scalar_one_or_none()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
+    profile = await _admin_load_profile(db, tenant_uuid, user_id)
     profile.verification_status = "rejected"
     profile.rejection_reason = reason
     profile.reviewed_at = datetime.utcnow()
@@ -618,41 +758,25 @@ async def get_profile(
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
+    # If the caller is asking for their own profile, route through the bootstrap path.
+    requesting_user_id = str(current_user.get("sub", ""))
+    if requesting_user_id == str(user_id):
+        profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+        return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+
+    tenant_uuid = await _resolve_tenant_uuid(db, tenant_slug)
+    if tenant_uuid is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
     result = await db.execute(
         select(UserProfile).where(
             UserProfile.user_id == user_id,
+            UserProfile.tenant_id == tenant_uuid,
             UserProfile.deleted_at.is_(None),
         )
     )
     profile = result.scalar_one_or_none()
     if not profile:
-        # Auto-create an empty profile for authenticated users fetching their own profile
-        # This prevents 404 on first app load before onboarding completes
-        from sqlalchemy import text as sa_text
-        tenant_result = await db.execute(
-            sa_text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"),
-            {"slug": tenant_slug}
-        )
-        tenant_row = tenant_result.fetchone()
-        tenant_uuid = tenant_row[0] if tenant_row else None
-
-        # Only auto-create if the requesting user is fetching their own profile
-        requesting_user_id = str(current_user.get("sub", ""))
-        if requesting_user_id != str(user_id):
-            raise HTTPException(status_code=404, detail="Profile not found")
-
-        profile = UserProfile(
-            id=uuid.uuid4(),
-            tenant_id=tenant_uuid,
-            user_id=user_id,
-            first_name="",
-            last_name="",
-        )
-        db.add(profile)
-        await db.flush()
-        await db.refresh(profile)
-        logger.info("profile_auto_created_on_get", user_id=str(user_id))
-
+        raise HTTPException(status_code=404, detail="Profile not found")
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
 
 
@@ -662,61 +786,22 @@ async def update_profile(
     payload: ProfileUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
 ):
-    result = await db.execute(
-        select(UserProfile).where(
-            UserProfile.user_id == user_id,
-            UserProfile.deleted_at.is_(None),
-        )
-    )
-    profile = result.scalar_one_or_none()
+    """Legacy PUT — only allowed for the caller's own row. Delegates to PATCH logic."""
+    if str(user_id) != str(current_user.get("sub", "")):
+        raise HTTPException(status_code=403, detail="Can only update your own profile")
 
-    if not profile:
-        # Auto-create profile for new users (upsert behaviour)
-        from sqlalchemy import text as sa_text
-        tenant_result = await db.execute(
-            sa_text("SELECT id FROM tenants WHERE slug = 'bandhan' LIMIT 1")
-        )
-        tenant_row = tenant_result.fetchone()
-        tenant_uuid = tenant_row[0] if tenant_row else None
-
-        # Ensure user exists in users table (required for FK)
-        from sqlalchemy import text as sa_text2
-        user_exists = await db.execute(
-            sa_text2("SELECT id FROM users WHERE id = :uid LIMIT 1"),
-            {"uid": str(user_id)}
-        )
-        if not user_exists.fetchone():
-            # Create user record if missing
-            await db.execute(
-                sa_text2("""
-                    INSERT INTO users (id, tenant_id, is_phone_verified, created_at, updated_at)
-                    VALUES (:uid, :tid, true, NOW(), NOW())
-                    ON CONFLICT (id) DO NOTHING
-                """),
-                {"uid": str(user_id), "tid": str(tenant_uuid)}
-            )
-            await db.flush()
-
-        profile = UserProfile(
-            id=uuid.uuid4(),
-            tenant_id=tenant_uuid,
-            user_id=user_id,
-            first_name="",
-            last_name="",
-        )
-        db.add(profile)
-        await db.flush()
-        logger.info("profile_auto_created", user_id=str(user_id))
-
-    update_data = payload.model_dump(exclude_none=True)
-    for key, value in update_data.items():
-        setattr(profile, key, value)
-
+    profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+    update_data = payload.model_dump(exclude_unset=True)
+    _apply_profile_patch(profile, update_data)
     profile.completeness_score = compute_profile_completeness(profile)
+    try:
+        setattr(profile, "version", (getattr(profile, "version", 0) or 0) + 1)
+    except Exception:
+        pass
     await db.flush()
     await db.refresh(profile)
-
     logger.info("profile_updated", user_id=str(user_id))
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
 
@@ -727,16 +812,9 @@ async def get_photo_upload_url(
     current_user: Annotated[dict, Depends(get_current_user)] = None,
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
-    """Returns signed Cloudinary upload params for direct client photo upload."""
-    ext_map = {
-        "image/jpeg": "jpg",
-        "image/jpg": "jpg",
-        "image/png": "png",
-        "image/webp": "webp",
-    }
+    ext_map = {"image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp"}
     ext = ext_map.get(content_type, "jpg")
     user_id = current_user.get("sub", "unknown")
-
     result = generate_photo_upload_signature(
         tenant_slug=tenant_slug,
         user_id=user_id,

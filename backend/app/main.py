@@ -77,6 +77,11 @@ async def _ensure_verification_columns() -> None:
         # Legacy users.phone was NOT NULL, but Firebase-created rows may not have phone at creation time
         "ALTER TABLE users ALTER COLUMN phone DROP NOT NULL",
         "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
+        # Identity unification — firebase_uids list column (new in identity rework)
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uids JSONB NOT NULL DEFAULT '[]'::jsonb",
+        # Optimistic locking + rejection history on profiles
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_rejection_reason TEXT",
     ]
     async with engine.begin() as conn:
         for s in stmts:
@@ -84,6 +89,15 @@ async def _ensure_verification_columns() -> None:
                 await conn.execute(text(s))
             except Exception as e:
                 logger.warning("schema_guard_failed", stmt=s, error=str(e))
+
+    # ALTER TYPE ADD VALUE cannot run inside a transaction on Postgres, so do
+    # it on a fresh autocommit connection. Idempotent via IF NOT EXISTS (PG 12+).
+    try:
+        async with engine.connect() as conn:
+            await conn.execution_options(isolation_level="AUTOCOMMIT")
+            await conn.execute(text("ALTER TYPE maritalstatus ADD VALUE IF NOT EXISTS 'awaiting_divorce'"))
+    except Exception as e:
+        logger.warning("marital_status_enum_update_failed", error=str(e))
 
 
 async def _ensure_schema() -> None:
