@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Heart, Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
-
-const ADMIN_EMAIL = "admin@match4marriage.com";
-const ADMIN_PASSWORD = "Admin@123";
+import {
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+import { firebaseAuth, clearClientState, rememberSessionUid } from "@/lib/firebase";
+import { api } from "@/lib/api";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -15,27 +18,66 @@ export default function AdminLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // If an admin is already signed in, skip the form.
+  useEffect(() => {
+    const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
+      if (!user) return;
+      try {
+        // Force refresh so a freshly-granted admin claim is picked up.
+        await user.getIdToken(true);
+        const res = await api.get<{ data: { is_admin: boolean } }>("/api/v1/auth/me");
+        if ((res.data as any)?.data?.is_admin) {
+          router.replace("/admin/verifications");
+        }
+      } catch {
+        // Not authenticated / not authorised — stay on login page
+      }
+    });
+    return unsub;
+  }, [router]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
+    try {
+      // 1. Sign in via Firebase
+      const cred = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+      // 2. Force a token refresh so custom claims land immediately
+      await cred.user.getIdToken(true);
+      rememberSessionUid(cred.user.uid);
 
-    // Hardcoded credentials check
-    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-      const token = btoa(`${email}:${Date.now()}`);
-      localStorage.setItem("admin_token", token);
-      localStorage.setItem("admin_email", email);
-      router.push("/admin/dashboard");
-    } else {
-      setError("Invalid email or password");
+      // 3. Confirm admin role server-side
+      const res = await api.get<{ data: { is_admin: boolean; roles: string[] } }>("/api/v1/auth/me");
+      const isAdmin = (res.data as any)?.data?.is_admin === true;
+      if (!isAdmin) {
+        await signOut(firebaseAuth);
+        clearClientState();
+        setError("This account does not have admin access.");
+        setLoading(false);
+        return;
+      }
+
+      // 4. Route into the admin area
+      router.replace("/admin/verifications");
+    } catch (e: any) {
+      const code = e?.code || "";
+      if (code.includes("user-not-found") || code.includes("invalid-credential") || code.includes("wrong-password")) {
+        setError("Email or password is incorrect.");
+      } else if (code.includes("too-many-requests")) {
+        setError("Too many attempts. Please wait a moment and try again.");
+      } else if (code.includes("user-disabled")) {
+        setError("This account has been disabled.");
+      } else {
+        setError(e?.message || "Login failed.");
+      }
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-mesh flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2.5 mb-3">
             <Heart className="w-7 h-7 text-rose fill-rose" />
@@ -44,7 +86,6 @@ export default function AdminLoginPage() {
           <p className="font-body text-sm text-muted">Admin Panel</p>
         </div>
 
-        {/* Login Card */}
         <div className="glass-card p-8">
           <h2 className="font-display text-xl font-semibold text-deep mb-6 text-center">
             Admin Log In
@@ -69,6 +110,7 @@ export default function AdminLoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="admin@match4marriage.com"
+                  autoComplete="username"
                   required
                   className="w-full pl-10 pr-4 py-3 rounded-xl border font-body text-sm text-deep bg-white/80 focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold transition-colors"
                   style={{ borderColor: "rgba(201,149,74,0.2)", minHeight: "auto" }}
@@ -87,6 +129,7 @@ export default function AdminLoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  autoComplete="current-password"
                   required
                   className="w-full pl-10 pr-10 py-3 rounded-xl border font-body text-sm text-deep bg-white/80 focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold transition-colors"
                   style={{ borderColor: "rgba(201,149,74,0.2)", minHeight: "auto" }}

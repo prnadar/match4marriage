@@ -7,12 +7,16 @@ import {
   LayoutDashboard, Users, Upload, Image, CreditCard,
   Flag, Settings, LogOut, Heart, ChevronLeft, ChevronRight,
   Menu, UserCheck, Camera, MessageSquare, BarChart3,
-  Bell, DollarSign, Handshake,
+  Bell, DollarSign, Handshake, ShieldCheck,
 } from "lucide-react";
+import { signOut } from "firebase/auth";
 import { ToastProvider } from "@/components/admin/Toast";
+import { api } from "@/lib/api";
+import { firebaseAuth, clearClientState } from "@/lib/firebase";
 
 const navItems = [
   { href: "/admin/dashboard",       label: "Dashboard",      icon: LayoutDashboard },
+  { href: "/admin/verifications",   label: "Verifications",  icon: ShieldCheck },
   { href: "/admin/users",           label: "Users",          icon: Users },
   { href: "/admin/profiles",        label: "Profiles",       icon: UserCheck },
   { href: "/admin/profiles/upload", label: "Upload Profile", icon: Upload },
@@ -34,23 +38,41 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
 
-  // Auth guard — skip for login page
+  // Auth guard: the admin area is gated by Firebase email/password sign-in +
+  // `admin` custom claim. /auth/me is the server-side source of truth for
+  // roles, so we call it on every mount rather than trusting localStorage.
   useEffect(() => {
     if (pathname === "/admin/login") {
       setAuthenticated(true);
       return;
     }
-    const token = localStorage.getItem("admin_token");
-    if (!token) {
-      router.replace("/admin/login");
-    } else {
-      setAuthenticated(true);
-    }
+
+    let cancelled = false;
+    const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
+      if (cancelled) return;
+      if (!user) {
+        router.replace("/admin/login");
+        return;
+      }
+      try {
+        const res = await api.get<{ data: { is_admin: boolean } }>("/api/v1/auth/me");
+        const isAdmin = (res.data as any)?.data?.is_admin === true;
+        if (cancelled) return;
+        if (!isAdmin) {
+          router.replace("/admin/login");
+          return;
+        }
+        setAuthenticated(true);
+      } catch {
+        if (!cancelled) router.replace("/admin/login");
+      }
+    });
+    return () => { cancelled = true; unsub(); };
   }, [pathname, router]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("admin_token");
-    localStorage.removeItem("admin_email");
+  const handleLogout = async () => {
+    try { await signOut(firebaseAuth); } catch {}
+    clearClientState();
     router.push("/admin/login");
   };
 
