@@ -825,11 +825,20 @@ async def get_photo_upload_url(
     ext_map = {"image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp"}
     ext = ext_map.get(content_type, "jpg")
     user_id = current_user.get("sub", "unknown")
-    result = generate_photo_upload_signature(
-        tenant_slug=tenant_slug,
-        user_id=user_id,
-        file_extension=ext,
-    )
+    try:
+        result = generate_photo_upload_signature(
+            tenant_slug=tenant_slug,
+            user_id=user_id,
+            file_extension=ext,
+        )
+    except RuntimeError as exc:
+        # Cloudinary not configured (or transient auth failure). Return a
+        # clean 503 rather than leaking the raw Python error as a 500.
+        logger.error("photo_upload_unavailable", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Photo uploads are temporarily unavailable. Please try again later or contact support.",
+        )
     return APIResponse(success=True, data=result)
 
 

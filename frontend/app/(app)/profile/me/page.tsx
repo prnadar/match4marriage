@@ -1744,7 +1744,12 @@ function PhotosTab() {
 
         uploaded.push({ id: cld.public_id, url: cld.secure_url, path: cld.public_id, isPrimary: photos.length === 0 && uploaded.length === 0 });
       } catch (err) {
-        setUploadError(err instanceof Error ? err.message : "Upload failed");
+        // Strip the "NNN: " status-code prefix ApiError tacks on so the user
+        // sees just the human-readable reason (e.g. "Photo uploads are
+        // temporarily unavailable…") rather than "500: RuntimeError: …".
+        const raw = err instanceof Error ? err.message : "Upload failed";
+        const clean = raw.replace(/^\d{3}:\s*/, "").replace(/^RuntimeError:\s*/i, "");
+        setUploadError(clean);
       }
     }
 
