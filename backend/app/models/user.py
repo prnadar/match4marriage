@@ -48,6 +48,7 @@ class MaritalStatus(str, enum.Enum):
     DIVORCED = "divorced"
     WIDOWED = "widowed"
     SEPARATED = "separated"
+    AWAITING_DIVORCE = "awaiting_divorce"
 
 
 class Religion(str, enum.Enum):
@@ -74,6 +75,10 @@ class User(TenantModel):
     auth0_sub: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(15), nullable=True, index=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    # Firebase UIDs linked to this user (one user may auth via phone, email, or
+    # google — each gives a different Firebase UID but they're the same person).
+    # Stored as JSON list so we don't need a side-table.
+    firebase_uids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
 
     # PII stored as hash for lookup; never store raw Aadhaar
     aadhaar_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -184,8 +189,14 @@ class UserProfile(TenantModel):
     # Verification workflow: draft | submitted | approved | rejected
     verification_status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Historical snapshot of the most recent rejection reason, preserved across
+    # resubmits so admins keep review context.
+    last_rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Optimistic locking counter — incremented on every update.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="profile")

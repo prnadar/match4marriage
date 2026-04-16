@@ -40,6 +40,8 @@ class TokenResponse(BaseSchema):
     expires_in: int
     user_id: str
     is_new_user: bool = False
+    email: str | None = None
+    phone: str | None = None
 
 
 class RefreshTokenRequest(BaseSchema):

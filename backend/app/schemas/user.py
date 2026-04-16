@@ -98,26 +98,39 @@ class ProfileRead(TimestampedSchema):
     city: str | None
     state: str | None
     country: str
+    pincode: str | None = None
     religion: Religion | None
     caste: str | None
+    sub_caste: str | None = None
     mother_tongue: str | None
     languages: list[str]
     height_cm: int | None
+    weight_kg: int | None = None
+    complexion: str | None = None
+    body_type: str | None = None
     education_level: str | None
+    education_field: str | None = None
+    college: str | None = None
     occupation: str | None
+    employer: str | None = None
     annual_income_inr: int | None
     bio: str | None
+    about_family: str | None = None
     photos: list[dict[str, Any]]
+    intro_videos: list[dict[str, Any]] = []
+    voice_note_key: str | None = None
     completeness_score: int
     is_manglik: bool | None
+    birth_time: str | None = None
+    birth_place: str | None = None
+    visa_status: str | None = None
     willing_to_relocate: bool
     verification_status: str = "draft"
     rejection_reason: str | None = None
-    complexion: str | None = None
-    body_type: str | None = None
-    weight_kg: int | None = None
-    education_field: str | None = None
-    employer: str | None = None
+    last_rejection_reason: str | None = None
+    submitted_at: datetime | None = None
+    reviewed_at: datetime | None = None
+    version: int = 0
     family_details: dict[str, Any] = {}
     partner_prefs: dict[str, Any] = {}
     kundali_data: dict[str, Any] = {}
