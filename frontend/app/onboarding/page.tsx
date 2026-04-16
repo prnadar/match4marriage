@@ -10,7 +10,7 @@ import {
   Heart, Phone, User, Brain, Shield, Sliders,
   Check, ArrowRight, ArrowLeft, Upload, Star,
 } from "lucide-react";
-import { firebaseAuth } from "@/lib/firebase";
+import { firebaseAuth, rememberSessionUid } from "@/lib/firebase";
 import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
 
 const steps = [
@@ -239,6 +239,9 @@ export default function OnboardingPage() {
         setAuthChecked(true);
         return;
       }
+      // If a different user signed in on this device, purge the prior user's
+      // localStorage before we start pre-filling.
+      rememberSessionUid(user.uid);
       try {
         const res = await profileApi.me();
         // Backend may return { data: profile } or profile directly
