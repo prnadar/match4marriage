@@ -28,8 +28,8 @@ export function useAuthState(): AuthState {
   return state;
 }
 
-export function getCTA(state: AuthState): { label: string; href: string } {
-  if (!state.isAuthenticated) return { label: "Get Started", href: "/onboarding" };
-  if (!state.hasOnboarded) return { label: "Complete Profile", href: "/onboarding" };
-  return { label: "Go to Dashboard", href: "/dashboard" };
+export function getCTA(state: AuthState): { label: string; href: string; locked: string } {
+  if (!state.isAuthenticated) return { label: "Get Started", href: "/onboarding", locked: "Register to view" };
+  if (!state.hasOnboarded) return { label: "Complete Profile", href: "/onboarding", locked: "Complete profile to view" };
+  return { label: "Go to Dashboard", href: "/dashboard", locked: "Unlocked" };
 }
