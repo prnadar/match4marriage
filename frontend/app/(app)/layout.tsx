@@ -83,17 +83,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
       if (!user) { router.replace("/onboarding"); return; }
       rememberSessionUid(user.uid);
-      const hasPassword = user.providerData.some((p) => p.providerId === "password");
       try {
         const res = await profileApi.me();
         const p = (res.data as any)?.data;
         const hasProfile = !!(p && p.first_name && p.first_name.trim());
         if (!hasProfile) { router.replace("/onboarding"); return; }
-        // Existing user with no password → prompt them to set one, but only once per session.
-        if (!hasPassword && !sessionStorage.getItem("skip_password_prompt")) {
-          sessionStorage.setItem("skip_password_prompt", "1");
-          router.replace("/auth/setup-password");
-        }
       } catch {
         // backend unreachable — leave user on page
       }
