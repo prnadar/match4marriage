@@ -132,8 +132,12 @@ export default function LoginPage() {
     <div className="m4m-userlogin-root" style={{
       minHeight: "100vh",
       display: "grid",
-      gridTemplateColumns: "minmax(0, 1.05fr) minmax(420px, 500px)",
-      background: "#0c050a",
+      // Hero first (left), form second (right). At very wide screens
+      // the hero still wins space; under 1100px we single-column (see
+      // GlobalStyles). Using minmax(0, 1fr) ensures the hero can shrink
+      // down to 0 and then stack cleanly via the media query.
+      gridTemplateColumns: "minmax(560px, 1fr) minmax(0, 480px)",
+      background: "#fdfbf9",
       position: "relative",
       overflow: "hidden",
       color: "#fff",
@@ -1067,20 +1071,24 @@ function GlobalStyles() {
         border-color: #dc1e3c !important;
       }
 
-      /* Responsive */
-      @media (max-width: 1024px) {
+      /* Responsive
+         Collapse to single column well before the columns start fighting
+         for space. Above 1100px we have confident two-column layout with
+         the hero dominant. */
+      @media (max-width: 1100px) {
         .m4m-userlogin-root {
           grid-template-columns: 1fr !important;
+          min-height: auto !important;
         }
         .m4m-userlogin-hero {
-          padding: 40px 32px !important;
-          min-height: 540px;
+          padding: 44px 36px !important;
+          min-height: 520px;
         }
       }
       @media (max-width: 640px) {
         .m4m-userlogin-hero {
-          padding: 32px 24px !important;
-          min-height: 440px;
+          padding: 32px 22px !important;
+          min-height: 420px;
         }
       }
 
