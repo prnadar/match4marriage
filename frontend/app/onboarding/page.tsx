@@ -1,33 +1,62 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+/**
+ * Onboarding — 3-step sign-up optimised for UK-Indian matrimony market.
+ *
+ *   Step 1: Create account  — Email + password + full name.
+ *                             Firebase createUserWithEmailAndPassword.
+ *   Step 2: About you       — DOB, gender, religion, caste, mother tongue,
+ *                             country, education, profession + phone OTP.
+ *                             Phone is linked to the existing user via
+ *                             linkWithCredential (same Firebase UID,
+ *                             multiple auth providers).
+ *   Step 3: Verify identity — Unchanged ID upload step.
+ *
+ * After completion the user has both email/password AND phone auth on
+ * the same Firebase account. They can sign in with either on /auth/login.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import PublicHeader from "@/components/PublicHeader";
-import PublicFooter from "@/components/PublicFooter";
-import { profileApi, api } from "@/lib/api";
+import Image from "next/image";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  Heart, Phone, User, Brain, Shield, Sliders,
-  Check, ArrowRight, ArrowLeft, Upload, Star,
+  Heart, User as UserIcon, Phone, Shield, Mail, Lock, Eye, EyeOff,
+  ArrowRight, ArrowLeft, Check, AlertCircle, Loader2, Upload,
 } from "lucide-react";
+import {
+  createUserWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  linkWithCredential,
+  PhoneAuthProvider,
+  signInWithEmailAndPassword,
+  sendEmailVerification,
+  updateProfile as updateFirebaseProfile,
+  type ConfirmationResult,
+} from "firebase/auth";
 import { firebaseAuth, rememberSessionUid } from "@/lib/firebase";
-import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
+import { api } from "@/lib/api";
 
-const steps = [
-  { id: 1, label: "Basic Profile",  icon: User,    title: "Tell us about yourself",              subtitle: "Your profile helps us find better matches" },
-  { id: 2, label: "Verify Phone",   icon: Phone,   title: "Verify your phone number",            subtitle: "We'll send a one-time verification code" },
-  { id: 3, label: "ID Verify",      icon: Shield,  title: "Verify your identity",                subtitle: "Government-grade trust. Only you can see this data" },
-];
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-const personalities = [
-  { q: "I prefer spending weekends…",       a: ["At home with family", "Exploring new places",   "Both equally",           "With close friends"] },
-  { q: "My career ambitions are…",          a: ["Very important to me", "Important but balanced", "Secondary to family",    "Still figuring out"] },
-  { q: "My ideal family life looks like…",  a: ["Joint family",         "Nuclear with close ties", "Nuclear independent",   "Open to either"] },
-  { q: "I handle disagreements by…",        a: ["Discussing calmly",    "Giving space first",      "Seeking compromise",    "Avoiding confrontation"] },
-  { q: "My communication style is…",        a: ["Direct and honest",    "Thoughtful and measured", "Expressive and warm",  "Reserved but deep"] },
-];
+const STEPS = [
+  { id: 1, label: "Create account",  icon: UserIcon, hint: "Start with your email & password"       },
+  { id: 2, label: "About you",       icon: Phone,    hint: "Profile basics + phone verification"     },
+  { id: 3, label: "Verify identity", icon: Shield,   hint: "A moment of formality for everyone's safety" },
+] as const;
 
-// ── ID Verify Step Component ──────────────────────────────────────────────────
+const COUNTRY_CODES = [
+  { code: "+44", flag: "🇬🇧", label: "UK" },
+  { code: "+91", flag: "🇮🇳", label: "India" },
+  { code: "+1",  flag: "🇺🇸", label: "US" },
+  { code: "+1",  flag: "🇨🇦", label: "Canada" },
+  { code: "+61", flag: "🇦🇺", label: "Australia" },
+  { code: "+971", flag: "🇦🇪", label: "UAE" },
+  { code: "+65", flag: "🇸🇬", label: "Singapore" },
+] as const;
 
 const COUNTRIES = [
   "United Kingdom", "India", "United States", "Canada", "Australia",
@@ -35,939 +64,1171 @@ const COUNTRIES = [
   "Netherlands", "France", "Ireland", "Malaysia", "Kenya", "Other",
 ];
 
-const DOCUMENTS_BY_COUNTRY: Record<string, string[]> = {
-  "United Kingdom":  ["Passport", "UK Driving Licence", "BRP (Biometric Residence Permit)", "National ID Card"],
-  "India":           ["Passport", "Driving Licence", "Voter ID Card", "National ID Card"],
-  "United States":   ["Passport", "US Driver's License", "US State ID", "Permanent Resident Card"],
-  "Canada":          ["Passport", "Canadian Driver's Licence", "Permanent Resident Card"],
-  "Australia":       ["Passport", "Australian Driver's Licence", "Medicare Card"],
-  "UAE":             ["Passport", "UAE Emirates ID", "UAE Driving Licence"],
-  "Singapore":       ["Passport", "Singapore NRIC", "Singapore Driving Licence"],
-  "New Zealand":     ["Passport", "NZ Driver's Licence"],
-  "South Africa":    ["Passport", "SA Smart ID Card", "SA Driver's Licence"],
-  "Germany":         ["Passport", "German National ID (Personalausweis)", "German Driving Licence"],
-  "Netherlands":     ["Passport", "Dutch National ID", "Dutch Driving Licence"],
-  "France":          ["Passport", "French National ID", "French Driving Licence"],
-  "Ireland":         ["Passport", "Irish Driving Licence", "Public Services Card"],
-  "Malaysia":        ["Passport", "Malaysian MyKad (National ID)"],
-  "Kenya":           ["Passport", "Kenyan National ID"],
-  "Other":           ["Passport", "National ID Card", "Driving Licence"],
+const RELIGION_OPTIONS = [
+  "Hindu", "Muslim", "Christian", "Sikh", "Jain", "Buddhist",
+  "Parsi / Zoroastrian", "Jewish", "No Religion", "Other",
+];
+const RELIGION_MAP: Record<string, string> = {
+  "Hindu": "hindu", "Muslim": "muslim", "Christian": "christian",
+  "Sikh": "sikh", "Jain": "jain", "Buddhist": "buddhist",
+  "Parsi / Zoroastrian": "parsi", "Jewish": "jewish",
+  "No Religion": "other", "Other": "other",
 };
 
-function IdVerifyStep({ onComplete }: { onComplete?: (done: boolean) => void }) {
-  const [country, setCountry] = useState("");
-  const [docType, setDocType] = useState("");
-  const [docNumber, setDocNumber] = useState("");
-  const [frontFile, setFrontFile] = useState<File | null>(null);
-  const [backFile, setBackFile] = useState<File | null>(null);
-  const [selfieFile, setSelfieFile] = useState<File | null>(null);
+const MOTHER_TONGUE_OPTIONS = [
+  "Tamil", "Hindi", "Telugu", "Kannada", "Malayalam", "Marathi",
+  "Bengali", "Gujarati", "Punjabi", "Urdu", "Sindhi", "Odia",
+  "Konkani", "Tulu", "Sinhala", "English", "Other",
+];
 
-  const availableDocs = country ? (DOCUMENTS_BY_COUNTRY[country] || DOCUMENTS_BY_COUNTRY["Other"]) : [];
-  const needsBack = docType && !["Passport"].includes(docType);
+const EASE = [0.22, 1, 0.36, 1] as const;
 
-  // Notify parent whenever completion state changes
-  const checkComplete = (front: File | null, back: File | null, selfie: File | null, doc: string, ct: string) => {
-    const done = !!(ct && doc && front && selfie);
-    onComplete?.(done);
-  };
-
-  const UploadBox = ({
-    label, hint, file, onChange,
-  }: { label: string; hint: string; file: File | null; onChange: (f: File) => void }) => (
-    <div>
-      <label style={{ fontSize: "11px", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>{label}</label>
-      <label style={{
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "6px",
-        padding: "20px 16px",
-        border: file ? "2px solid rgba(220,30,60,0.4)" : "2px dashed rgba(220,30,60,0.2)",
-        borderRadius: "10px",
-        background: file ? "rgba(220,30,60,0.03)" : "#fff",
-        cursor: "pointer",
-      }}>
-        <input type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && onChange(e.target.files[0])} />
-        <Upload style={{ width: "20px", height: "20px", color: file ? "#dc1e3c" : "rgba(220,30,60,0.35)" }} />
-        {file
-          ? <p style={{ fontSize: "12px", color: "#dc1e3c", fontWeight: 600 }}>{file.name}</p>
-          : <p style={{ fontSize: "12px", color: "#888" }}>{hint}</p>
-        }
-        <p style={{ fontSize: "11px", color: "#bbb" }}>JPG, PNG or PDF · Max 5MB</p>
-      </label>
-    </div>
-  );
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-
-      {/* Trust banner */}
-      <div style={{ background: "rgba(92,122,82,0.07)", border: "1px solid rgba(92,122,82,0.2)", borderRadius: "10px", padding: "14px 16px", display: "flex", gap: "12px" }}>
-        <Shield style={{ width: "18px", height: "18px", color: "#5C7A52", flexShrink: 0, marginTop: "2px" }} />
-        <div>
-          <p style={{ fontSize: "12px", fontWeight: 600, color: "#5C7A52", marginBottom: "2px" }}>Your data is protected</p>
-          <p style={{ fontSize: "11px", color: "rgba(92,122,82,0.75)", lineHeight: 1.5 }}>Documents are encrypted at rest and never shared. Only your verified ✓ status is visible to matches. UK GDPR & PDPA compliant.</p>
-        </div>
-      </div>
-
-      {/* Country selector */}
-      <div>
-        <label style={{ fontSize: "11px", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>Your Country</label>
-        <select
-          value={country}
-          onChange={(e) => { setCountry(e.target.value); setDocType(""); }}
-          style={{ width: "100%", padding: "12px 16px", border: "1px solid rgba(220,30,60,0.15)", borderRadius: "10px", fontSize: "14px", color: country ? "#1a0a14" : "#aaa", background: "#fff", outline: "none", cursor: "pointer" }}
-        >
-          <option value="" disabled>Select your country…</option>
-          {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </div>
-
-      {/* Document type selector */}
-      {country && (
-        <div>
-          <label style={{ fontSize: "11px", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "8px" }}>Document Type</label>
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            {availableDocs.map((doc) => (
-              <button
-                key={doc}
-                onClick={() => setDocType(doc)}
-                style={{
-                  textAlign: "left",
-                  padding: "12px 16px",
-                  borderRadius: "10px",
-                  fontSize: "13px",
-                  fontWeight: docType === doc ? 600 : 400,
-                  border: `${docType === doc ? "2px" : "1px"} solid ${docType === doc ? "#dc1e3c" : "rgba(220,30,60,0.15)"}`,
-                  background: docType === doc ? "rgba(220,30,60,0.05)" : "#fff",
-                  color: docType === doc ? "#dc1e3c" : "#555",
-                  cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: "10px",
-                }}
-              >
-                <span style={{ fontSize: "16px" }}>🪪</span>
-                {doc}
-                {docType === doc && <span style={{ marginLeft: "auto", fontSize: "12px", color: "#dc1e3c" }}>✓</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Document number */}
-      {docType && (
-        <div>
-          <label style={{ fontSize: "11px", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>Document Number</label>
-          <input
-            value={docNumber}
-            onChange={(e) => setDocNumber(e.target.value)}
-            placeholder={`Enter your ${docType} number`}
-            style={{ width: "100%", padding: "12px 16px", border: "1px solid rgba(220,30,60,0.15)", borderRadius: "10px", fontSize: "14px", color: "#1a0a14", background: "#fff", outline: "none", boxSizing: "border-box", letterSpacing: "0.05em" }}
-          />
-        </div>
-      )}
-
-      {/* Upload boxes */}
-      {docType && (
-        <>
-          <UploadBox
-            label={`${docType}${docType} Front`}
-            hint="Upload front of document"
-            file={frontFile}
-            onChange={(f) => { setFrontFile(f); checkComplete(f, backFile, selfieFile, docType, country); }}
-          />
-          {needsBack && (
-            <UploadBox
-              label={`${docType}${docType} Back`}
-              hint="Upload back of document"
-              file={backFile}
-              onChange={(f) => { setBackFile(f); checkComplete(frontFile, f, selfieFile, docType, country); }}
-            />
-          )}
-          <UploadBox
-            label="Selfie / Liveness Photo"
-            hint="Take or upload a clear selfie"
-            file={selfieFile}
-            onChange={(f) => { setSelfieFile(f); checkComplete(frontFile, backFile, f, docType, country); }}
-          />
-        </>
-      )}
-    </div>
-  );
-}
-
-const COUNTRY_CODES = [
-  { code: "+44",  flag: "🇬🇧", label: "UK (+44)" },
-  { code: "+91",  flag: "🇮🇳", label: "India (+91)" },
-  { code: "+1",   flag: "🇺🇸", label: "US (+1)" },
-  { code: "+1",   flag: "🇨🇦", label: "Canada (+1)" },
-  { code: "+61",  flag: "🇦🇺", label: "Australia (+61)" },
-  { code: "+971", flag: "🇦🇪", label: "UAE (+971)" },
-  { code: "+65",  flag: "🇸🇬", label: "Singapore (+65)" },
-  { code: "+64",  flag: "🇳🇿", label: "New Zealand (+64)" },
-  { code: "+27",  flag: "🇿🇦", label: "South Africa (+27)" },
-  { code: "+49",  flag: "🇩🇪", label: "Germany (+49)" },
-  { code: "+31",  flag: "🇳🇱", label: "Netherlands (+31)" },
-  { code: "+33",  flag: "🇫🇷", label: "France (+33)" },
-  { code: "+353", flag: "🇮🇪", label: "Ireland (+353)" },
-  { code: "+60",  flag: "🇲🇾", label: "Malaysia (+60)" },
-  { code: "+254", flag: "🇰🇪", label: "Kenya (+254)" },
-  { code: "+94",  flag: "🇱🇰", label: "Sri Lanka (+94)" },
-  { code: "+977", flag: "🇳🇵", label: "Nepal (+977)" },
-  { code: "+880", flag: "🇧🇩", label: "Bangladesh (+880)" },
-  { code: "+92",  flag: "🇵🇰", label: "Pakistan (+92)" },
-  { code: "+974", flag: "🇶🇦", label: "Qatar (+974)" },
-  { code: "+968", flag: "🇴🇲", label: "Oman (+968)" },
-  { code: "+973", flag: "🇧🇭", label: "Bahrain (+973)" },
-  { code: "+965", flag: "🇰🇼", label: "Kuwait (+965)" },
-] as const;
+// ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [step, setStep] = useState(1);
-  const [authChecked, setAuthChecked] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
 
-  // Auth guard + resume logic. Runs once on mount.
-  // - No user: start at step 1
-  // - User + complete profile: skip to dashboard
-  // - User + partial profile: prefill fields + jump to first incomplete step
+  useEffect(() => { setMounted(true); }, []);
+
+  // Auth guard: if signed in with profile, skip to dashboard; if signed in
+  // without profile, start at step 2 (they have email but no phone/profile).
   useEffect(() => {
-    // Fast-path: returning user flag set by previous successful onboarding
-    if (typeof window !== "undefined" && localStorage.getItem("onboarding_completed") === "true") {
-      router.replace("/dashboard");
-      return;
-    }
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
-      if (!user) {
-        setAuthChecked(true);
-        return;
-      }
-      // If a different user signed in on this device, purge the prior user's
-      // localStorage before we start pre-filling.
+      if (!user) return;
       rememberSessionUid(user.uid);
       try {
-        const res = await profileApi.me();
-        // Backend may return { data: profile } or profile directly
-        const raw: any = res.data;
-        const p = raw?.data ?? raw;
-        if (p) {
-          const hasBasic = !!(p.first_name && String(p.first_name).trim());
-          const hasIdVerify = !!(p.id_verified);
-          if (hasBasic) {
-            localStorage.setItem("onboarding_completed", "true");
-            router.replace("/dashboard");
-            return;
-          }
-          if (hasIdVerify) { /* noop: kept for type */ }
-          // Prefill form from saved profile (resume)
-          if (hasBasic) {
-            const fullName = [p.first_name, p.last_name].filter(Boolean).join(" ");
-            const religionDisplay: Record<string, string> = {
-              hindu: "Hindu", muslim: "Muslim", christian: "Christian", sikh: "Sikh",
-              jain: "Jain", buddhist: "Buddhist", parsi: "Parsi / Zoroastrian",
-              jewish: "Jewish", other: "Other",
-            };
-            setForm((prev) => ({
-              ...prev,
-              name: fullName || prev.name,
-              dob: p.date_of_birth || prev.dob,
-              gender: p.gender ? (p.gender.charAt(0).toUpperCase() + p.gender.slice(1)) : prev.gender,
-              religion: p.religion ? (religionDisplay[p.religion] || p.religion) : prev.religion,
-              caste: p.caste || prev.caste,
-              country: p.country || prev.country,
-              motherTongue: p.mother_tongue || prev.motherTongue,
-              education: p.education_level || prev.education,
-              profession: p.occupation || prev.profession,
-            }));
-          }
-          // Phone is already verified (Firebase session exists) → skip step 2
-          setOtpVerified(true);
-          // If basic info present but ID not, jump to step 3
-          if (hasBasic && !hasIdVerify) setStep(3);
-          else if (!hasBasic) setStep(1);
-        }
-      } catch {
-        // backend unreachable — let them start fresh
-      }
-      setAuthChecked(true);
-    });
-    return unsub;
-  }, [router]);
-  const [phone, setPhone] = useState("");
-  const [countryCode, setCountryCode] = useState("+44");
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpVerified, setOtpVerified] = useState(false);
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [otpError, setOtpError] = useState("");
-  const [idUploaded, setIdUploaded] = useState(false);
-
-  // Firebase phone auth refs
-  const confirmationRef = useRef<ConfirmationResult | null>(null);
-  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
-  const saveBasicRef = useRef<(() => Promise<boolean>) | null>(null);
-
-  const getRecaptchaVerifier = useCallback(() => {
-    if (recaptchaRef.current) return recaptchaRef.current;
-    // Clear previous reCAPTCHA widget from DOM if any
-    const container = document.getElementById("recaptcha-container");
-    if (container) container.innerHTML = "";
-    const verifier = new RecaptchaVerifier(firebaseAuth, "recaptcha-container", {
-      size: "invisible",
-    });
-    recaptchaRef.current = verifier;
-    return verifier;
-  }, []);
-
-  const handleSendOtp = useCallback(async () => {
-    const trimmed = phone.replace(/\D/g, "");
-    if (trimmed.length < 7) {
-      setOtpError("Please enter a valid phone number");
-      return;
-    }
-    setOtpLoading(true);
-    setOtpError("");
-    try {
-      const fullNumber = `${countryCode}${trimmed}`;
-      const verifier = getRecaptchaVerifier();
-      const result = await signInWithPhoneNumber(firebaseAuth, fullNumber, verifier);
-      confirmationRef.current = result;
-      setOtpSent(true);
-    } catch (err: unknown) {
-      console.error("Firebase phone auth error:", err);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const firebaseErr = err as any;
-      const code: string = firebaseErr?.code ?? "";
-      const msg: string = firebaseErr?.message ?? (err instanceof Error ? err.message : "Failed to send OTP");
-      console.error("Firebase error code:", code, "message:", msg);
-      if (code === "auth/too-many-requests" || msg.includes("too-many-requests")) {
-        setOtpError("Too many attempts. Please wait a few minutes and try again.");
-      } else if (code === "auth/invalid-phone-number" || msg.includes("invalid-phone-number")) {
-        setOtpError("Invalid phone number. Please check and try again.");
-      } else if (code === "auth/captcha-check-failed" || msg.includes("reCAPTCHA")) {
-        setOtpError("reCAPTCHA verification failed. Please refresh the page and try again.");
-      } else if (code === "auth/network-request-failed") {
-        setOtpError("Network error. Please check your internet connection.");
-      } else if (code === "auth/quota-exceeded") {
-        setOtpError("SMS quota exceeded. Please try again later.");
-      } else if (code === "auth/missing-phone-provider") {
-        setOtpError("Phone authentication is not enabled. Please contact support.");
-      } else if (code === "auth/billing-not-enabled" || msg.toLowerCase().includes("billing")) {
-        setOtpError("Firebase billing (Blaze plan) is required for phone SMS. Please upgrade at console.firebase.google.com and wait a few minutes.");
-      } else if (code === "auth/internal-error" || msg.toLowerCase().includes("internal")) {
-        setOtpError(`Firebase internal error — this often means billing isn't active yet. Error: ${code} - ${msg}`);
-      } else {
-        setOtpError(`Could not send OTP: ${code || msg}`);
-      }
-      // Reset reCAPTCHA on error so it re-renders fresh
-      try {
-        if (recaptchaRef.current) {
-          recaptchaRef.current.clear();
-        }
-      } catch { /* ignore */ }
-      recaptchaRef.current = null;
-    } finally {
-      setOtpLoading(false);
-    }
-  }, [phone, countryCode, getRecaptchaVerifier]);
-
-  const handleVerifyOtp = useCallback(async () => {
-    const otpCode = otp.join("");
-    if (otpCode.length < 6) return;
-    if (!confirmationRef.current) {
-      setOtpError("Session expired. Please resend the OTP.");
-      return;
-    }
-    setOtpLoading(true);
-    setOtpError("");
-    try {
-      await confirmationRef.current.confirm(otpCode);
-      // Existing user? Skip onboarding — go straight to dashboard.
-      try {
-        const res = await profileApi.me();
+        const res = await api.get("/api/v1/profile/me");
         const p = (res.data as any)?.data;
-        if (p && p.first_name && p.first_name.trim().length > 0) {
-          localStorage.setItem("onboarding_completed", "true");
+        if (p && p.first_name && String(p.first_name).trim()) {
           router.replace("/dashboard");
           return;
         }
-      } catch {
-        // No profile yet — continue onboarding
-      }
-      // Flush step-1 form data to Neon now that Firebase session exists.
-      if (saveBasicRef.current) {
-        await saveBasicRef.current();
-      }
-      setOtpVerified(true);
-    } catch (err: unknown) {
-      console.error("OTP verification error:", err);
-      setOtpError("Incorrect code. Please try again.");
-    } finally {
-      setOtpLoading(false);
-    }
-  }, [otp, router]);
-  const [form, setForm] = useState({ name: "", dob: "", gender: "", religion: "", caste: "", country: "", motherTongue: "", education: "", profession: "" });
-
-  // Pre-fill name & gender from registration data stored in localStorage
-  useEffect(() => {
-    const savedName = localStorage.getItem("user_name") ?? "";
-    const savedGender = localStorage.getItem("user_gender") ?? "";
-    if (savedName || savedGender) {
-      setForm((prev) => ({
-        ...prev,
-        name: prev.name || savedName,
-        gender: prev.gender || (savedGender === "male" ? "Male" : savedGender === "female" ? "Female" : prev.gender),
-      }));
-    }
-  }, []);
-  const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
-  const [prefs, setPrefs] = useState({ ageMin: "25", ageMax: "32", religion: "Any", city: "Any India" });
-
-  const progress = ((step - 1) / (steps.length - 1)) * 100;
-  const currentStep = steps[step - 1];
-
-  // Persist current step so returning users resume where they left off
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("onboarding_step", String(step));
-    }
-  }, [step]);
-
-  // On mount, resume from saved step (if any)
-  useEffect(() => {
-    const saved = localStorage.getItem("onboarding_step");
-    if (saved) {
-      const parsed = parseInt(saved, 10);
-      if (parsed >= 1 && parsed <= steps.length) setStep(parsed);
-    }
-  }, []);
-
-  const [saving, setSaving] = useState(false);
-
-  // Persist basic profile fields to Neon. Requires active Firebase session.
-  const saveBasicToBackend = useCallback(async () => {
-    if (!firebaseAuth.currentUser) return false;
-    if (!form.name) return false;
-    const nameParts = form.name.trim().split(/\s+/);
-    const religionMap: Record<string, string> = {
-      "Hindu": "hindu", "Muslim": "muslim", "Christian": "christian",
-      "Sikh": "sikh", "Jain": "jain", "Buddhist": "buddhist",
-      "Parsi / Zoroastrian": "parsi", "Jewish": "jewish",
-      "No Religion": "other", "Other": "other",
-    };
-    try {
-      await api.patch("/api/v1/profile/me", {
-        first_name: nameParts[0] || undefined,
-        last_name: nameParts.slice(1).join(" ") || undefined,
-        gender: form.gender ? form.gender.toLowerCase() : undefined,
-        date_of_birth: form.dob || undefined,
-        religion: form.religion ? (religionMap[form.religion] || form.religion.toLowerCase()) : undefined,
-        caste: form.caste || undefined,
-        country: form.country || undefined,
-        mother_tongue: form.motherTongue || undefined,
-        education_level: form.education || undefined,
-        occupation: form.profession || undefined,
-      });
-      return true;
-    } catch (err) {
-      console.error("Save basic profile failed:", err);
-      return false;
-    }
-  }, [form]);
-
-  useEffect(() => {
-    saveBasicRef.current = saveBasicToBackend;
-  }, [saveBasicToBackend]);
-
-  const next = async () => {
-    if (step === 1) {
-      // Step 1 → Step 2: data kept in React state; flushed after OTP auth.
+      } catch { /* new user — stay on onboarding */ }
+      // Signed in but no profile yet — they completed step 1 on a previous visit
       setStep(2);
-    } else if (step === 2) {
-      // OTP already verified + saveBasicToBackend ran on verify success
-      setStep(3);
-    } else if (step === 3) {
-      setSaving(true);
-      try {
-        // Mark ID verified (stub for now — real KYC provider later)
-        await api.patch("/api/v1/profile/me", { visa_status: "id_uploaded" });
-      } catch (err) {
-        console.warn("ID verify persist failed:", err);
-      } finally {
-        setSaving(false);
+    });
+    return unsub;
+  }, [router]);
+
+  // Shared state passed down to each step
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+
+  // ─── Step 1 (email + password) handler ─────────────────────────────────
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleCreateAccount = useCallback(async (password: string) => {
+    setLoading(true);
+    setError("");
+    try {
+      // Guard: don't collide with an existing email
+      const methods = await fetchSignInMethodsForEmail(firebaseAuth, email.trim());
+      if (methods.length > 0) {
+        setError("An account with this email already exists. Sign in instead.");
+        setLoading(false);
+        return false;
       }
+
+      const cred = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
+      rememberSessionUid(cred.user.uid);
+
+      // Best-effort: set display name on the Firebase user
+      try {
+        await updateFirebaseProfile(cred.user, { displayName: fullName.trim() });
+      } catch { /* non-fatal */ }
+
+      // Kick off email verification (non-blocking — we don't wait for them to click it)
+      try { await sendEmailVerification(cred.user); } catch { /* non-fatal */ }
+
+      // Save first/last name to our backend immediately
+      const nameParts = fullName.trim().split(/\s+/);
+      try {
+        await api.patch("/api/v1/profile/me", {
+          first_name: nameParts[0] || undefined,
+          last_name: nameParts.slice(1).join(" ") || undefined,
+        });
+      } catch (e) {
+        // Non-fatal — user still exists in Firebase; profile will be created on next request
+        console.warn("Initial profile save failed:", e);
+      }
+
+      setStep(2);
+      return true;
+    } catch (e: any) {
+      const code = e?.code || "";
+      if (code.includes("email-already-in-use")) {
+        setError("An account with this email already exists. Try signing in.");
+      } else if (code.includes("weak-password")) {
+        setError("Password is too weak. Use at least 8 characters.");
+      } else if (code.includes("invalid-email")) {
+        setError("Please enter a valid email address.");
+      } else {
+        setError(e?.message || "Could not create account.");
+      }
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [email, fullName]);
+
+  // ─── Step 2 (profile + phone link) handler ─────────────────────────────
+
+  const handleLinkPhoneAndSaveProfile = useCallback(async (payload: {
+    dob: string; gender: string; religion: string; caste: string;
+    country: string; motherTongue: string; education: string; profession: string;
+    verificationId: string; otp: string;
+  }) => {
+    setLoading(true);
+    setError("");
+    try {
+      const user = firebaseAuth.currentUser;
+      if (!user) {
+        setError("Session lost. Please sign in again.");
+        setLoading(false);
+        return false;
+      }
+
+      // 1. Link phone credential to the existing Firebase user
+      const phoneCred = PhoneAuthProvider.credential(payload.verificationId, payload.otp.trim());
+      try {
+        await linkWithCredential(user, phoneCred);
+      } catch (e: any) {
+        const code = e?.code || "";
+        if (code.includes("provider-already-linked")) {
+          // Already linked — fine, continue
+        } else if (code.includes("invalid-verification-code")) {
+          setError("Incorrect code. Please try again.");
+          setLoading(false);
+          return false;
+        } else if (code.includes("credential-already-in-use")) {
+          setError("This phone number is already linked to another account.");
+          setLoading(false);
+          return false;
+        } else {
+          throw e;
+        }
+      }
+
+      // 2. Refresh the token so the backend sees the new phone claim
+      await user.getIdToken(true);
+
+      // 3. Save profile basics
+      await api.patch("/api/v1/profile/me", {
+        date_of_birth: payload.dob || undefined,
+        gender: payload.gender ? payload.gender.toLowerCase() : undefined,
+        religion: payload.religion ? (RELIGION_MAP[payload.religion] || payload.religion.toLowerCase()) : undefined,
+        caste: payload.caste || undefined,
+        country: payload.country || undefined,
+        mother_tongue: payload.motherTongue || undefined,
+        education_level: payload.education || undefined,
+        occupation: payload.profession || undefined,
+      });
+
+      setStep(3);
+      return true;
+    } catch (e: any) {
+      setError(e?.message || "Could not save your profile. Please try again.");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ─── Step 3 → finish ────────────────────────────────────────────────────
+
+  const handleFinish = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      await api.patch("/api/v1/profile/me", { visa_status: "id_uploaded" });
+    } catch (e) {
+      console.warn("ID verify persist failed:", e);
+    } finally {
       localStorage.setItem("onboarding_completed", "true");
       localStorage.removeItem("onboarding_step");
-      router.push("/auth/setup-password");
+      router.push("/dashboard");
     }
-  };
-  const back = () => step > 1 && setStep(step - 1);
+  }, [router]);
 
-  if (!authChecked) return null;
+  const currentStep = STEPS[step - 1];
 
-  if (!authChecked) {
-    return (
-      <div style={{ minHeight: "100vh", background: "#fdfbf9", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-poppins, sans-serif)", color: "#7B2D3A" }}>
-        Loading…
-      </div>
-    );
-  }
+  if (!mounted) return null;
 
   return (
     <div style={{
       minHeight: "100vh",
+      display: "grid",
+      gridTemplateColumns: "minmax(0, 1fr) minmax(460px, 560px)",
       background: "#fdfbf9",
-      display: "flex",
-      flexDirection: "column",
+      overflow: "hidden",
       fontFamily: "var(--font-poppins, sans-serif)",
-    }}>
-      <PublicHeader />
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 16px" }}>
+    }}
+    className="m4m-onb-root"
+    >
+      <GlobalStyles />
 
-      {/* Progress stepper */}
-      <div style={{ width: "100%", maxWidth: "520px", marginBottom: "32px" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "12px" }}>
-          {steps.map((s) => {
-            const Icon = s.icon;
-            const done = s.id < step;
-            const active = s.id === step;
-            return (
-              <div key={s.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
-                <div style={{
-                  width: "36px", height: "36px", borderRadius: "50%",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: done
-                    ? "linear-gradient(135deg, #5C7A52, #8DB870)"
-                    : active
-                    ? "linear-gradient(135deg, #dc1e3c, #a0153c)"
-                    : "rgba(26,10,20,0.06)",
-                  border: done || active ? "none" : "1px solid rgba(26,10,20,0.12)",
-                  transition: "all 0.3s",
-                }}>
-                  {done
-                    ? <Check style={{ width: "16px", height: "16px", color: "#fff" }} />
-                    : <Icon style={{ width: "16px", height: "16px", color: active ? "#fff" : "rgba(26,10,20,0.3)" }} />
-                  }
-                </div>
-                <span style={{
-                  fontSize: "10px",
-                  textAlign: "center",
-                  maxWidth: "52px",
-                  lineHeight: 1.2,
-                  fontWeight: active ? 600 : 400,
-                  color: active ? "#dc1e3c" : "rgba(26,10,20,0.35)",
-                }}>
-                  {s.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Progress bar */}
-        <div style={{ height: "4px", background: "rgba(26,10,20,0.08)", borderRadius: "2px", overflow: "hidden" }}>
-          <div style={{
-            height: "100%",
-            width: `${progress}%`,
-            background: "linear-gradient(90deg, #dc1e3c, #C89020)",
-            borderRadius: "2px",
-            transition: "width 0.5s ease",
-          }} />
-        </div>
-      </div>
-
-      {/* Card */}
-      <div style={{
-        width: "100%",
-        maxWidth: "520px",
-        background: "#fff",
-        border: "1px solid rgba(220,30,60,0.08)",
-        borderRadius: "16px",
-        padding: "32px",
-        boxShadow: "0 8px 40px rgba(220,30,60,0.06)",
+      {/* ─── LEFT: editorial photograph + progress ─── */}
+      <aside className="m4m-onb-hero" style={{
+        position: "relative",
+        overflow: "hidden",
+        background: "#1a0a14",
       }}>
+        <Image
+          src="/couples/couple-hero.jpg"
+          alt=""
+          fill
+          priority
+          sizes="(max-width: 1024px) 100vw, 55vw"
+          style={{ objectFit: "cover", objectPosition: "center" }}
+        />
+        <div aria-hidden style={{
+          position: "absolute", inset: 0,
+          background: "linear-gradient(180deg, rgba(26,10,20,0.6) 0%, rgba(26,10,20,0.1) 35%, rgba(26,10,20,0.15) 60%, rgba(26,10,20,0.85) 100%)",
+        }} />
 
-        <div style={{ marginBottom: "24px" }}>
-          <p style={{ fontSize: "12px", color: "#C89020", marginBottom: "4px", opacity: 0.7 }}>
-            Step {step} of {steps.length}
-          </p>
-          <h2 style={{
-            fontFamily: "var(--font-playfair, serif)",
-            fontSize: "24px",
-            fontWeight: 600,
-            color: "#1a0a14",
-            marginBottom: "4px",
+        {/* Brand mark */}
+        <Link href="/" style={{
+          position: "absolute", top: 32, left: 32, zIndex: 2,
+          display: "inline-flex", alignItems: "center", gap: 10,
+          padding: "8px 12px 8px 10px",
+          background: "rgba(255,255,255,0.08)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 999,
+          backdropFilter: "blur(14px)",
+          textDecoration: "none",
+        }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: 8,
+            background: "linear-gradient(135deg, #ff4d79, #a0153c)",
+            display: "grid", placeItems: "center",
           }}>
-            {currentStep.title}
-          </h2>
-          <p style={{ fontSize: "13px", color: "#888" }}>{currentStep.subtitle}</p>
+            <Heart style={{ width: 14, height: 14, color: "#fff" }} fill="#fff" />
+          </div>
+          <span style={{
+            fontFamily: "var(--font-playfair, serif)",
+            fontSize: 15, fontWeight: 700, color: "#fff", letterSpacing: "-0.005em",
+          }}>
+            Match<span style={{ color: "#ffb9c8" }}>4</span>Marriage
+          </span>
+        </Link>
+
+        {/* Bottom: step indicator + copy */}
+        <div style={{
+          position: "absolute", left: 48, right: 48, bottom: 52, zIndex: 2,
+          color: "#fff",
+        }}>
+          <div style={{
+            fontSize: 10, fontWeight: 700,
+            color: "rgba(255,255,255,0.55)",
+            letterSpacing: "0.22em", textTransform: "uppercase",
+            marginBottom: 14,
+            display: "flex", alignItems: "center", gap: 12,
+          }}>
+            <span>Step {step} of {STEPS.length}</span>
+            <span style={{ width: 32, height: 1, background: "rgba(255,255,255,0.25)" }} />
+            <span>{currentStep.label}</span>
+          </div>
+          <h1 style={{
+            fontFamily: "var(--font-playfair, serif)",
+            fontSize: "clamp(36px, 4.2vw, 56px)",
+            fontWeight: 500,
+            lineHeight: 1.05,
+            margin: 0,
+            letterSpacing: "-0.026em",
+            textShadow: "0 2px 20px rgba(0,0,0,0.4)",
+          }}>
+            {step === 1 && <>Create your account.</>}
+            {step === 2 && <>Tell us about you.</>}
+            {step === 3 && <>One last thing.</>}
+          </h1>
+          <p style={{
+            fontSize: 16, lineHeight: 1.6, color: "rgba(255,255,255,0.75)",
+            marginTop: 14, maxWidth: 460,
+          }}>
+            {currentStep.hint}
+          </p>
+
+          {/* Progress bar */}
+          <div style={{ display: "flex", gap: 6, marginTop: 34, maxWidth: 340 }}>
+            {STEPS.map((s, i) => {
+              const isDone = i + 1 < step;
+              const isActive = i + 1 === step;
+              return (
+                <div key={s.id} style={{
+                  flex: 1, height: 3, borderRadius: 2,
+                  background: isDone ? "#ffb9c8"
+                    : isActive ? "linear-gradient(90deg, #ffb9c8, rgba(255,152,174,0.25))"
+                    : "rgba(255,255,255,0.18)",
+                  transition: "background 300ms ease",
+                }} />
+              );
+            })}
+          </div>
         </div>
+      </aside>
 
-        {/* ── Step 2: Phone + OTP ── */}
-        {step === 2 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            <div id="recaptcha-container" />
-            {otpError && (
-              <div style={{ padding: "10px 14px", background: "rgba(220,30,60,0.05)", border: "1px solid rgba(220,30,60,0.2)", borderRadius: "10px" }}>
-                <p style={{ fontSize: "12px", color: "#dc1e3c", margin: 0 }}>{otpError}</p>
-              </div>
-            )}
-            {!otpSent ? (
-              <>
-                <div>
-                  <label style={{ fontSize: "11px", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>
-                    Mobile Number
-                  </label>
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: "0",
-                    border: "1px solid rgba(220,30,60,0.15)",
-                    borderRadius: "10px",
-                    height: "48px",
-                    background: "#fff",
-                    overflow: "hidden",
-                  }}>
-                    <select
-                      value={countryCode}
-                      onChange={(e) => setCountryCode(e.target.value)}
-                      style={{
-                        height: "100%",
-                        padding: "0 8px 0 12px",
-                        border: "none",
-                        borderRight: "1px solid rgba(220,30,60,0.15)",
-                        background: "rgba(220,30,60,0.02)",
-                        fontSize: "13px",
-                        color: "#1a0a14",
-                        outline: "none",
-                        cursor: "pointer",
-                        minWidth: "130px",
-                      }}
-                    >
-                      {COUNTRY_CODES.map((c, i) => (
-                        <option key={`${c.code}-${i}`} value={c.code}>
-                          {c.flag} {c.label}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="tel"
-                      placeholder="9876543210"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
-                      style={{ flex: 1, background: "transparent", fontSize: "14px", color: "#1a0a14", outline: "none", border: "none", padding: "0 16px" }}
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={handleSendOtp}
-                  disabled={phone.length < 7 || otpLoading}
-                  style={{
-                    width: "100%", padding: "12px 24px",
-                    background: phone.length < 7 || otpLoading ? "rgba(26,10,20,0.08)" : "linear-gradient(135deg, #dc1e3c, #a0153c)",
-                    color: phone.length < 7 || otpLoading ? "#aaa" : "#fff",
-                    borderRadius: "10px", fontSize: "14px", fontWeight: 600,
-                    border: "none", cursor: phone.length < 7 || otpLoading ? "not-allowed" : "pointer",
-                    boxShadow: phone.length >= 7 && !otpLoading ? "0 4px 16px rgba(220,30,60,0.25)" : "none",
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                  }}
-                >
-                  {otpLoading ? "Sending..." : <>Send OTP <ArrowRight style={{ width: "16px", height: "16px" }} /></>}
-                </button>
-              </>
-            ) : !otpVerified ? (
-              <>
-                <p style={{ fontSize: "13px", color: "#888" }}>
-                  Enter the 6-digit OTP sent to <strong style={{ color: "#1a0a14" }}>{countryCode} {phone}</strong>
-                </p>
-                <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
-                  {otp.map((digit, i) => (
-                    <input
-                      key={i}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/, "");
-                        const updated = [...otp]; updated[i] = val; setOtp(updated);
-                        if (val && i < 5) (document.getElementById(`otp-${i + 1}`) as HTMLInputElement)?.focus();
-                      }}
-                      id={`otp-${i}`}
-                      style={{
-                        width: "44px", height: "52px", textAlign: "center",
-                        fontFamily: "var(--font-playfair, serif)",
-                        fontSize: "20px", fontWeight: 700, color: "#1a0a14",
-                        border: digit ? "2px solid #dc1e3c" : "1px solid rgba(220,30,60,0.15)",
-                        borderRadius: "10px",
-                        background: digit ? "rgba(220,30,60,0.04)" : "#fff",
-                        outline: "none",
-                      }}
-                    />
-                  ))}
-                </div>
-                <button
-                  onClick={handleVerifyOtp}
-                  disabled={otp.join("").length < 6 || otpLoading}
-                  style={{
-                    width: "100%", padding: "12px 24px",
-                    background: otp.join("").length < 6 || otpLoading ? "rgba(26,10,20,0.08)" : "linear-gradient(135deg, #dc1e3c, #a0153c)",
-                    color: otp.join("").length < 6 || otpLoading ? "#aaa" : "#fff",
-                    borderRadius: "10px", fontSize: "14px", fontWeight: 600,
-                    border: "none", cursor: otp.join("").length < 6 || otpLoading ? "not-allowed" : "pointer",
-                    boxShadow: otp.join("").length >= 6 && !otpLoading ? "0 4px 16px rgba(220,30,60,0.25)" : "none",
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                  }}
-                >
-                  {otpLoading ? "Verifying..." : "Verify OTP"}
-                </button>
-                <p style={{ fontSize: "12px", textAlign: "center", color: "#aaa" }}>
-                  Didn't receive?{" "}
-                  <button
-                    onClick={() => { setOtpSent(false); setOtp(["", "", "", "", "", ""]); setOtpError(""); recaptchaRef.current = null; }}
-                    style={{ background: "none", border: "none", color: "#dc1e3c", fontWeight: 600, cursor: "pointer", fontSize: "12px", padding: 0 }}
-                  >
-                    Resend OTP
-                  </button>
-                </p>
-              </>
-            ) : (
-              <div style={{ textAlign: "center", padding: "12px 0" }}>
-                <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: "rgba(92,122,82,0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-                  <Check style={{ width: "24px", height: "24px", color: "#5C7A52" }} />
-                </div>
-                <p style={{ fontSize: "15px", fontWeight: 600, color: "#5C7A52" }}>Phone verified!</p>
-                <p style={{ fontSize: "13px", color: "#888", marginTop: "4px" }}>{countryCode} {phone}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Step 1: Basic Profile ── */}
-        {step === 1 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              {[
-                { key: "name", label: "Full Name",    placeholder: "Prabhakar Sharma" },
-                { key: "dob",  label: "Date of Birth", placeholder: "DD/MM/YYYY", type: "date" },
-              ].map(({ key, label, placeholder, type }) => (
-                <div key={key}>
-                  <label style={{ fontSize: "11px", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>{label}</label>
-                  <input
-                    type={type || "text"}
-                    placeholder={placeholder}
-                    value={(form as Record<string, string>)[key]}
-                    onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                    style={{ width: "100%", padding: "12px 16px", border: "1px solid rgba(220,30,60,0.15)", borderRadius: "10px", fontSize: "13px", color: "#1a0a14", background: "#fff", outline: "none", boxSizing: "border-box" }}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div>
-              <label style={{ fontSize: "11px", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "8px" }}>Gender</label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
-                {["Male", "Female", "Other"].map((g) => (
-                  <button
-                    key={g}
-                    onClick={() => setForm({ ...form, gender: g })}
-                    style={{
-                      padding: "10px",
-                      borderRadius: "10px",
-                      fontSize: "13px",
-                      fontWeight: 600,
-                      border: `2px solid ${form.gender === g ? "#dc1e3c" : "rgba(220,30,60,0.15)"}`,
-                      background: form.gender === g ? "rgba(220,30,60,0.06)" : "#fff",
-                      color: form.gender === g ? "#dc1e3c" : "#888",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {g}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-
-              {/* Religion — Dropdown */}
-              <div>
-                <label style={{ fontSize: "11px", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>Religion</label>
-                <select
-                  value={form.religion}
-                  onChange={(e) => setForm({ ...form, religion: e.target.value })}
-                  style={{ width: "100%", padding: "12px 16px", border: "1px solid rgba(220,30,60,0.15)", borderRadius: "10px", fontSize: "13px", color: form.religion ? "#1a0a14" : "#aaa", background: "#fff", outline: "none", boxSizing: "border-box", appearance: "none", WebkitAppearance: "none", cursor: "pointer" }}
-                >
-                  <option value="" disabled>Select Religion</option>
-                  <option>Hindu</option>
-                  <option>Muslim</option>
-                  <option>Christian</option>
-                  <option>Sikh</option>
-                  <option>Jain</option>
-                  <option>Buddhist</option>
-                  <option>Parsi / Zoroastrian</option>
-                  <option>Jewish</option>
-                  <option>No Religion</option>
-                  <option>Other</option>
-                </select>
-              </div>
-
-              {/* Caste / Community */}
-              <div>
-                <label style={{ fontSize: "11px", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>Caste / Community</label>
-                <input
-                  placeholder="Brahmin"
-                  value={form.caste}
-                  onChange={(e) => setForm({ ...form, caste: e.target.value })}
-                  style={{ width: "100%", padding: "12px 16px", border: "1px solid rgba(220,30,60,0.15)", borderRadius: "10px", fontSize: "13px", color: "#1a0a14", background: "#fff", outline: "none", boxSizing: "border-box" }}
-                />
-              </div>
-
-              {/* Country — Dropdown */}
-              <div>
-                <label style={{ fontSize: "11px", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>Country</label>
-                <select
-                  value={form.country}
-                  onChange={(e) => setForm({ ...form, country: e.target.value })}
-                  style={{ width: "100%", padding: "12px 16px", border: "1px solid rgba(220,30,60,0.15)", borderRadius: "10px", fontSize: "13px", color: form.country ? "#1a0a14" : "#aaa", background: "#fff", outline: "none", boxSizing: "border-box", appearance: "none", WebkitAppearance: "none", cursor: "pointer" }}
-                >
-                  <option value="" disabled>Select Country</option>
-                  <option>United Kingdom</option>
-                  <option>India</option>
-                  <option>United States</option>
-                  <option>Canada</option>
-                  <option>Australia</option>
-                  <option>UAE</option>
-                  <option>Singapore</option>
-                  <option>Germany</option>
-                  <option>France</option>
-                  <option>Netherlands</option>
-                  <option>New Zealand</option>
-                  <option>Malaysia</option>
-                  <option>Sri Lanka</option>
-                  <option>South Africa</option>
-                  <option>Other</option>
-                </select>
-              </div>
-
-
-
-              {/* Mother Tongue — Dropdown */}
-              <div>
-                <label style={{ fontSize: "11px", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>Mother Tongue</label>
-                <select
-                  value={form.motherTongue}
-                  onChange={(e) => setForm({ ...form, motherTongue: e.target.value })}
-                  style={{ width: "100%", padding: "12px 16px", border: "1px solid rgba(220,30,60,0.15)", borderRadius: "10px", fontSize: "13px", color: form.motherTongue ? "#1a0a14" : "#aaa", background: "#fff", outline: "none", boxSizing: "border-box", appearance: "none", WebkitAppearance: "none", cursor: "pointer" }}
-                >
-                  <option value="" disabled>Select Language</option>
-                  <option>Tamil</option>
-                  <option>Hindi</option>
-                  <option>Telugu</option>
-                  <option>Kannada</option>
-                  <option>Malayalam</option>
-                  <option>Marathi</option>
-                  <option>Bengali</option>
-                  <option>Gujarati</option>
-                  <option>Punjabi</option>
-                  <option>Urdu</option>
-                  <option>Sindhi</option>
-                  <option>Odia</option>
-                  <option>Konkani</option>
-                  <option>Tulu</option>
-                  <option>Sinhala</option>
-                  <option>English</option>
-                  <option>Other</option>
-                </select>
-              </div>
-
-              {/* Education */}
-              <div>
-                <label style={{ fontSize: "11px", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>Education</label>
-                <input
-                  placeholder="B.Tech, IIT"
-                  value={form.education}
-                  onChange={(e) => setForm({ ...form, education: e.target.value })}
-                  style={{ width: "100%", padding: "12px 16px", border: "1px solid rgba(220,30,60,0.15)", borderRadius: "10px", fontSize: "13px", color: "#1a0a14", background: "#fff", outline: "none", boxSizing: "border-box" }}
-                />
-              </div>
-
-              {/* Profession */}
-              <div style={{ gridColumn: "1 / -1" }}>
-                <label style={{ fontSize: "11px", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", display: "block", marginBottom: "6px" }}>Profession</label>
-                <input
-                  placeholder="Software Engineer"
-                  value={form.profession}
-                  onChange={(e) => setForm({ ...form, profession: e.target.value })}
-                  style={{ width: "100%", padding: "12px 16px", border: "1px solid rgba(220,30,60,0.15)", borderRadius: "10px", fontSize: "13px", color: "#1a0a14", background: "#fff", outline: "none", boxSizing: "border-box" }}
-                />
-              </div>
-
-            </div>
-          </div>
-        )}
-
-        {/* ── Step 3: ID Verification ── */}
-        {step === 3 && (
-          <IdVerifyStep onComplete={setIdUploaded} />
-        )}
-
-        {/* Navigation */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "32px" }}>
-          {step > 1 && (
-            <button
-              onClick={back}
+      {/* ─── RIGHT: step card ─── */}
+      <section className="m4m-onb-form" style={{
+        display: "flex", flexDirection: "column",
+        padding: "48px 52px",
+        background: "#fdfbf9",
+        overflowY: "auto",
+        position: "relative",
+      }}>
+        <AnimatePresence mode="wait">
+          {error && (
+            <motion.div
+              key="err"
+              initial={{ opacity: 0, y: -6, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -4, height: 0 }}
               style={{
-                display: "flex", alignItems: "center", gap: "6px",
-                padding: "12px 20px",
-                borderRadius: "10px",
-                fontSize: "13px", fontWeight: 500,
-                color: "rgba(26,10,20,0.5)",
-                border: "1px solid rgba(26,10,20,0.12)",
-                background: "#fff",
-                cursor: "pointer",
+                display: "flex", alignItems: "flex-start", gap: 9,
+                background: "rgba(220,30,60,0.06)",
+                color: "#a0153c", fontSize: 13,
+                padding: "12px 14px", borderRadius: 10,
+                marginBottom: 18,
+                border: "1px solid rgba(220,30,60,0.14)",
+                overflow: "hidden",
               }}
             >
-              <ArrowLeft style={{ width: "16px", height: "16px" }} />
-              Back
-            </button>
+              <AlertCircle style={{ width: 14, height: 14, flexShrink: 0, marginTop: 1 }} />
+              <span>{error}</span>
+            </motion.div>
           )}
-          {(() => {
-            const blocked =
-              saving ||
-              (step === 2 && !otpVerified) ||
-              (step === 3 && !idUploaded);
-            return (
-              <button
-                onClick={blocked ? undefined : next}
-                disabled={blocked}
-                style={{
-                  flex: 1,
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                  padding: "12px 24px",
-                  borderRadius: "10px",
-                  fontSize: "14px", fontWeight: 600,
-                  color: blocked ? "#aaa" : "#fff",
-                  background: blocked ? "rgba(26,10,20,0.08)" : "linear-gradient(135deg, #dc1e3c, #a0153c)",
-                  border: "none",
-                  cursor: blocked ? "not-allowed" : "pointer",
-                  boxShadow: blocked ? "none" : "0 4px 16px rgba(220,30,60,0.25)",
-                }}
-              >
-                {saving ? "Saving..." : step === steps.length ? "Go to Dashboard" : "Continue"}
-                <ArrowRight style={{ width: "16px", height: "16px" }} />
-              </button>
-            );
-          })()}
+        </AnimatePresence>
+
+        <AnimatePresence mode="wait">
+          {step === 1 && (
+            <Step1CreateAccount
+              key="s1"
+              fullName={fullName} setFullName={setFullName}
+              email={email} setEmail={setEmail}
+              loading={loading}
+              onSubmit={handleCreateAccount}
+            />
+          )}
+          {step === 2 && (
+            <Step2Profile
+              key="s2"
+              loading={loading}
+              onSubmit={handleLinkPhoneAndSaveProfile}
+              onBack={() => setStep(1)}
+              setError={setError}
+            />
+          )}
+          {step === 3 && (
+            <Step3IdVerify
+              key="s3"
+              loading={loading}
+              onSubmit={handleFinish}
+              onBack={() => setStep(2)}
+            />
+          )}
+        </AnimatePresence>
+
+        <div style={{
+          marginTop: "auto", paddingTop: 32,
+          fontSize: 13, color: "#78686e", textAlign: "center",
+        }}>
+          Already have an account?{" "}
+          <Link href="/auth/login" style={{
+            color: "#dc1e3c", fontWeight: 600, textDecoration: "none",
+          }}>
+            Sign in →
+          </Link>
         </div>
-
-        {step === 2 && (
-          <p style={{ fontSize: "12px", textAlign: "center", color: "#aaa", marginTop: "16px" }}>
-            Already have an account?{" "}
-            <Link href="/auth/login" style={{ color: "#dc1e3c", fontWeight: 600, textDecoration: "none" }}>Log in</Link>
-          </p>
-        )}
-      </div>
-
-      {/* Footer */}
-      <p style={{ fontSize: "11px", color: "#ccc", marginTop: "24px" }}>Step {step} of {steps.length}</p>
-      </div>
-      <PublicFooter />
+      </section>
     </div>
+  );
+}
+
+// ─── STEP 1 ─────────────────────────────────────────────────────────────────
+
+function Step1CreateAccount({
+  fullName, setFullName, email, setEmail, loading, onSubmit,
+}: {
+  fullName: string; setFullName: (v: string) => void;
+  email: string; setEmail: (v: string) => void;
+  loading: boolean;
+  onSubmit: (password: string) => Promise<boolean>;
+}) {
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
+  const passwordStrength = useMemo(() => scorePassword(password), [password]);
+  const canSubmit = fullName.trim().length >= 2
+    && /^[^@]+@[^@]+\.[^@]+$/.test(email.trim())
+    && password.length >= 8
+    && !loading;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.35, ease: EASE }}
+    >
+      <Eyebrow>Step 1 of 3</Eyebrow>
+      <H2>Create your account</H2>
+      <Sub>We&apos;ll use your email for important updates and as your primary sign-in.</Sub>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (canSubmit) onSubmit(password);
+        }}
+        style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 28 }}
+      >
+        <Field icon={UserIcon} label="Full name">
+          <input
+            type="text"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="Priya Menon"
+            autoComplete="name"
+            required
+            style={inputStyle}
+          />
+        </Field>
+
+        <Field icon={Mail} label="Email">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            autoComplete="email"
+            required
+            style={inputStyle}
+          />
+        </Field>
+
+        <Field icon={Lock} label="Password">
+          <input
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="At least 8 characters"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            style={{ ...inputStyle, paddingRight: 42 }}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            style={eyeBtnStyle}
+          >
+            {showPassword ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
+          </button>
+        </Field>
+
+        {password.length > 0 && <PasswordStrength score={passwordStrength} />}
+
+        <SubmitBtn disabled={!canSubmit} loading={loading}>
+          Continue to profile
+        </SubmitBtn>
+      </form>
+
+      <p style={{
+        fontSize: 11.5, color: "#999", marginTop: 20, textAlign: "center", lineHeight: 1.6,
+      }}>
+        By continuing you agree to our{" "}
+        <Link href="/terms" style={linkStyle}>Terms</Link> and{" "}
+        <Link href="/privacy" style={linkStyle}>Privacy Policy</Link>.
+      </p>
+    </motion.div>
+  );
+}
+
+function scorePassword(pw: string): number {
+  if (!pw) return 0;
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
+  if (/\d/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  return Math.min(4, score);
+}
+
+function PasswordStrength({ score }: { score: number }) {
+  const labels = ["Weak", "Weak", "Okay", "Strong", "Excellent"];
+  const colors = ["#dc1e3c", "#dc1e3c", "#c89020", "#5c7a52", "#3f5937"];
+  return (
+    <div style={{ marginTop: -6 }}>
+      <div style={{ display: "flex", gap: 4 }}>
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} style={{
+            flex: 1, height: 3, borderRadius: 2,
+            background: i < score ? colors[score] : "rgba(0,0,0,0.07)",
+            transition: "background 200ms",
+          }} />
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: "#777", marginTop: 6 }}>
+        Password strength: <strong style={{ color: colors[score] }}>{labels[score]}</strong>
+      </div>
+    </div>
+  );
+}
+
+// ─── STEP 2 ─────────────────────────────────────────────────────────────────
+
+type OtpState = "idle" | "sending" | "sent" | "verifying";
+
+function Step2Profile({
+  loading, onSubmit, onBack, setError,
+}: {
+  loading: boolean;
+  onSubmit: (p: {
+    dob: string; gender: string; religion: string; caste: string;
+    country: string; motherTongue: string; education: string; profession: string;
+    verificationId: string; otp: string;
+  }) => Promise<boolean>;
+  onBack: () => void;
+  setError: (s: string) => void;
+}) {
+  const [dob, setDob] = useState("");
+  const [gender, setGender] = useState("");
+  const [religion, setReligion] = useState("");
+  const [caste, setCaste] = useState("");
+  const [country, setCountry] = useState("United Kingdom");
+  const [motherTongue, setMotherTongue] = useState("");
+  const [education, setEducation] = useState("");
+  const [profession, setProfession] = useState("");
+
+  const [countryCode, setCountryCode] = useState("+44");
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpState, setOtpState] = useState<OtpState>("idle");
+  const verificationIdRef = useRef<string | null>(null);
+  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
+
+  const ensureRecaptcha = useCallback(() => {
+    if (recaptchaRef.current) return recaptchaRef.current;
+    const v = new RecaptchaVerifier(firebaseAuth, "recaptcha-onboarding", { size: "invisible" });
+    recaptchaRef.current = v;
+    return v;
+  }, []);
+
+  const canSendOtp = dob && gender && religion && caste.trim() && motherTongue && education.trim() && profession.trim()
+    && phone.replace(/\D/g, "").length >= 6;
+
+  const handleSendOtp = async () => {
+    setError("");
+    setOtpState("sending");
+    try {
+      const full = `${countryCode}${phone.replace(/\D/g, "")}`;
+      const confirm: ConfirmationResult = await signInWithPhoneNumber(firebaseAuth, full, ensureRecaptcha());
+      verificationIdRef.current = confirm.verificationId;
+      setOtpState("sent");
+    } catch (e: any) {
+      const code = e?.code || "";
+      if (code.includes("invalid-phone-number")) setError("That phone number doesn't look right.");
+      else if (code.includes("too-many-requests")) setError("Too many attempts. Try again in a few minutes.");
+      else if (code.includes("quota-exceeded")) setError("SMS quota exhausted. Please try again later.");
+      else setError(e?.message || "Could not send code. Please try again.");
+      setOtpState("idle");
+    }
+  };
+
+  const canSubmit = otpState === "sent" && verificationIdRef.current && otp.replace(/\D/g, "").length === 6 && !loading;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.35, ease: EASE }}
+    >
+      <div id="recaptcha-onboarding" />
+
+      <Eyebrow>Step 2 of 3</Eyebrow>
+      <H2>About you</H2>
+      <Sub>Core details that help us find meaningful matches.</Sub>
+
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!canSubmit || !verificationIdRef.current) return;
+          setOtpState("verifying");
+          const ok = await onSubmit({
+            dob, gender, religion, caste, country,
+            motherTongue, education, profession,
+            verificationId: verificationIdRef.current, otp,
+          });
+          if (!ok) setOtpState("sent");
+        }}
+        style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 28 }}
+      >
+        <Row>
+          <Field label="Date of birth">
+            <input type="date" value={dob} onChange={(e) => setDob(e.target.value)} required style={inputStyle} />
+          </Field>
+          <Field label="Gender">
+            <Segmented
+              value={gender}
+              onChange={setGender}
+              options={["Male", "Female", "Other"]}
+            />
+          </Field>
+        </Row>
+
+        <Row>
+          <Field label="Religion">
+            <select value={religion} onChange={(e) => setReligion(e.target.value)} required style={selectStyle}>
+              <option value="">Select religion</option>
+              {RELIGION_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </Field>
+          <Field label="Caste / community">
+            <input
+              type="text" value={caste} onChange={(e) => setCaste(e.target.value)}
+              placeholder="e.g. Nair, Iyer" required style={inputStyle}
+            />
+          </Field>
+        </Row>
+
+        <Row>
+          <Field label="Country">
+            <select value={country} onChange={(e) => setCountry(e.target.value)} required style={selectStyle}>
+              {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Mother tongue">
+            <select value={motherTongue} onChange={(e) => setMotherTongue(e.target.value)} required style={selectStyle}>
+              <option value="">Select language</option>
+              {MOTHER_TONGUE_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </Field>
+        </Row>
+
+        <Row>
+          <Field label="Education">
+            <input
+              type="text" value={education} onChange={(e) => setEducation(e.target.value)}
+              placeholder="e.g. BSc Computer Science" required style={inputStyle}
+            />
+          </Field>
+          <Field label="Profession">
+            <input
+              type="text" value={profession} onChange={(e) => setProfession(e.target.value)}
+              placeholder="e.g. Software Engineer" required style={inputStyle}
+            />
+          </Field>
+        </Row>
+
+        <div style={{ height: 1, background: "rgba(0,0,0,0.06)", margin: "8px 0" }} />
+
+        <Field icon={Phone} label="Mobile number (for SMS verification)">
+          <div style={phoneShell}>
+            <select value={countryCode} onChange={(e) => setCountryCode(e.target.value)} style={countrySelectStyle}>
+              {COUNTRY_CODES.map((c, i) => (
+                <option key={`${c.code}-${i}`} value={c.code}>{c.flag} {c.code}</option>
+              ))}
+            </select>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/[^\d\s]/g, ""))}
+              placeholder="7700 900000"
+              autoComplete="tel"
+              style={phoneNumberInputStyle}
+              disabled={otpState === "sent"}
+            />
+            <button
+              type="button"
+              onClick={handleSendOtp}
+              disabled={!canSendOtp || otpState === "sending" || otpState === "sent"}
+              style={sendOtpBtnStyle(otpState === "sent")}
+            >
+              {otpState === "sending" ? "Sending…" : otpState === "sent" ? "Sent ✓" : "Send code"}
+            </button>
+          </div>
+        </Field>
+
+        <AnimatePresence>
+          {otpState === "sent" && (
+            <motion.div
+              initial={{ opacity: 0, y: -6, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -4, height: 0 }}
+              transition={{ duration: 0.3 }}
+              style={{ overflow: "hidden" }}
+            >
+              <Field label="6-digit code from SMS">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="\d*"
+                  maxLength={6}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                  placeholder="••••••"
+                  autoComplete="one-time-code"
+                  style={otpInputStyle}
+                />
+              </Field>
+              <button
+                type="button"
+                onClick={() => { setOtpState("idle"); setOtp(""); verificationIdRef.current = null; }}
+                style={resendBtnStyle}
+              >
+                Resend to a different number
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+          <button
+            type="button"
+            onClick={onBack}
+            style={backBtnStyle}
+          >
+            <ArrowLeft style={{ width: 14, height: 14 }} /> Back
+          </button>
+          <SubmitBtn disabled={!canSubmit} loading={loading || otpState === "verifying"} grow>
+            Continue
+          </SubmitBtn>
+        </div>
+      </form>
+    </motion.div>
+  );
+}
+
+// ─── STEP 3 ─────────────────────────────────────────────────────────────────
+
+const DOCUMENTS_BY_COUNTRY: Record<string, string[]> = {
+  "United Kingdom":  ["Passport", "UK Driving Licence", "BRP", "National ID"],
+  "India":           ["Passport", "Driving Licence", "Voter ID", "Aadhaar (masked)"],
+  "United States":   ["Passport", "US Driver's License", "State ID"],
+  "Other":           ["Passport", "National ID", "Driving Licence"],
+};
+
+function Step3IdVerify({
+  loading, onSubmit, onBack,
+}: {
+  loading: boolean; onSubmit: () => void; onBack: () => void;
+}) {
+  const [docCountry, setDocCountry] = useState("United Kingdom");
+  const [docType, setDocType] = useState("");
+  const [docNumber, setDocNumber] = useState("");
+  const [frontFile, setFrontFile] = useState<File | null>(null);
+  const [selfieFile, setSelfieFile] = useState<File | null>(null);
+
+  const needsBack = docType && docType !== "Passport";
+  const [backFile, setBackFile] = useState<File | null>(null);
+
+  const available = DOCUMENTS_BY_COUNTRY[docCountry] || DOCUMENTS_BY_COUNTRY["Other"];
+  const canSubmit = docCountry && docType && docNumber.trim() && frontFile && selfieFile && (!needsBack || backFile) && !loading;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.35, ease: EASE }}
+    >
+      <Eyebrow>Step 3 of 3</Eyebrow>
+      <H2>Verify your identity</H2>
+      <Sub>Shared only with our review team — never with matches. Encrypted at rest.</Sub>
+
+      <div style={{
+        marginTop: 20, padding: "14px 16px",
+        background: "rgba(92,122,82,0.06)",
+        border: "1px solid rgba(92,122,82,0.18)",
+        borderRadius: 12,
+        display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: "#3F5937",
+      }}>
+        <Shield style={{ width: 16, height: 16, flexShrink: 0, marginTop: 1 }} />
+        <div style={{ lineHeight: 1.55 }}>
+          <strong>Your data is protected.</strong> ID documents are encrypted and only visible to our
+          verification team. Only your verified ✓ status is shown on your profile.
+        </div>
+      </div>
+
+      <form
+        onSubmit={(e) => { e.preventDefault(); if (canSubmit) onSubmit(); }}
+        style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 24 }}
+      >
+        <Row>
+          <Field label="Country">
+            <select value={docCountry} onChange={(e) => { setDocCountry(e.target.value); setDocType(""); }} style={selectStyle}>
+              {Object.keys(DOCUMENTS_BY_COUNTRY).map((c) => <option key={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Document type">
+            <select value={docType} onChange={(e) => setDocType(e.target.value)} required style={selectStyle}>
+              <option value="">Select</option>
+              {available.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </Field>
+        </Row>
+
+        <Field label="Document number">
+          <input
+            type="text" value={docNumber} onChange={(e) => setDocNumber(e.target.value)}
+            placeholder="Enter number" required style={inputStyle}
+          />
+        </Field>
+
+        <UploadBox label="Front of document" file={frontFile} onChange={setFrontFile} />
+        {needsBack && <UploadBox label="Back of document" file={backFile} onChange={setBackFile} />}
+        <UploadBox label="Selfie holding your document" file={selfieFile} onChange={setSelfieFile} />
+
+        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+          <button type="button" onClick={onBack} style={backBtnStyle}>
+            <ArrowLeft style={{ width: 14, height: 14 }} /> Back
+          </button>
+          <SubmitBtn disabled={!canSubmit} loading={loading} grow>
+            Finish &amp; go to dashboard
+          </SubmitBtn>
+        </div>
+      </form>
+    </motion.div>
+  );
+}
+
+function UploadBox({ label, file, onChange }: { label: string; file: File | null; onChange: (f: File | null) => void }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10.5, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7 }}>{label}</div>
+      <label style={{
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+        padding: "20px 16px",
+        border: file ? "1.5px solid rgba(92,122,82,0.4)" : "1.5px dashed rgba(220,30,60,0.2)",
+        borderRadius: 12,
+        background: file ? "rgba(92,122,82,0.04)" : "#fff",
+        cursor: "pointer",
+        transition: "border-color 180ms, background 180ms",
+      }}>
+        <input
+          type="file" accept="image/*,.pdf"
+          style={{ display: "none" }}
+          onChange={(e) => onChange(e.target.files?.[0] || null)}
+        />
+        <Upload style={{ width: 20, height: 20, color: file ? "#5C7A52" : "rgba(220,30,60,0.35)" }} />
+        {file ? (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#3F5937" }}>{file.name}</div>
+            <div style={{ fontSize: 11, color: "#5C7A52" }}>Click to change</div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 13, color: "#555" }}>Click to upload</div>
+            <div style={{ fontSize: 11, color: "#999" }}>JPG, PNG or PDF · Max 10MB</div>
+          </>
+        )}
+      </label>
+    </div>
+  );
+}
+
+// ─── Shared tiny components ─────────────────────────────────────────────────
+
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      display: "inline-flex", alignItems: "center", gap: 7,
+      padding: "4px 10px 4px 8px",
+      background: "rgba(220,30,60,0.055)",
+      border: "1px solid rgba(220,30,60,0.12)",
+      borderRadius: 999,
+      marginBottom: 16,
+    }}>
+      <Heart style={{ width: 10, height: 10, color: "#dc1e3c" }} fill="#dc1e3c" />
+      <span style={{
+        fontSize: 9.5, fontWeight: 700, color: "#a0153c",
+        letterSpacing: "0.14em", textTransform: "uppercase",
+      }}>{children}</span>
+    </div>
+  );
+}
+
+function H2({ children }: { children: React.ReactNode }) {
+  return (
+    <h1 style={{
+      fontFamily: "var(--font-playfair, serif)",
+      fontSize: 36, fontWeight: 500, color: "#1a0a14",
+      margin: 0, letterSpacing: "-0.022em", lineHeight: 1.1,
+    }}>{children}</h1>
+  );
+}
+
+function Sub({ children }: { children: React.ReactNode }) {
+  return (
+    <p style={{
+      fontSize: 14.5, color: "#78686e",
+      margin: "10px 0 0", lineHeight: 1.55,
+    }}>{children}</p>
+  );
+}
+
+function Field({ icon: Icon, label, children }: {
+  icon?: any; label: string; children: React.ReactNode;
+}) {
+  return (
+    <label style={{ display: "block", position: "relative", flex: 1 }}>
+      <div style={{
+        fontSize: 10.5, fontWeight: 700, color: "#555",
+        textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 7,
+      }}>{label}</div>
+      <div style={{ position: "relative" }}>
+        {Icon && (
+          <Icon style={{
+            position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)",
+            width: 15, height: 15, color: "#bbb", pointerEvents: "none", zIndex: 1,
+          }} />
+        )}
+        {children}
+      </div>
+    </label>
+  );
+}
+
+function Row({ children }: { children: React.ReactNode }) {
+  return <div className="m4m-onb-row" style={{ display: "flex", gap: 12 }}>{children}</div>;
+}
+
+function Segmented({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {
+  return (
+    <div style={{
+      display: "flex", padding: 3,
+      background: "rgba(220,30,60,0.03)",
+      border: "1px solid rgba(26,10,20,0.1)",
+      borderRadius: 12,
+    }}>
+      {options.map((o) => {
+        const active = value === o;
+        return (
+          <button
+            key={o}
+            type="button"
+            onClick={() => onChange(o)}
+            style={{
+              position: "relative", flex: 1,
+              padding: "10px 10px", border: "none", background: "transparent",
+              fontSize: 13, fontWeight: active ? 600 : 500,
+              color: active ? "#fff" : "#666",
+              cursor: "pointer", fontFamily: "inherit", zIndex: 1,
+            }}
+          >
+            {active && (
+              <motion.span
+                layoutId={`seg-${options.join("|")}`}
+                transition={{ type: "spring", stiffness: 380, damping: 28 }}
+                style={{
+                  position: "absolute", inset: 0,
+                  background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
+                  borderRadius: 9,
+                  boxShadow: "0 4px 12px rgba(220,30,60,0.28), inset 0 0 0 1px rgba(255,255,255,0.08)",
+                  zIndex: -1,
+                }}
+              />
+            )}
+            {o}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SubmitBtn({ disabled, loading, grow, children }: {
+  disabled?: boolean; loading?: boolean; grow?: boolean; children: React.ReactNode;
+}) {
+  return (
+    <motion.button
+      type="submit"
+      disabled={disabled}
+      whileHover={{ y: disabled ? 0 : -1 }}
+      whileTap={{ scale: disabled ? 1 : 0.98 }}
+      transition={{ type: "spring", stiffness: 380, damping: 28 }}
+      style={{
+        flex: grow ? 1 : undefined,
+        marginTop: 6,
+        padding: "15px 18px",
+        background: disabled
+          ? "linear-gradient(135deg, rgba(220,30,60,0.35), rgba(160,21,60,0.35))"
+          : "linear-gradient(135deg, #dc1e3c 0%, #a0153c 100%)",
+        color: "#fff",
+        border: "none",
+        borderRadius: 12,
+        fontSize: 14, fontWeight: 600,
+        cursor: disabled ? "not-allowed" : "pointer",
+        boxShadow: disabled ? "none" : "0 10px 28px rgba(220,30,60,0.32), inset 0 0 0 1px rgba(255,255,255,0.1)",
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        fontFamily: "inherit",
+        transition: "background 0.2s, box-shadow 0.2s",
+      }}
+    >
+      {loading ? (
+        <>
+          <Loader2 style={{ width: 15, height: 15, animation: "m4m-onb-spin 0.7s linear infinite" }} />
+          Please wait…
+        </>
+      ) : (
+        <>{children} <ArrowRight style={{ width: 15, height: 15 }} /></>
+      )}
+    </motion.button>
+  );
+}
+
+// ─── Styles ────────────────────────────────────────────────────────────────
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "13px 14px 13px 40px",
+  background: "rgba(255,255,255,0.98)",
+  border: "1px solid rgba(26,10,20,0.1)",
+  borderRadius: 12,
+  fontSize: 14,
+  color: "#1a0a14",
+  outline: "none",
+  fontFamily: "inherit",
+  transition: "border-color 0.2s, box-shadow 0.2s, background 0.2s",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+};
+
+const selectStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "13px 14px",
+  background: "rgba(255,255,255,0.98)",
+  border: "1px solid rgba(26,10,20,0.1)",
+  borderRadius: 12,
+  fontSize: 14,
+  color: "#1a0a14",
+  outline: "none",
+  fontFamily: "inherit",
+  cursor: "pointer",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+};
+
+const eyeBtnStyle: React.CSSProperties = {
+  position: "absolute",
+  right: 10, top: "50%", transform: "translateY(-50%)",
+  background: "none", border: "none", cursor: "pointer",
+  color: "#aaa", padding: 6, display: "grid", placeItems: "center",
+  borderRadius: 6, transition: "color 0.15s",
+};
+
+const phoneShell: React.CSSProperties = {
+  display: "flex", gap: 6,
+  padding: 4,
+  background: "rgba(255,255,255,0.98)",
+  border: "1px solid rgba(26,10,20,0.1)",
+  borderRadius: 12,
+  boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+};
+
+const countrySelectStyle: React.CSSProperties = {
+  border: "none", background: "transparent", fontSize: 13,
+  color: "#1a0a14", outline: "none", cursor: "pointer",
+  padding: "8px 6px 8px 10px", fontFamily: "inherit", fontWeight: 600,
+  minWidth: 78,
+};
+
+const phoneNumberInputStyle: React.CSSProperties = {
+  flex: 1, border: "none", outline: "none",
+  fontSize: 14, color: "#1a0a14", background: "transparent",
+  fontFamily: "inherit", padding: "9px 4px",
+};
+
+function sendOtpBtnStyle(sent: boolean): React.CSSProperties {
+  return {
+    padding: "9px 14px",
+    background: sent ? "rgba(92,122,82,0.12)" : "linear-gradient(135deg, #dc1e3c, #a0153c)",
+    color: sent ? "#3F5937" : "#fff",
+    border: "none",
+    borderRadius: 9,
+    fontSize: 12, fontWeight: 600, cursor: sent ? "default" : "pointer",
+    fontFamily: "inherit",
+    whiteSpace: "nowrap",
+    boxShadow: sent ? "none" : "0 2px 10px rgba(220,30,60,0.2)",
+  };
+}
+
+const otpInputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "16px 14px",
+  background: "rgba(255,255,255,0.98)",
+  border: "1px solid rgba(26,10,20,0.1)",
+  borderRadius: 12,
+  fontSize: 22, fontWeight: 600,
+  color: "#1a0a14",
+  outline: "none",
+  textAlign: "center",
+  letterSpacing: "0.4em",
+  fontFamily: "ui-monospace, 'SF Mono', monospace",
+};
+
+const resendBtnStyle: React.CSSProperties = {
+  background: "none", border: "none", cursor: "pointer",
+  fontSize: 12, color: "#dc1e3c", fontWeight: 600,
+  marginTop: 8, padding: 0, fontFamily: "inherit",
+};
+
+const backBtnStyle: React.CSSProperties = {
+  padding: "14px 18px",
+  background: "#fff",
+  border: "1px solid rgba(26,10,20,0.1)",
+  borderRadius: 12,
+  fontSize: 13, fontWeight: 600, color: "#555",
+  cursor: "pointer", fontFamily: "inherit",
+  display: "inline-flex", alignItems: "center", gap: 6,
+};
+
+const linkStyle: React.CSSProperties = {
+  color: "#dc1e3c", textDecoration: "none", fontWeight: 600,
+};
+
+// ─── Global styles ─────────────────────────────────────────────────────────
+
+function GlobalStyles() {
+  return (
+    <style jsx global>{`
+      @keyframes m4m-onb-spin { to { transform: rotate(360deg); } }
+
+      .m4m-onb-root input:focus,
+      .m4m-onb-root select:focus {
+        border-color: #dc1e3c !important;
+        background: #fff !important;
+        box-shadow: 0 0 0 4px rgba(220, 30, 60, 0.07) !important;
+      }
+
+      @media (max-width: 1024px) {
+        .m4m-onb-root {
+          grid-template-columns: 1fr !important;
+          min-height: auto !important;
+        }
+        .m4m-onb-hero {
+          aspect-ratio: 16 / 10;
+          min-height: 320px;
+        }
+        .m4m-onb-form {
+          padding: 40px 28px !important;
+        }
+      }
+      @media (max-width: 640px) {
+        .m4m-onb-row {
+          flex-direction: column !important;
+        }
+        .m4m-onb-hero {
+          aspect-ratio: unset;
+          min-height: 280px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+      }
+    `}</style>
   );
 }
