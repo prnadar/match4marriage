@@ -1,0 +1,629 @@
+"""
+Admin router — user management, stats, admin-only ops endpoints.
+
+All endpoints require the caller's Firebase ID token to carry an `admin`
+(or `super_admin`) custom claim. Tenant isolation is enforced on every query.
+"""
+from __future__ import annotations
+
+import uuid
+from datetime import date, datetime, timedelta, timezone
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, or_, select, text as sa_text
+from sqlalchemy.ext.asyncio import AsyncSession
+from firebase_admin import auth as firebase_auth
+
+from app.core.database import get_db
+from app.core.firebase import get_firebase_app
+from app.core.logging import get_logger
+from app.core.security import get_current_user, has_admin_role, _roles_from_claims
+from app.core.tenancy import get_current_tenant_slug
+from app.models.report import Report, ReportStatus
+from app.models.user import User, UserProfile
+from app.schemas.common import APIResponse, PaginatedResponse
+from app.schemas.user import ProfileRead
+
+router = APIRouter(prefix="/admin", tags=["admin"])
+logger = get_logger(__name__)
+
+
+def _require_admin(current_user: dict) -> None:
+    if not has_admin_role(current_user):
+        raise HTTPException(status_code=403, detail="Admin required")
+
+
+async def _tenant_uuid_from_slug(db: AsyncSession, tenant_slug: str) -> uuid.UUID:
+    from app.routers.profile import _resolve_tenant_uuid
+    t = await _resolve_tenant_uuid(db, tenant_slug)
+    if t is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return t
+
+
+# ─── Users ───────────────────────────────────────────────────────────────────
+
+
+def _serialize_user(u: User, p: UserProfile | None) -> dict[str, Any]:
+    photos = (p.photos if p else None) or []
+    primary = next((ph.get("url") for ph in photos if ph.get("is_primary")), None)
+    if primary is None and photos:
+        primary = photos[0].get("url")
+    return {
+        "id": str(u.id),
+        "email": u.email,
+        "phone": u.phone,
+        "is_active": bool(u.is_active),
+        "is_phone_verified": bool(u.is_phone_verified),
+        "is_email_verified": bool(u.is_email_verified),
+        "is_profile_complete": bool(u.is_profile_complete),
+        "trust_score": int(u.trust_score or 0),
+        "subscription_tier": u.subscription_tier.value if u.subscription_tier else "free",
+        "created_at": u.created_at.isoformat() if u.created_at else None,
+        "last_active_at": u.last_active_at.isoformat() if u.last_active_at else None,
+        "deleted_at": u.deleted_at.isoformat() if u.deleted_at else None,
+        # Flattened from profile
+        "first_name": p.first_name if p else "",
+        "last_name": p.last_name if p else "",
+        "city": p.city if p else None,
+        "country": (p.country if p else None),
+        "religion": p.religion.value if (p and p.religion) else None,
+        "occupation": p.occupation if p else None,
+        "primary_photo_url": primary,
+        "completeness_score": int(p.completeness_score) if p and p.completeness_score is not None else 0,
+        "verification_status": p.verification_status if p else "draft",
+    }
+
+
+@router.get("/users", response_model=PaginatedResponse[dict])
+async def list_users(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+    q: str | None = Query(default=None, description="Search on name, email, phone"),
+    status_filter: str | None = Query(default=None, description="active | suspended | deleted | verified | pending"),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    _require_admin(current_user)
+    tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
+
+    base = (
+        select(User, UserProfile)
+        .outerjoin(UserProfile, UserProfile.user_id == User.id)
+        .where(User.tenant_id == tenant_uuid)
+    )
+
+    # Filters
+    if status_filter == "active":
+        base = base.where(User.deleted_at.is_(None), User.is_active == True)  # noqa: E712
+    elif status_filter == "suspended":
+        base = base.where(User.deleted_at.is_(None), User.is_active == False)  # noqa: E712
+    elif status_filter == "deleted":
+        base = base.where(User.deleted_at.is_not(None))
+    elif status_filter == "verified":
+        base = base.where(UserProfile.verification_status == "approved", User.deleted_at.is_(None))
+    elif status_filter == "pending":
+        base = base.where(UserProfile.verification_status == "submitted", User.deleted_at.is_(None))
+    else:
+        base = base.where(User.deleted_at.is_(None))
+
+    if q:
+        ql = f"%{q.lower()}%"
+        base = base.where(or_(
+            func.lower(User.email).like(ql),
+            User.phone.like(f"%{q}%"),
+            func.lower(UserProfile.first_name).like(ql),
+            func.lower(UserProfile.last_name).like(ql),
+        ))
+
+    total: int = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
+
+    offset = (page - 1) * limit
+    rows = (await db.execute(
+        base.order_by(User.created_at.desc()).offset(offset).limit(limit)
+    )).all()
+
+    items = [_serialize_user(u, p) for u, p in rows]
+    return PaginatedResponse.create(items=items, total=total, page=page, limit=limit)
+
+
+@router.get("/users/{user_id}", response_model=APIResponse[dict])
+async def get_user_detail(
+    user_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    _require_admin(current_user)
+    tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
+
+    row = (await db.execute(
+        select(User, UserProfile)
+        .outerjoin(UserProfile, UserProfile.user_id == User.id)
+        .where(User.id == user_id, User.tenant_id == tenant_uuid)
+    )).one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    u, p = row
+
+    base = _serialize_user(u, p)
+    profile = ProfileRead.model_validate(p, from_attributes=True).model_dump(mode="json") if p else None
+
+    # Counts of related items
+    reports_against = (await db.execute(
+        select(func.count()).where(Report.reported_user_id == user_id, Report.deleted_at.is_(None))
+    )).scalar_one()
+    reports_filed = (await db.execute(
+        select(func.count()).where(Report.reporter_id == user_id, Report.deleted_at.is_(None))
+    )).scalar_one()
+
+    return APIResponse(success=True, data={**base, "profile": profile, "reports_against": reports_against, "reports_filed": reports_filed})
+
+
+async def _load_user_for_admin(db: AsyncSession, user_id: uuid.UUID, tenant_uuid: uuid.UUID) -> User:
+    u = (await db.execute(
+        select(User).where(User.id == user_id, User.tenant_id == tenant_uuid)
+    )).scalar_one_or_none()
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    return u
+
+
+@router.post("/users/{user_id}/suspend", response_model=APIResponse[dict])
+async def suspend_user(
+    user_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    _require_admin(current_user)
+    tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
+    u = await _load_user_for_admin(db, user_id, tenant_uuid)
+    u.is_active = False
+    await db.flush()
+    # Also revoke Firebase refresh tokens so active sessions die immediately.
+    try:
+        if u.firebase_uids:
+            app = get_firebase_app()
+            for fuid in u.firebase_uids:
+                try:
+                    firebase_auth.revoke_refresh_tokens(fuid, app=app)
+                except Exception as exc:
+                    logger.warning("revoke_tokens_failed", uid=fuid, error=str(exc))
+    except Exception as exc:
+        logger.warning("firebase_revoke_skipped", error=str(exc))
+    logger.info("admin_suspend_user", admin=current_user.get("sub"), target=str(user_id))
+    return APIResponse(success=True, data={"id": str(u.id), "is_active": u.is_active})
+
+
+@router.post("/users/{user_id}/activate", response_model=APIResponse[dict])
+async def activate_user(
+    user_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    _require_admin(current_user)
+    tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
+    u = await _load_user_for_admin(db, user_id, tenant_uuid)
+    u.is_active = True
+    await db.flush()
+    logger.info("admin_activate_user", admin=current_user.get("sub"), target=str(user_id))
+    return APIResponse(success=True, data={"id": str(u.id), "is_active": u.is_active})
+
+
+@router.post("/users/{user_id}/soft-delete", response_model=APIResponse[dict])
+async def soft_delete_user(
+    user_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    _require_admin(current_user)
+    tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
+    u = await _load_user_for_admin(db, user_id, tenant_uuid)
+    u.deleted_at = datetime.now(timezone.utc)
+    u.is_active = False
+    # Soft-delete their profile too so they drop out of browse
+    prof = (await db.execute(
+        select(UserProfile).where(UserProfile.user_id == user_id)
+    )).scalar_one_or_none()
+    if prof and prof.deleted_at is None:
+        prof.deleted_at = datetime.now(timezone.utc)
+    await db.flush()
+    try:
+        if u.firebase_uids:
+            app = get_firebase_app()
+            for fuid in u.firebase_uids:
+                try:
+                    firebase_auth.revoke_refresh_tokens(fuid, app=app)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    logger.info("admin_soft_delete_user", admin=current_user.get("sub"), target=str(user_id))
+    return APIResponse(success=True, data={"id": str(u.id)})
+
+
+@router.post("/users/{user_id}/restore", response_model=APIResponse[dict])
+async def restore_user(
+    user_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    _require_admin(current_user)
+    tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
+    u = (await db.execute(
+        select(User).where(User.id == user_id, User.tenant_id == tenant_uuid)
+    )).scalar_one_or_none()
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    u.deleted_at = None
+    u.is_active = True
+    prof = (await db.execute(
+        select(UserProfile).where(UserProfile.user_id == user_id)
+    )).scalar_one_or_none()
+    if prof and prof.deleted_at is not None:
+        prof.deleted_at = None
+    await db.flush()
+    logger.info("admin_restore_user", admin=current_user.get("sub"), target=str(user_id))
+    return APIResponse(success=True, data={"id": str(u.id)})
+
+
+@router.post("/users/{user_id}/trust-boost", response_model=APIResponse[dict])
+async def trust_boost(
+    user_id: uuid.UUID,
+    payload: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    _require_admin(current_user)
+    tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
+    try:
+        delta = int(payload.get("delta", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="delta must be an integer")
+    if delta == 0:
+        raise HTTPException(status_code=400, detail="delta must be non-zero")
+    u = await _load_user_for_admin(db, user_id, tenant_uuid)
+    u.trust_score = max(0, min(100, (u.trust_score or 0) + delta))
+    await db.flush()
+    logger.info("admin_trust_boost", admin=current_user.get("sub"), target=str(user_id), delta=delta)
+    return APIResponse(success=True, data={"id": str(u.id), "trust_score": u.trust_score})
+
+
+# ─── Stats / Dashboard ───────────────────────────────────────────────────────
+
+
+@router.get("/stats", response_model=APIResponse[dict])
+async def dashboard_stats(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    """Top-line KPIs for the admin dashboard."""
+    _require_admin(current_user)
+    tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
+
+    now = datetime.now(timezone.utc)
+    today_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    seven_days_ago = now - timedelta(days=7)
+    thirty_days_ago = now - timedelta(days=30)
+
+    async def _count(q) -> int:
+        return (await db.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
+
+    users_q = select(User.id).where(User.tenant_id == tenant_uuid, User.deleted_at.is_(None))
+    active_users_q = users_q.where(User.is_active == True)  # noqa: E712
+    suspended_users_q = select(User.id).where(
+        User.tenant_id == tenant_uuid, User.deleted_at.is_(None), User.is_active == False  # noqa: E712
+    )
+    new_today_q = users_q.where(User.created_at >= today_start)
+    new_7d_q = users_q.where(User.created_at >= seven_days_ago)
+    new_30d_q = users_q.where(User.created_at >= thirty_days_ago)
+
+    profiles_base = select(UserProfile.id).where(UserProfile.tenant_id == tenant_uuid, UserProfile.deleted_at.is_(None))
+    pending_q = profiles_base.where(UserProfile.verification_status == "submitted")
+    approved_q = profiles_base.where(UserProfile.verification_status == "approved")
+    rejected_q = profiles_base.where(UserProfile.verification_status == "rejected")
+
+    reports_open_q = select(Report.id).where(
+        Report.deleted_at.is_(None), Report.status == ReportStatus.OPEN
+    )
+
+    total_users = await _count(users_q)
+    active_users = await _count(active_users_q)
+    suspended_users = await _count(suspended_users_q)
+    new_today = await _count(new_today_q)
+    new_7d = await _count(new_7d_q)
+    new_30d = await _count(new_30d_q)
+    pending = await _count(pending_q)
+    approved = await _count(approved_q)
+    rejected = await _count(rejected_q)
+    open_reports = await _count(reports_open_q)
+
+    # Registration trend (last 14 days, bucketed by day)
+    trend_rows = (await db.execute(sa_text("""
+        SELECT DATE(created_at AT TIME ZONE 'UTC') AS d, COUNT(*) AS c
+        FROM users
+        WHERE tenant_id = :tid AND deleted_at IS NULL
+          AND created_at >= NOW() - INTERVAL '14 days'
+        GROUP BY d
+        ORDER BY d
+    """), {"tid": str(tenant_uuid)})).all()
+    trend = [{"date": r[0].isoformat(), "count": int(r[1])} for r in trend_rows]
+
+    # Religion distribution
+    relig_rows = (await db.execute(sa_text("""
+        SELECT religion::text AS r, COUNT(*) AS c
+        FROM profiles
+        WHERE tenant_id = :tid AND deleted_at IS NULL AND religion IS NOT NULL
+        GROUP BY religion
+        ORDER BY c DESC
+        LIMIT 10
+    """), {"tid": str(tenant_uuid)})).all()
+    religion = [{"religion": r[0], "count": int(r[1])} for r in relig_rows]
+
+    # Recent activity (last 20 submissions / approvals / rejections)
+    recent_rows = (await db.execute(sa_text("""
+        SELECT p.user_id, p.first_name, p.last_name,
+               p.verification_status, p.submitted_at, p.reviewed_at
+        FROM profiles p
+        WHERE p.tenant_id = :tid AND p.deleted_at IS NULL
+          AND (p.submitted_at IS NOT NULL OR p.reviewed_at IS NOT NULL)
+        ORDER BY GREATEST(
+            COALESCE(p.reviewed_at, 'epoch'::timestamp),
+            COALESCE(p.submitted_at, 'epoch'::timestamp)
+        ) DESC
+        LIMIT 20
+    """), {"tid": str(tenant_uuid)})).all()
+    recent = [
+        {
+            "user_id": str(r[0]),
+            "name": f"{(r[1] or '').strip()} {(r[2] or '').strip()}".strip() or "(unnamed)",
+            "status": r[3],
+            "submitted_at": r[4].isoformat() if r[4] else None,
+            "reviewed_at": r[5].isoformat() if r[5] else None,
+        }
+        for r in recent_rows
+    ]
+
+    return APIResponse(success=True, data={
+        "users": {
+            "total": total_users,
+            "active": active_users,
+            "suspended": suspended_users,
+            "new_today": new_today,
+            "new_7d": new_7d,
+            "new_30d": new_30d,
+        },
+        "profiles": {
+            "pending": pending,
+            "approved": approved,
+            "rejected": rejected,
+        },
+        "reports": {
+            "open": open_reports,
+        },
+        "registration_trend": trend,
+        "religion_distribution": religion,
+        "recent_activity": recent,
+    })
+
+
+# ─── Admin users (people with the `admin` claim) ─────────────────────────────
+
+
+@router.get("/admins", response_model=APIResponse[list[dict]])
+async def list_admins(
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    """List Firebase users that carry the `admin` or `super_admin` custom claim."""
+    _require_admin(current_user)
+    app = get_firebase_app()
+    if app is None:
+        return APIResponse(success=True, data=[])
+    out: list[dict] = []
+    try:
+        # Page through all users; for launch-scale this is fine.
+        page = firebase_auth.list_users(max_results=1000, app=app)
+        while page:
+            for u in page.users:
+                claims = u.custom_claims or {}
+                roles = claims.get("roles") or []
+                if not isinstance(roles, list):
+                    roles = [roles]
+                if "admin" in roles or "super_admin" in roles:
+                    out.append({
+                        "uid": u.uid,
+                        "email": u.email,
+                        "display_name": u.display_name,
+                        "disabled": bool(u.disabled),
+                        "email_verified": bool(u.email_verified),
+                        "last_sign_in": u.user_metadata.last_sign_in_timestamp if u.user_metadata else None,
+                        "created": u.user_metadata.creation_timestamp if u.user_metadata else None,
+                        "roles": roles,
+                    })
+            page = page.get_next_page() if page.has_next_page else None
+    except Exception as exc:
+        logger.error("list_admins_failed", error=str(exc))
+        raise HTTPException(status_code=500, detail="Could not list admins")
+    out.sort(key=lambda r: (r.get("email") or "").lower())
+    return APIResponse(success=True, data=out)
+
+
+@router.post("/admins", response_model=APIResponse[dict])
+async def grant_admin(
+    payload: dict,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    """
+    Grant admin to a Firebase user by email. Only super_admins can do this.
+    payload = { "email": "...", "create": bool, "password": "..." (if create) }
+    """
+    if "super_admin" not in _roles_from_claims(current_user):
+        raise HTTPException(status_code=403, detail="Super admin required")
+    app = get_firebase_app()
+    if app is None:
+        raise HTTPException(status_code=503, detail="Firebase not configured")
+
+    email = (payload.get("email") or "").strip().lower()
+    create = bool(payload.get("create"))
+    password = payload.get("password")
+    if not email:
+        raise HTTPException(status_code=400, detail="email required")
+
+    try:
+        user = firebase_auth.get_user_by_email(email, app=app)
+        if create and password:
+            firebase_auth.update_user(user.uid, password=password, app=app)
+    except firebase_auth.UserNotFoundError:
+        if not create or not password:
+            raise HTTPException(status_code=404, detail="User not found; pass create=true + password to provision")
+        user = firebase_auth.create_user(email=email, password=password, email_verified=True, app=app)
+
+    current = user.custom_claims or {}
+    roles = list(current.get("roles") or [])
+    if "admin" not in roles:
+        roles.append("admin")
+    new_claims = {**current, "roles": roles}
+    firebase_auth.set_custom_user_claims(user.uid, new_claims, app=app)
+    logger.info("admin_granted", uid=user.uid, email=email, by=current_user.get("sub"))
+    return APIResponse(success=True, data={"uid": user.uid, "email": user.email, "roles": roles})
+
+
+@router.delete("/admins/{uid}", response_model=APIResponse[dict])
+async def revoke_admin(
+    uid: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    if "super_admin" not in _roles_from_claims(current_user):
+        raise HTTPException(status_code=403, detail="Super admin required")
+    app = get_firebase_app()
+    if app is None:
+        raise HTTPException(status_code=503, detail="Firebase not configured")
+
+    try:
+        user = firebase_auth.get_user(uid, app=app)
+    except firebase_auth.UserNotFoundError:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    current = user.custom_claims or {}
+    roles = [r for r in (current.get("roles") or []) if r != "admin"]
+    new_claims = {**current, "roles": roles}
+    if not roles:
+        new_claims.pop("roles", None)
+    firebase_auth.set_custom_user_claims(uid, new_claims, app=app)
+    try:
+        firebase_auth.revoke_refresh_tokens(uid, app=app)
+    except Exception:
+        pass
+    logger.info("admin_revoked", uid=uid, by=current_user.get("sub"))
+    return APIResponse(success=True, data={"uid": uid})
+
+
+# ─── Reports ─────────────────────────────────────────────────────────────────
+
+
+@router.get("/reports", response_model=PaginatedResponse[dict])
+async def list_reports_enriched(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+    status_filter: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Tenant-scoped, enriched reports list with reporter/reported names."""
+    _require_admin(current_user)
+    tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
+
+    q = select(Report).where(Report.tenant_id == tenant_uuid, Report.deleted_at.is_(None))
+    if status_filter:
+        try:
+            q = q.where(Report.status == ReportStatus(status_filter))
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Unknown status {status_filter!r}")
+
+    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
+    offset = (page - 1) * limit
+    rows = (await db.execute(
+        q.order_by(Report.created_at.desc()).offset(offset).limit(limit)
+    )).scalars().all()
+
+    # Bulk-fetch names for all involved users
+    user_ids: set[uuid.UUID] = set()
+    for r in rows:
+        user_ids.add(r.reporter_id)
+        user_ids.add(r.reported_user_id)
+        if r.admin_id:
+            user_ids.add(r.admin_id)
+    names: dict[uuid.UUID, str] = {}
+    if user_ids:
+        name_rows = (await db.execute(
+            select(UserProfile.user_id, UserProfile.first_name, UserProfile.last_name)
+            .where(UserProfile.user_id.in_(user_ids))
+        )).all()
+        for uid_, fn, ln in name_rows:
+            names[uid_] = f"{(fn or '').strip()} {(ln or '').strip()}".strip() or "(unnamed)"
+
+    items = []
+    for r in rows:
+        items.append({
+            "id": str(r.id),
+            "category": r.category.value if r.category else None,
+            "status": r.status.value if r.status else None,
+            "description": r.description,
+            "evidence": r.evidence or [],
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
+            "reporter_id": str(r.reporter_id),
+            "reporter_name": names.get(r.reporter_id, "(unknown)"),
+            "reported_user_id": str(r.reported_user_id),
+            "reported_user_name": names.get(r.reported_user_id, "(unknown)"),
+            "admin_id": str(r.admin_id) if r.admin_id else None,
+            "admin_notes": r.admin_notes,
+            "action_taken": r.action_taken,
+        })
+    return PaginatedResponse.create(items=items, total=total, page=page, limit=limit)
+
+
+@router.put("/reports/{report_id}", response_model=APIResponse[dict])
+async def resolve_report_enriched(
+    report_id: uuid.UUID,
+    payload: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    _require_admin(current_user)
+    tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
+
+    r = (await db.execute(
+        select(Report).where(
+            Report.id == report_id,
+            Report.tenant_id == tenant_uuid,
+            Report.deleted_at.is_(None),
+        )
+    )).scalar_one_or_none()
+    if not r:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    try:
+        r.status = ReportStatus((payload.get("status") or "").strip())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    r.admin_notes = payload.get("admin_notes") or None
+    r.action_taken = payload.get("action_taken") or None
+    try:
+        r.admin_id = uuid.UUID(current_user.get("sub", ""))
+    except (ValueError, AttributeError):
+        pass
+    r.resolved_at = datetime.now(timezone.utc)
+    await db.flush()
+    logger.info("report_resolved", report_id=str(report_id), status=r.status.value, by=current_user.get("sub"))
+    return APIResponse(success=True, data={"id": str(r.id), "status": r.status.value})

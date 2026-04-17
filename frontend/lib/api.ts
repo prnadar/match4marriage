@@ -112,6 +112,59 @@ export const profileApi = {
   getTrustScore: () => api.get("/api/v1/profile/trust-score"),
 };
 
+export const adminApi = {
+  // Users
+  listUsers: (params: { q?: string; status_filter?: string; page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.status_filter) qs.set("status_filter", params.status_filter);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const s = qs.toString();
+    return api.get(`/api/v1/admin/users${s ? "?" + s : ""}`);
+  },
+  getUser: (userId: string) => api.get(`/api/v1/admin/users/${userId}`),
+  suspendUser: (userId: string) => api.post(`/api/v1/admin/users/${userId}/suspend`),
+  activateUser: (userId: string) => api.post(`/api/v1/admin/users/${userId}/activate`),
+  softDeleteUser: (userId: string) => api.post(`/api/v1/admin/users/${userId}/soft-delete`),
+  restoreUser: (userId: string) => api.post(`/api/v1/admin/users/${userId}/restore`),
+  trustBoost: (userId: string, delta: number) => api.post(`/api/v1/admin/users/${userId}/trust-boost`, { delta }),
+
+  // Dashboard
+  getStats: () => api.get("/api/v1/admin/stats"),
+
+  // Admins
+  listAdmins: () => api.get("/api/v1/admin/admins"),
+  grantAdmin: (email: string, opts: { create?: boolean; password?: string } = {}) =>
+    api.post("/api/v1/admin/admins", { email, ...opts }),
+  revokeAdmin: (uid: string) => api.delete(`/api/v1/admin/admins/${uid}`),
+
+  // Reports
+  listReports: (params: { status_filter?: string; page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status_filter) qs.set("status_filter", params.status_filter);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const s = qs.toString();
+    return api.get(`/api/v1/admin/reports${s ? "?" + s : ""}`);
+  },
+  resolveReport: (reportId: string, body: { status: string; admin_notes?: string; action_taken?: string }) =>
+    api.put(`/api/v1/admin/reports/${reportId}`, body),
+
+  // Verifications (alias of existing profile admin endpoints)
+  listVerifications: (status_filter: "submitted" | "approved" | "rejected" | "all") =>
+    api.get(`/api/v1/profile/admin/verifications?status_filter=${status_filter}`),
+  approveVerification: (userId: string) =>
+    api.post(`/api/v1/profile/admin/verifications/${userId}/approve`, {}),
+  requestInfo: (userId: string, note: string) =>
+    api.post(`/api/v1/profile/admin/verifications/${userId}/request-info`, { note }),
+  rejectVerification: (userId: string, reason: string) =>
+    api.post(`/api/v1/profile/admin/verifications/${userId}/reject`, { reason }),
+
+  // Self
+  me: () => api.get("/api/v1/auth/me"),
+};
+
 export const matchApi = {
   list: () => api.get("/api/v1/matches"),
   feed: () => api.get("/api/v1/matches/feed"),

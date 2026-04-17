@@ -1,429 +1,298 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import {
-  Flag,
-  Eye,
-  AlertTriangle,
-  ShieldBan,
-  ShieldOff,
-  CheckCircle,
-  XCircle,
-  MessageSquare,
-} from "lucide-react";
-import TopBar from "@/components/admin/TopBar";
-import DataTable from "@/components/admin/DataTable";
-import ConfirmModal from "@/components/admin/ConfirmModal";
+import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
+import { Flag, Loader2, AlertTriangle, User, Calendar, Inbox, CheckCircle2, XCircle, X } from "lucide-react";
+import { PageShell, Button } from "@/components/admin/PageShell";
+import { adminApi, ApiError } from "@/lib/api";
 import { useToast } from "@/components/admin/Toast";
-import { mockReports, type AdminReport } from "@/lib/admin-mock-data";
 
-// ── Types ────────────────────────────────────────────────────────────────────
+type Filter = "all" | "open" | "under_review" | "resolved_action_taken" | "resolved_no_action" | "dismissed";
 
-type TabStatus = "pending" | "resolved" | "dismissed";
+const TABS: Array<{ key: Filter; label: string }> = [
+  { key: "all",                   label: "All" },
+  { key: "open",                  label: "Open" },
+  { key: "under_review",          label: "Under review" },
+  { key: "resolved_action_taken", label: "Resolved (actioned)" },
+  { key: "resolved_no_action",    label: "Resolved (no action)" },
+  { key: "dismissed",             label: "Dismissed" },
+];
 
-interface ConfirmAction {
-  type: "warn" | "suspend" | "ban";
-  reportId: string;
-  userName: string;
+interface ReportRow {
+  id: string;
+  category: string;
+  status: string;
+  description: string | null;
+  evidence: string[];
+  created_at: string | null;
+  resolved_at: string | null;
+  reporter_id: string;
+  reporter_name: string;
+  reported_user_id: string;
+  reported_user_name: string;
+  admin_id: string | null;
+  admin_notes: string | null;
+  action_taken: string | null;
 }
 
-// ── Reason badge colors ──────────────────────────────────────────────────────
-
-const reasonColors: Record<string, string> = {
-  "Fake Profile": "bg-red-50 text-red-600 border-red-200",
-  "Inappropriate Photos": "bg-amber-50 text-amber-600 border-amber-200",
-  Harassment: "bg-rose-50 text-rose border-rose-200",
-  Spam: "bg-orange-50 text-orange-600 border-orange-200",
-  "Underage User": "bg-purple-50 text-purple-600 border-purple-200",
-  "Already Married": "bg-blue-50 text-blue-600 border-blue-200",
-  "Wrong Information": "bg-slate-50 text-slate-600 border-slate-200",
-};
-
-// ── Status badge ─────────────────────────────────────────────────────────────
-
-function StatusBadge({ status }: { status: AdminReport["status"] }) {
-  const map: Record<string, string> = {
-    pending: "bg-amber-50 text-amber-600 border-amber-200",
-    resolved: "bg-emerald-50 text-emerald-600 border-emerald-200",
-    dismissed: "bg-slate-50 text-slate-500 border-slate-200",
-  };
-  return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${map[status]}`}
-    >
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
-  );
-}
-
-// ── Detail Modal ─────────────────────────────────────────────────────────────
-
-function DetailModal({
-  report,
-  notes,
-  onNotesChange,
-  onClose,
-}: {
-  report: AdminReport;
-  notes: string;
-  onNotesChange: (value: string) => void;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 animate-float-in">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-deep/30 hover:text-deep transition-colors"
-        >
-          <XCircle className="w-5 h-5" />
-        </button>
-
-        <h3 className="font-display text-lg font-semibold text-deep mb-4">
-          Report Detail &mdash; {report.id}
-        </h3>
-
-        <div className="space-y-3 font-body text-sm text-deep">
-          <div className="flex gap-3">
-            <span className="text-muted w-28 flex-shrink-0">Reporter:</span>
-            <span className="font-medium">{report.reporter.name}</span>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-muted w-28 flex-shrink-0">Reported User:</span>
-            <span className="font-medium">{report.reportedUser.name}</span>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-muted w-28 flex-shrink-0">Reason:</span>
-            <span
-              className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${
-                reasonColors[report.reason] || "bg-gray-50 text-gray-600 border-gray-200"
-              }`}
-            >
-              {report.reason}
-            </span>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-muted w-28 flex-shrink-0">Date:</span>
-            <span>{report.date}</span>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-muted w-28 flex-shrink-0">Status:</span>
-            <StatusBadge status={report.status} />
-          </div>
-          <div>
-            <span className="text-muted block mb-1">Description:</span>
-            <p className="text-deep/80 bg-blush/50 rounded-xl p-3">{report.description}</p>
-          </div>
-          <div>
-            <span className="text-muted block mb-1">Internal Notes:</span>
-            <textarea
-              value={notes}
-              onChange={(e) => onNotesChange(e.target.value)}
-              placeholder="Add internal notes about this report..."
-              rows={3}
-              className="w-full rounded-xl border px-3 py-2 font-body text-sm text-deep bg-white focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold transition-colors resize-none"
-              style={{ borderColor: "rgba(201,149,74,0.2)" }}
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end mt-5">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl font-body text-sm font-medium text-deep/60 hover:bg-gray-100 transition-colors"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Page ────────────────────────────────────────────────────────────────
-
-export default function ReportsPage() {
+export default function AdminReportsPage() {
   const { toast } = useToast();
+  const [filter, setFilter] = useState<Filter>("open");
+  const [items, setItems] = useState<ReportRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [reports, setReports] = useState<AdminReport[]>(mockReports);
-  const [activeTab, setActiveTab] = useState<TabStatus>("pending");
-  const [notes, setNotes] = useState<Record<string, string>>({});
-  const [detailReport, setDetailReport] = useState<AdminReport | null>(null);
-  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [selected, setSelected] = useState<ReportRow | null>(null);
+  const [notes, setNotes] = useState("");
+  const [action, setAction] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  // Filter reports by active tab
-  const filteredReports = useMemo(
-    () => reports.filter((r) => r.status === activeTab),
-    [reports, activeTab],
-  );
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await adminApi.listReports({
+        status_filter: filter === "all" ? undefined : filter,
+        limit: 200,
+      });
+      const payload = res.data as any;
+      setItems(Array.isArray(payload?.items) ? payload.items : []);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  }, [filter]);
 
-  // ── Handlers ─────────────────────────────────────────────────────────────
+  useEffect(() => { load(); }, [load]);
 
-  const updateReportStatus = (id: string, status: AdminReport["status"]) => {
-    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
+  const resolve = async (status: string) => {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await adminApi.resolveReport(selected.id, {
+        status,
+        admin_notes: notes.trim() || undefined,
+        action_taken: action.trim() || undefined,
+      });
+      toast("success", "Report updated");
+      setSelected(null);
+      setNotes("");
+      setAction("");
+      await load();
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Could not update");
+    } finally {
+      setBusy(false);
+    }
   };
-
-  const handleResolve = (id: string) => {
-    updateReportStatus(id, "resolved");
-    toast("success", "Report marked as resolved");
-  };
-
-  const handleDismiss = (id: string) => {
-    updateReportStatus(id, "dismissed");
-    toast("info", "Report dismissed");
-  };
-
-  const handleConfirmAction = () => {
-    if (!confirmAction) return;
-    const { type, reportId, userName } = confirmAction;
-    const labels: Record<string, string> = {
-      warn: "Warning sent",
-      suspend: "User suspended",
-      ban: "User banned",
-    };
-    updateReportStatus(reportId, "resolved");
-    toast("success", `${labels[type]}: ${userName}`);
-    setConfirmAction(null);
-  };
-
-  const handleNotesChange = (reportId: string, value: string) => {
-    setNotes((prev) => ({ ...prev, [reportId]: value }));
-  };
-
-  // ── Tabs ─────────────────────────────────────────────────────────────────
-
-  const tabs: { key: TabStatus; label: string; count: number }[] = [
-    { key: "pending", label: "Pending", count: reports.filter((r) => r.status === "pending").length },
-    { key: "resolved", label: "Resolved", count: reports.filter((r) => r.status === "resolved").length },
-    { key: "dismissed", label: "Dismissed", count: reports.filter((r) => r.status === "dismissed").length },
-  ];
-
-  // ── Confirm modal config ─────────────────────────────────────────────────
-
-  const confirmConfig: Record<string, { title: string; message: string; label: string; variant: "danger" | "warning" }> = {
-    warn: {
-      title: "Warn User",
-      message: `Send a warning to ${confirmAction?.userName}? They will be notified about policy violations.`,
-      label: "Send Warning",
-      variant: "warning",
-    },
-    suspend: {
-      title: "Suspend User",
-      message: `Suspend ${confirmAction?.userName}? Their profile will be hidden and they won't be able to log in.`,
-      label: "Suspend",
-      variant: "danger",
-    },
-    ban: {
-      title: "Ban User",
-      message: `Permanently ban ${confirmAction?.userName}? This action cannot be easily undone.`,
-      label: "Ban User",
-      variant: "danger",
-    },
-  };
-
-  // ── Table columns ────────────────────────────────────────────────────────
-
-  const columns = [
-    { key: "id", label: "ID", sortable: true },
-    {
-      key: "reporter",
-      label: "Reporter",
-      sortable: true,
-      render: (row: AdminReport) => (
-        <span className="font-medium">{row.reporter.name}</span>
-      ),
-    },
-    {
-      key: "reportedUser",
-      label: "Reported User",
-      sortable: true,
-      render: (row: AdminReport) => (
-        <span className="font-medium">{row.reportedUser.name}</span>
-      ),
-    },
-    {
-      key: "reason",
-      label: "Reason",
-      sortable: true,
-      render: (row: AdminReport) => (
-        <span
-          className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${
-            reasonColors[row.reason] || "bg-gray-50 text-gray-600 border-gray-200"
-          }`}
-        >
-          {row.reason}
-        </span>
-      ),
-    },
-    { key: "date", label: "Date", sortable: true },
-    {
-      key: "status",
-      label: "Status",
-      render: (row: AdminReport) => <StatusBadge status={row.status} />,
-    },
-    {
-      key: "actions",
-      label: "Actions",
-      render: (row: AdminReport) => (
-        <div className="flex items-center gap-1 flex-wrap">
-          <button
-            onClick={() => setDetailReport(row)}
-            className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 transition-colors"
-            title="View Detail"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
-          {row.status === "pending" && (
-            <>
-              <button
-                onClick={() =>
-                  setConfirmAction({ type: "warn", reportId: row.id, userName: row.reportedUser.name })
-                }
-                className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 transition-colors"
-                title="Warn User"
-              >
-                <AlertTriangle className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() =>
-                  setConfirmAction({ type: "suspend", reportId: row.id, userName: row.reportedUser.name })
-                }
-                className="p-1.5 rounded-lg text-orange-500 hover:bg-orange-50 transition-colors"
-                title="Suspend User"
-              >
-                <ShieldOff className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() =>
-                  setConfirmAction({ type: "ban", reportId: row.id, userName: row.reportedUser.name })
-                }
-                className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
-                title="Ban User"
-              >
-                <ShieldBan className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => handleDismiss(row.id)}
-                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-50 transition-colors"
-                title="Dismiss"
-              >
-                <XCircle className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => handleResolve(row.id)}
-                className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-50 transition-colors"
-                title="Resolve"
-              >
-                <CheckCircle className="w-4 h-4" />
-              </button>
-            </>
-          )}
-        </div>
-      ),
-    },
-  ];
 
   return (
-    <div className="min-h-screen">
-      <TopBar
-        title="Reports"
-        subtitle="Handle reported content and users"
-        actions={
-          <div className="flex items-center gap-2">
-            <Flag className="w-4 h-4 text-rose" />
-            <span className="font-body text-xs text-white/60">
-              {reports.filter((r) => r.status === "pending").length} pending
-            </span>
-          </div>
-        }
-      />
-
-      <div className="p-6 space-y-6">
-        {/* Tabs */}
-        <div className="flex gap-1 p-1 rounded-xl bg-blush/50 w-fit">
-          {tabs.map((tab) => (
+    <PageShell title="Reports" subtitle="User reports that need admin review.">
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 16 }}>
+        {TABS.map(({ key, label }) => {
+          const active = filter === key;
+          return (
             <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2 rounded-lg font-body text-sm font-medium transition-colors ${
-                activeTab === tab.key
-                  ? "bg-white text-deep shadow-sm"
-                  : "text-muted hover:text-deep"
-              }`}
+              key={key}
+              onClick={() => setFilter(key)}
+              style={{
+                padding: "7px 12px", borderRadius: 8, border: "none",
+                background: active ? "rgba(220,30,60,0.08)" : "transparent",
+                color: active ? "#dc1e3c" : "#666",
+                fontWeight: active ? 600 : 500,
+                fontSize: 13, cursor: "pointer",
+              }}
             >
-              {tab.label}
-              <span
-                className={`ml-2 inline-flex items-center justify-center w-5 h-5 rounded-full text-xs ${
-                  activeTab === tab.key ? "bg-rose text-white" : "bg-blush text-muted"
-                }`}
-              >
-                {tab.count}
-              </span>
+              {label}
             </button>
+          );
+        })}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: selected ? "1fr 1fr" : "1fr", gap: 16, alignItems: "start" }}>
+
+        {/* List */}
+        <div style={{ background: "#fff", border: "1px solid rgba(220,30,60,0.08)", borderRadius: 12, overflow: "hidden" }}>
+          {loading ? (
+            <div style={{ padding: 40, textAlign: "center", color: "#999" }}>
+              <Loader2 style={{ width: 20, height: 20, animation: "spin 1s linear infinite", margin: "0 auto 10px", display: "block" }} />
+            </div>
+          ) : error ? (
+            <div style={{ padding: 20, background: "#ffe9ec", color: "#7B2D3A", fontSize: 13 }}>
+              <AlertTriangle style={{ width: 14, height: 14, display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} /> {error}
+            </div>
+          ) : items.length === 0 ? (
+            <div style={{ padding: "50px 20px", textAlign: "center", color: "#999" }}>
+              <Inbox style={{ width: 32, height: 32, color: "#ddd", margin: "0 auto 12px", display: "block" }} />
+              <p style={{ fontSize: 13, margin: 0 }}>No reports in this category.</p>
+            </div>
+          ) : items.map((r) => (
+            <ReportRowEl key={r.id} report={r} active={selected?.id === r.id} onClick={() => { setSelected(r); setNotes(r.admin_notes || ""); setAction(r.action_taken || ""); }} />
           ))}
         </div>
 
-        {/* Notes Section (inline per report) */}
-        <DataTable
-          columns={columns}
-          data={filteredReports as any[]}
-          searchable
-          searchPlaceholder="Search reports..."
-          searchKeys={["id", "reason", "date"]}
-          emptyMessage={`No ${activeTab} reports`}
-        />
+        {/* Detail panel */}
+        {selected && (
+          <div style={{ background: "#fff", border: "1px solid rgba(220,30,60,0.08)", borderRadius: 12, padding: 20, position: "sticky", top: 96 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: "#1a0a14", margin: 0 }}>Investigate</h2>
+              <button onClick={() => setSelected(null)} style={{ background: "rgba(0,0,0,0.04)", border: "none", borderRadius: 8, width: 28, height: 28, cursor: "pointer" }}>
+                <X style={{ width: 14, height: 14, color: "#888" }} />
+              </button>
+            </div>
 
-        {/* Inline notes for each visible report */}
-        {filteredReports.length > 0 && (
-          <div className="glass-card p-5">
-            <h3 className="font-display text-sm font-semibold text-deep mb-3 flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-gold" />
-              Internal Notes
-            </h3>
-            <div className="space-y-3">
-              {filteredReports.map((report) => (
-                <div key={report.id} className="flex items-start gap-3">
-                  <span className="font-body text-xs text-muted w-20 flex-shrink-0 pt-2">
-                    {report.id}
-                  </span>
-                  <textarea
-                    value={notes[report.id] ?? report.notes}
-                    onChange={(e) => handleNotesChange(report.id, e.target.value)}
-                    placeholder="Add internal notes..."
-                    rows={2}
-                    className="flex-1 rounded-xl border px-3 py-2 font-body text-sm text-deep bg-white focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold transition-colors resize-none"
-                    style={{ borderColor: "rgba(201,149,74,0.2)" }}
-                  />
-                </div>
-              ))}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+              <ReportField label="Category">{selected.category?.replace(/_/g, " ")}</ReportField>
+              <ReportField label="Status">{selected.status?.replace(/_/g, " ")}</ReportField>
+              <ReportField label="Reporter">
+                <Link href={`/admin/users/${selected.reporter_id}`} style={linkStyle}>{selected.reporter_name}</Link>
+              </ReportField>
+              <ReportField label="Reported user">
+                <Link href={`/admin/users/${selected.reported_user_id}`} style={linkStyle}>{selected.reported_user_name}</Link>
+              </ReportField>
+              <ReportField label="Filed">{selected.created_at ? new Date(selected.created_at).toLocaleString() : "—"}</ReportField>
+              <ReportField label="Resolved">{selected.resolved_at ? new Date(selected.resolved_at).toLocaleString() : "—"}</ReportField>
+            </div>
+
+            {selected.description && (
+              <>
+                <div style={labelStyle}>Description</div>
+                <p style={{ fontSize: 13, color: "#444", lineHeight: 1.5, marginTop: 4, marginBottom: 14, whiteSpace: "pre-wrap" }}>
+                  {selected.description}
+                </p>
+              </>
+            )}
+
+            {selected.evidence && selected.evidence.length > 0 && (
+              <>
+                <div style={labelStyle}>Evidence</div>
+                <ul style={{ fontSize: 12, color: "#666", marginTop: 4, marginBottom: 14, paddingLeft: 18 }}>
+                  {selected.evidence.map((ev, i) => <li key={i}>{ev}</li>)}
+                </ul>
+              </>
+            )}
+
+            <div style={labelStyle}>Admin notes (internal)</div>
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="What you found, decisions taken…"
+              style={{ width: "100%", marginTop: 4, padding: 10, border: "1px solid rgba(220,30,60,0.15)", borderRadius: 8, fontSize: 13, fontFamily: "inherit", outline: "none", resize: "vertical" }}
+            />
+
+            <div style={{ ...labelStyle, marginTop: 10 }}>Action taken</div>
+            <select
+              value={action}
+              onChange={(e) => setAction(e.target.value)}
+              style={{ width: "100%", marginTop: 4, padding: 10, border: "1px solid rgba(220,30,60,0.15)", borderRadius: 8, fontSize: 13, background: "#fff" }}
+            >
+              <option value="">—</option>
+              <option value="warning">Warning issued</option>
+              <option value="temp_suspension">Temporary suspension</option>
+              <option value="permanent_ban">Permanent ban</option>
+              <option value="content_removed">Content removed</option>
+              <option value="no_action">No action</option>
+            </select>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+              <Button onClick={() => resolve("resolved_action_taken")} disabled={busy} variant="primary">
+                <CheckCircle2 style={{ width: 13, height: 13 }} /> Resolve · action taken
+              </Button>
+              <Button onClick={() => resolve("resolved_no_action")} disabled={busy} variant="secondary">
+                Resolve · no action
+              </Button>
+              <Button onClick={() => resolve("dismissed")} disabled={busy} variant="ghost">
+                <XCircle style={{ width: 13, height: 13 }} /> Dismiss
+              </Button>
+              <Button onClick={() => resolve("under_review")} disabled={busy} variant="warn">
+                Mark under review
+              </Button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Detail Modal */}
-      {detailReport && (
-        <DetailModal
-          report={detailReport}
-          notes={notes[detailReport.id] ?? detailReport.notes}
-          onNotesChange={(value) => handleNotesChange(detailReport.id, value)}
-          onClose={() => setDetailReport(null)}
-        />
-      )}
+      <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </PageShell>
+  );
+}
 
-      {/* Confirm Modal */}
-      {confirmAction && (
-        <ConfirmModal
-          open
-          title={confirmConfig[confirmAction.type].title}
-          message={confirmConfig[confirmAction.type].message}
-          confirmLabel={confirmConfig[confirmAction.type].label}
-          variant={confirmConfig[confirmAction.type].variant}
-          onConfirm={handleConfirmAction}
-          onCancel={() => setConfirmAction(null)}
-        />
+function ReportRowEl({ report, active, onClick }: { report: ReportRow; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: "100%", textAlign: "left",
+        background: active ? "rgba(220,30,60,0.04)" : "transparent",
+        border: "none",
+        borderLeft: active ? "3px solid #dc1e3c" : "3px solid transparent",
+        borderBottom: "1px solid rgba(0,0,0,0.04)",
+        padding: "14px 18px", cursor: "pointer",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <Flag style={{ width: 13, height: 13, color: "#dc1e3c" }} />
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#1a0a14", textTransform: "capitalize" }}>
+          {report.category?.replace(/_/g, " ")}
+        </span>
+        <StatusBadge status={report.status} />
+      </div>
+      <div style={{ fontSize: 12, color: "#666" }}>
+        <span style={{ color: "#1a0a14", fontWeight: 500 }}>{report.reporter_name}</span>
+        <span style={{ margin: "0 6px", color: "#ccc" }}>→</span>
+        <span style={{ color: "#1a0a14", fontWeight: 500 }}>{report.reported_user_name}</span>
+      </div>
+      {report.description && (
+        <p style={{ fontSize: 12, color: "#888", margin: "6px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {report.description}
+        </p>
       )}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, fontSize: 11, color: "#aaa" }}>
+        {report.created_at && (
+          <span><Calendar style={{ width: 11, height: 11, display: "inline", verticalAlign: "text-bottom", marginRight: 3 }} />
+            {new Date(report.created_at).toLocaleDateString()}
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { bg: string; fg: string; label: string }> = {
+    open:                  { bg: "rgba(220,30,60,0.10)", fg: "#a0153c", label: "Open" },
+    under_review:          { bg: "rgba(200,144,32,0.12)", fg: "#9A6B00", label: "Under review" },
+    resolved_action_taken: { bg: "rgba(92,122,82,0.14)",  fg: "#3F5937", label: "Actioned" },
+    resolved_no_action:    { bg: "rgba(0,0,0,0.06)",      fg: "#666",    label: "No action" },
+    dismissed:             { bg: "rgba(0,0,0,0.06)",      fg: "#666",    label: "Dismissed" },
+  };
+  const s = map[status] || { bg: "rgba(0,0,0,0.06)", fg: "#666", label: status };
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em",
+      padding: "2px 7px", borderRadius: 999, background: s.bg, color: s.fg,
+    }}>
+      {s.label}
+    </span>
+  );
+}
+
+function ReportField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={labelStyle}>{label}</div>
+      <div style={{ fontSize: 13, color: "#1a0a14", marginTop: 3, textTransform: "capitalize" }}>{children || "—"}</div>
     </div>
   );
 }
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 10, fontWeight: 600, color: "#999", textTransform: "uppercase", letterSpacing: "0.06em",
+};
+
+const linkStyle: React.CSSProperties = {
+  color: "#dc1e3c", textDecoration: "none", fontWeight: 500,
+};

@@ -19,7 +19,7 @@ from app.core.rate_limit import limiter  # shared Redis-backed Limiter
 from app.core.redis import close_redis
 from app.core.tenancy import TenantMiddleware
 from app.models import *  # noqa: F401,F403 — register all models with Alembic
-from app.routers import auth, chat, health, matches, notifications, profile, reports
+from app.routers import admin, auth, chat, health, matches, notifications, profile, reports
 # subscriptions router disabled for launch (razorpay/stripe deps removed)
 
 settings = get_settings()
@@ -174,6 +174,7 @@ PREFIX = settings.API_PREFIX
 
 app.include_router(auth.router, prefix=PREFIX)
 app.include_router(profile.router, prefix=PREFIX)
+app.include_router(admin.router, prefix=PREFIX)
 app.include_router(matches.router, prefix=PREFIX)
 app.include_router(chat.router, prefix=PREFIX)
 app.include_router(reports.router, prefix=PREFIX)

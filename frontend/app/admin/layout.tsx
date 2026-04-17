@@ -4,24 +4,20 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  LayoutDashboard, Users, Upload, Image, CreditCard,
-  Flag, Settings, LogOut, Heart, ChevronLeft, ChevronRight,
-  Menu, UserCheck, Camera, MessageSquare, BarChart3,
-  Bell, DollarSign, Handshake, ShieldCheck,
+  LayoutDashboard, Users, Flag, Settings, LogOut, Heart,
+  ChevronLeft, ChevronRight, Menu, ShieldCheck,
 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { ToastProvider } from "@/components/admin/Toast";
 import { api } from "@/lib/api";
 import { firebaseAuth, clearClientState } from "@/lib/firebase";
 
-// Only surface items that are actually functional. Mock pages are hidden until
-// they're rewritten against real APIs (tracked as post-launch work).
-const navItems: Array<{ href: string; label: string; icon: any; soon?: boolean }> = [
-  { href: "/admin/verifications",   label: "Verifications",  icon: ShieldCheck },
-  { href: "/admin/dashboard",       label: "Dashboard",      icon: LayoutDashboard, soon: true },
-  { href: "/admin/users",           label: "Users",          icon: Users,           soon: true },
-  { href: "/admin/reports",         label: "Reports",        icon: Flag,            soon: true },
-  { href: "/admin/settings",        label: "Settings",       icon: Settings,        soon: true },
+const navItems = [
+  { href: "/admin/dashboard",     label: "Dashboard",     icon: LayoutDashboard },
+  { href: "/admin/verifications", label: "Verifications", icon: ShieldCheck },
+  { href: "/admin/users",         label: "Users",         icon: Users },
+  { href: "/admin/reports",       label: "Reports",       icon: Flag },
+  { href: "/admin/settings",      label: "Settings",      icon: Settings },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -135,32 +131,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ href, label, icon: Icon, soon }) => {
+          {navItems.map(({ href, label, icon: Icon }) => {
             const isActive = pathname === href || pathname.startsWith(href + "/");
             return (
               <Link
                 key={href}
-                href={soon ? "/admin/coming-soon" : href}
+                href={href}
                 onClick={() => setMobileOpen(false)}
-                title={collapsed ? `${label}${soon ? " (coming soon)" : ""}` : undefined}
+                title={collapsed ? label : undefined}
                 style={{ minHeight: "auto" }}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl font-body text-sm font-medium transition-all duration-150 ${
                   isActive
                     ? "text-rose bg-rose/10"
                     : "text-deep/55 hover:text-deep hover:bg-rose/5"
-                } ${soon ? "opacity-60" : ""}`}
+                }`}
               >
                 <Icon className="w-4 h-4 flex-shrink-0" />
-                {!collapsed && (
-                  <>
-                    <span className="flex-1 whitespace-nowrap">{label}</span>
-                    {soon && (
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-deep/40 bg-deep/5 px-1.5 py-0.5 rounded">
-                        Soon
-                      </span>
-                    )}
-                  </>
-                )}
+                {!collapsed && <span className="flex-1 whitespace-nowrap">{label}</span>}
               </Link>
             );
           })}
