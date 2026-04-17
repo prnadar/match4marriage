@@ -10,7 +10,10 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Any
 
+import csv
+import io
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, or_, select, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 from firebase_admin import auth as firebase_auth
@@ -21,7 +24,8 @@ from app.core.logging import get_logger
 from app.core.security import get_current_user, has_admin_role, _roles_from_claims
 from app.core.tenancy import get_current_tenant_slug
 from app.models.report import Report, ReportStatus
-from app.models.user import User, UserProfile
+from app.models.subscription import Subscription, SubscriptionStatus
+from app.models.user import SubscriptionTier, User, UserProfile
 from app.schemas.common import APIResponse, PaginatedResponse
 from app.schemas.user import ProfileRead
 
@@ -76,6 +80,14 @@ def _serialize_user(u: User, p: UserProfile | None) -> dict[str, Any]:
     }
 
 
+USER_CSV_COLS = [
+    "id", "first_name", "last_name", "email", "phone", "city", "country",
+    "religion", "occupation", "subscription_tier", "verification_status",
+    "trust_score", "completeness_score", "is_active", "is_email_verified",
+    "is_phone_verified", "created_at", "last_active_at",
+]
+
+
 @router.get("/users", response_model=PaginatedResponse[dict])
 async def list_users(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -85,6 +97,7 @@ async def list_users(
     status_filter: str | None = Query(default=None, description="active | suspended | deleted | verified | pending"),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=200),
+    format: str | None = Query(default=None, description="json (default) | csv"),
 ):
     _require_admin(current_user)
     tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
@@ -118,6 +131,15 @@ async def list_users(
             func.lower(UserProfile.last_name).like(ql),
         ))
 
+    # CSV streams the *filtered* set, ignoring page/limit.
+    if (format or "").lower() == "csv":
+        rows = (await db.execute(base.order_by(User.created_at.desc()))).all()
+        return _stream_csv(
+            filename="users.csv",
+            cols=USER_CSV_COLS,
+            row_iter=(_csv_row(_serialize_user(u, p), USER_CSV_COLS) for u, p in rows),
+        )
+
     total: int = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
 
     offset = (page - 1) * limit
@@ -127,6 +149,117 @@ async def list_users(
 
     items = [_serialize_user(u, p) for u, p in rows]
     return PaginatedResponse.create(items=items, total=total, page=page, limit=limit)
+
+
+# ─── CSV helpers ─────────────────────────────────────────────────────────────
+
+
+def _csv_row(d: dict[str, Any], cols: list[str]) -> list[str]:
+    """Coerce a serialized dict row into CSV-friendly strings."""
+    out: list[str] = []
+    for c in cols:
+        v = d.get(c)
+        if v is None:
+            out.append("")
+        elif isinstance(v, bool):
+            out.append("true" if v else "false")
+        else:
+            out.append(str(v))
+    return out
+
+
+def _stream_csv(filename: str, cols: list[str], row_iter) -> StreamingResponse:
+    """Stream CSV in 100-row chunks so very large exports don't buffer in RAM."""
+    def gen():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(cols)
+        n = 0
+        for r in row_iter:
+            writer.writerow(r)
+            n += 1
+            if n % 100 == 0:
+                yield buf.getvalue()
+                buf.seek(0); buf.truncate(0)
+        if buf.tell():
+            yield buf.getvalue()
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ─── Bulk actions ────────────────────────────────────────────────────────────
+
+
+@router.post("/users/bulk", response_model=APIResponse[dict])
+async def bulk_user_action(
+    payload: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    """Apply one of {suspend|activate} to a list of user_ids. Tenant-scoped."""
+    _require_admin(current_user)
+    tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
+
+    action = (payload.get("action") or "").strip().lower()
+    if action not in ("suspend", "activate"):
+        raise HTTPException(status_code=400, detail="action must be 'suspend' or 'activate'")
+
+    raw_ids = payload.get("user_ids") or []
+    if not isinstance(raw_ids, list) or not raw_ids:
+        raise HTTPException(status_code=400, detail="user_ids must be a non-empty list")
+    if len(raw_ids) > 500:
+        raise HTTPException(status_code=400, detail="bulk operations are capped at 500 users")
+
+    ids: list[uuid.UUID] = []
+    for raw in raw_ids:
+        try:
+            ids.append(uuid.UUID(str(raw)))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"invalid user_id {raw!r}")
+
+    rows = (await db.execute(
+        select(User).where(
+            User.id.in_(ids),
+            User.tenant_id == tenant_uuid,
+            User.deleted_at.is_(None),
+        )
+    )).scalars().all()
+
+    new_active = (action == "activate")
+    affected = 0
+    for u in rows:
+        if u.is_active != new_active:
+            u.is_active = new_active
+            affected += 1
+
+    await db.flush()
+
+    # Suspend revokes Firebase sessions so logged-in users drop immediately.
+    if action == "suspend":
+        try:
+            app = get_firebase_app()
+            for u in rows:
+                if not u.is_active and u.firebase_uids:
+                    for fuid in u.firebase_uids:
+                        try:
+                            firebase_auth.revoke_refresh_tokens(fuid, app=app)
+                        except Exception as exc:
+                            logger.warning("bulk_revoke_failed", uid=fuid, error=str(exc))
+        except Exception as exc:
+            logger.warning("bulk_firebase_revoke_skipped", error=str(exc))
+
+    logger.info("admin_bulk_user_action", admin=current_user.get("sub"), action=action, requested=len(ids), affected=affected)
+    return APIResponse(success=True, data={
+        "action": action,
+        "requested": len(ids),
+        "matched": len(rows),
+        "affected": affected,
+    })
 
 
 @router.get("/users/{user_id}", response_model=APIResponse[dict])
@@ -392,6 +525,78 @@ async def dashboard_stats(
         for r in recent_rows
     ]
 
+    # Earnings — sums over `subscriptions.amount_paise` for non-cancelled rows.
+    # `total` covers all-time gross. `this_month` covers subscriptions whose
+    # current_period_start is in the current calendar month (proxy for new
+    # billings this month). `monthly_series` is the last 12 months bucketed
+    # by current_period_start month.
+    month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+
+    earnings_total_row = (await db.execute(sa_text("""
+        SELECT COALESCE(SUM(amount_paise), 0)
+        FROM subscriptions
+        WHERE tenant_id = :tid
+          AND status IN ('active', 'past_due', 'expired', 'paused')
+    """), {"tid": str(tenant_uuid)})).scalar_one()
+
+    earnings_month_row = (await db.execute(sa_text("""
+        SELECT COALESCE(SUM(amount_paise), 0)
+        FROM subscriptions
+        WHERE tenant_id = :tid
+          AND status IN ('active', 'past_due', 'expired', 'paused')
+          AND current_period_start >= :month_start
+    """), {"tid": str(tenant_uuid), "month_start": month_start})).scalar_one()
+
+    earnings_series_rows = (await db.execute(sa_text("""
+        SELECT TO_CHAR(date_trunc('month', current_period_start), 'YYYY-MM') AS m,
+               COALESCE(SUM(amount_paise), 0) AS p
+        FROM subscriptions
+        WHERE tenant_id = :tid
+          AND status IN ('active', 'past_due', 'expired', 'paused')
+          AND current_period_start >= NOW() - INTERVAL '12 months'
+        GROUP BY m
+        ORDER BY m
+    """), {"tid": str(tenant_uuid)})).all()
+    earnings_series = [{"month": r[0], "paise": int(r[1])} for r in earnings_series_rows]
+
+    # Plan distribution — count of (non-deleted) users per subscription_tier.
+    plan_rows = (await db.execute(sa_text("""
+        SELECT subscription_tier::text AS t, COUNT(*) AS c
+        FROM users
+        WHERE tenant_id = :tid AND deleted_at IS NULL
+        GROUP BY subscription_tier
+    """), {"tid": str(tenant_uuid)})).all()
+    # Always present all four tiers, even at 0, so the dashboard renders cleanly.
+    plan_counts = {t.value: 0 for t in SubscriptionTier}
+    for r in plan_rows:
+        plan_counts[r[0]] = int(r[1])
+    plan_distribution = [{"plan": k, "count": v} for k, v in plan_counts.items()]
+
+    # Renewals due — active subscriptions whose period ends in the next 14 days.
+    in_14_days = now + timedelta(days=14)
+    renewals_rows = (await db.execute(sa_text("""
+        SELECT s.user_id, s.plan, s.amount_paise, s.current_period_end,
+               p.first_name, p.last_name
+        FROM subscriptions s
+        LEFT JOIN profiles p ON p.user_id = s.user_id
+        WHERE s.tenant_id = :tid
+          AND s.status = 'active'
+          AND s.current_period_end >= NOW()
+          AND s.current_period_end <= :until
+        ORDER BY s.current_period_end ASC
+        LIMIT 10
+    """), {"tid": str(tenant_uuid), "until": in_14_days})).all()
+    renewals_due = [
+        {
+            "user_id": str(r[0]),
+            "plan": r[1],
+            "amount_paise": int(r[2]),
+            "current_period_end": r[3].isoformat() if r[3] else None,
+            "name": f"{(r[4] or '').strip()} {(r[5] or '').strip()}".strip() or "(unnamed)",
+        }
+        for r in renewals_rows
+    ]
+
     return APIResponse(success=True, data={
         "users": {
             "total": total_users,
@@ -409,6 +614,13 @@ async def dashboard_stats(
         "reports": {
             "open": open_reports,
         },
+        "earnings": {
+            "total_paise": int(earnings_total_row),
+            "this_month_paise": int(earnings_month_row),
+            "monthly_series": earnings_series,
+        },
+        "plan_distribution": plan_distribution,
+        "renewals_due": renewals_due,
         "registration_trend": trend,
         "religion_distribution": religion,
         "recent_activity": recent,

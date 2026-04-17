@@ -23,6 +23,7 @@ from app.core.rate_limit import BROWSE_LIMIT, limiter
 from app.core.security import get_current_user, has_admin_role
 from app.core.tenancy import get_current_tenant_slug
 from app.models.user import MaritalStatus, Religion, User, UserProfile
+from app.models.verification import Verification, VerificationStatus, VerificationType
 from app.schemas.common import APIResponse, PaginatedResponse
 from app.schemas.user import ProfileCard, ProfileCreate, ProfileRead, ProfileUpdate
 from app.services.storage import generate_photo_upload_signature, generate_upload_url
@@ -536,6 +537,50 @@ async def delete_my_photo(
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
 
 
+@router.put("/me/photos/reorder", response_model=APIResponse[ProfileRead])
+async def reorder_my_photos(
+    payload: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    """
+    Reorder the user's photos. Body: {"keys": ["public_id_1", "public_id_2", ...]}
+    The first key in the list becomes the primary photo. Unknown keys are
+    ignored; missing keys are appended to the tail in their existing order.
+    """
+    keys = payload.get("keys")
+    if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
+        raise HTTPException(status_code=400, detail="keys must be a list of strings")
+    profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+    existing = list(profile.photos or [])
+    by_key: dict[str, dict] = {p.get("key"): p for p in existing if p.get("key")}
+
+    seen: set[str] = set()
+    ordered: list[dict] = []
+    for k in keys:
+        ph = by_key.get(k)
+        if ph is None or k in seen:
+            continue
+        seen.add(k)
+        ordered.append(ph)
+    # Append any photos the client didn't include (defensive against drift).
+    for p in existing:
+        k = p.get("key")
+        if k and k not in seen:
+            ordered.append(p)
+            seen.add(k)
+
+    # First photo is the new primary.
+    for i, p in enumerate(ordered):
+        p["is_primary"] = (i == 0)
+
+    profile.photos = ordered
+    await db.flush()
+    await db.refresh(profile)
+    return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+
+
 @router.post("/me/photos/primary", response_model=APIResponse[ProfileRead])
 async def set_primary_photo(
     payload: dict,
@@ -644,6 +689,101 @@ async def submit_profile_for_review(
     await db.flush()
     await db.refresh(profile)
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+
+
+# ── Completion strip data ────────────────────────────────────────────────────
+
+# Friendly labels + the tab each missing field belongs to. Keep keys aligned
+# with `_is_profile_complete` above so the strip stays in sync with the gate.
+_FIELD_META: dict[str, dict[str, str]] = {
+    "first_name":      {"label": "First name",        "tab": "general"},
+    "last_name":       {"label": "Last name",         "tab": "general"},
+    "date_of_birth":   {"label": "Date of birth",     "tab": "general"},
+    "gender":          {"label": "Gender",            "tab": "general"},
+    "marital_status":  {"label": "Marital status",    "tab": "general"},
+    "city":            {"label": "City",              "tab": "contact"},
+    "country":         {"label": "Country",           "tab": "contact"},
+    "religion":        {"label": "Religion",          "tab": "general"},
+    "caste":           {"label": "Caste",             "tab": "general"},
+    "mother_tongue":   {"label": "Mother tongue",     "tab": "general"},
+    "height_cm":       {"label": "Height",            "tab": "general"},
+    "education_level": {"label": "Education",         "tab": "education"},
+    "occupation":      {"label": "Occupation",        "tab": "education"},
+    "bio":             {"label": "About yourself",    "tab": "general"},
+    "photos":          {"label": "Profile photos",    "tab": "photos"},
+    "partner_prefs":   {"label": "Partner preferences", "tab": "partner"},
+    "family_details":  {"label": "Family details",    "tab": "family"},
+}
+
+
+@router.get("/me/completion", response_model=APIResponse[dict])
+async def get_my_completion(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    """
+    Lightweight feed for the profile completion strip:
+      - score: current completeness percentage (0-100)
+      - status: verification_status of the profile
+      - missing: ordered list of missing fields with friendly labels + target tab
+      - badges: { email, phone, photo, id } each one of locked|pending|verified
+    Reuses _is_profile_complete so the gate and the strip never drift.
+    """
+    profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+    await _sync_verification_flags(db, current_user)
+
+    user = (await db.execute(
+        select(User).where(User.id == profile.user_id)
+    )).scalar_one_or_none()
+
+    _, missing_keys = _is_profile_complete(profile)
+    missing = [
+        {
+            "key": k,
+            "label": _FIELD_META.get(k, {}).get("label", k.replace("_", " ").title()),
+            "tab": _FIELD_META.get(k, {}).get("tab", "general"),
+        }
+        for k in missing_keys
+    ]
+
+    # Badges. "verified" = trusted state. "pending" = data in flight (e.g. an
+    # ID verification that's been started but not yet approved). "locked" = no
+    # data yet.
+    email_state = "verified" if (user and user.is_email_verified) else "locked"
+    phone_state = "verified" if (user and user.is_phone_verified) else "locked"
+    photo_state = "verified" if (profile.photos and len(profile.photos) > 0) else "locked"
+
+    # ID badge: look at the user's verification rows for any ID-style verification.
+    id_state = "locked"
+    if user is not None:
+        id_rows = (await db.execute(
+            select(Verification.status).where(
+                Verification.user_id == user.id,
+                Verification.verification_type.in_([
+                    VerificationType.AADHAAR,
+                    VerificationType.PAN,
+                    VerificationType.PHOTO_LIVENESS,
+                    VerificationType.DIGILOCKER_EDUCATION,
+                ]),
+            )
+        )).scalars().all()
+        if any(s == VerificationStatus.VERIFIED for s in id_rows):
+            id_state = "verified"
+        elif any(s in (VerificationStatus.PENDING, VerificationStatus.IN_REVIEW) for s in id_rows):
+            id_state = "pending"
+
+    return APIResponse(success=True, data={
+        "score": int(profile.completeness_score or 0),
+        "status": profile.verification_status,
+        "missing": missing,
+        "badges": {
+            "email": email_state,
+            "phone": phone_state,
+            "photo": photo_state,
+            "id":    id_state,
+        },
+    })
 
 
 # ── Admin endpoints ──────────────────────────────────────────────────────────
