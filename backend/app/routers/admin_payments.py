@@ -188,9 +188,11 @@ async def payments_summary(
     _require_admin(current_user)
     tenant_uuid = await _tenant_uuid(db, tenant_slug)
 
-    now = datetime.now(timezone.utc)
-    today_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
-    month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    # subscriptions.current_period_start is TIMESTAMP WITHOUT TIME ZONE, so
+    # comparison values must be naive too.
+    now = datetime.utcnow()
+    today_start = datetime(now.year, now.month, now.day)
+    month_start = datetime(now.year, now.month, 1)
 
     async def _sum(filter_q) -> int:
         v = (await db.execute(
@@ -206,7 +208,7 @@ async def payments_summary(
 
     today = await _sum(Subscription.current_period_start >= today_start)
     this_month = await _sum(Subscription.current_period_start >= month_start)
-    lifetime = await _sum(Subscription.current_period_start >= datetime(1970, 1, 1, tzinfo=timezone.utc))
+    lifetime = await _sum(Subscription.current_period_start >= datetime(1970, 1, 1))
 
     return APIResponse(success=True, data={
         "today_paise": today,
@@ -297,7 +299,8 @@ async def list_expiring_subscriptions(
     _require_admin(current_user)
     tenant_uuid = await _tenant_uuid(db, tenant_slug)
 
-    now = datetime.now(timezone.utc)
+    # current_period_end is naive — use naive datetimes throughout.
+    now = datetime.utcnow()
     until = now + timedelta(days=days)
 
     base = (

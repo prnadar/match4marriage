@@ -530,7 +530,10 @@ async def dashboard_stats(
     # current_period_start is in the current calendar month (proxy for new
     # billings this month). `monthly_series` is the last 12 months bucketed
     # by current_period_start month.
-    month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    #
+    # subscriptions.current_period_start is TIMESTAMP WITHOUT TIME ZONE, so
+    # parameters MUST be naive (no tzinfo). NOW() in SQL is naive too.
+    month_start_naive = datetime(now.year, now.month, 1)
 
     earnings_total_row = (await db.execute(sa_text("""
         SELECT COALESCE(SUM(amount_paise), 0)
@@ -545,7 +548,7 @@ async def dashboard_stats(
         WHERE tenant_id = :tid
           AND UPPER(status::text) IN ('ACTIVE', 'PAST_DUE', 'EXPIRED', 'PAUSED')
           AND current_period_start >= :month_start
-    """), {"tid": str(tenant_uuid), "month_start": month_start})).scalar_one()
+    """), {"tid": str(tenant_uuid), "month_start": month_start_naive})).scalar_one()
 
     earnings_series_rows = (await db.execute(sa_text("""
         SELECT TO_CHAR(date_trunc('month', current_period_start), 'YYYY-MM') AS m,
@@ -573,7 +576,8 @@ async def dashboard_stats(
     plan_distribution = [{"plan": k, "count": v} for k, v in plan_counts.items()]
 
     # Renewals due — active subscriptions whose period ends in the next 14 days.
-    in_14_days = now + timedelta(days=14)
+    # current_period_end is TIMESTAMP WITHOUT TIME ZONE; pass naive datetime.
+    in_14_days_naive = (now + timedelta(days=14)).replace(tzinfo=None)
     renewals_rows = (await db.execute(sa_text("""
         SELECT s.user_id, s.plan, s.amount_paise, s.current_period_end,
                p.first_name, p.last_name
@@ -585,7 +589,7 @@ async def dashboard_stats(
           AND s.current_period_end <= :until
         ORDER BY s.current_period_end ASC
         LIMIT 10
-    """), {"tid": str(tenant_uuid), "until": in_14_days})).all()
+    """), {"tid": str(tenant_uuid), "until": in_14_days_naive})).all()
     renewals_due = [
         {
             "user_id": str(r[0]),
