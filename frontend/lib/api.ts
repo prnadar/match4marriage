@@ -92,6 +92,29 @@ export const api = {
   delete: <T = any>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
+/**
+ * Authenticated CSV download. Streams to a Blob and triggers a save dialog.
+ * Bypasses the JSON `request` helper because the response body is text/csv.
+ */
+export async function downloadCsv(path: string, filename: string): Promise<void> {
+  const token = await getIdToken();
+  const headers: Record<string, string> = { "X-Tenant-ID": TENANT };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${BASE}${path}`, { headers });
+  if (!res.ok) {
+    throw new ApiError(res.status, `${res.status}: ${res.statusText}`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export const profileApi = {
   me: () => api.get("/api/v1/profile/me"),
   getProfile: (_userId?: string) => api.get("/api/v1/profile/me"),
@@ -150,6 +173,132 @@ export const adminApi = {
   },
   resolveReport: (reportId: string, body: { status: string; admin_notes?: string; action_taken?: string }) =>
     api.put(`/api/v1/admin/reports/${reportId}`, body),
+
+  // Payments + Subscriptions
+  listPayments: (params: { q?: string; gateway?: string; direction?: "credit" | "debit"; days?: number; page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.gateway) qs.set("gateway", params.gateway);
+    if (params.direction) qs.set("direction", params.direction);
+    if (params.days) qs.set("days", String(params.days));
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const s = qs.toString();
+    return api.get(`/api/v1/admin/payments${s ? "?" + s : ""}`);
+  },
+  getPaymentsSummary: () => api.get("/api/v1/admin/payments/summary"),
+  listSubscriptions: (params: { q?: string; status_filter?: string; plan?: string; page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.status_filter) qs.set("status_filter", params.status_filter);
+    if (params.plan) qs.set("plan", params.plan);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const s = qs.toString();
+    return api.get(`/api/v1/admin/subscriptions${s ? "?" + s : ""}`);
+  },
+  listExpiringSubscriptions: (days = 14) =>
+    api.get(`/api/v1/admin/subscriptions/expiring?days=${days}`),
+
+  // Pricing plans
+  listPricingPlans: () => api.get("/api/v1/admin/pricing-plans"),
+  createPricingPlan: (body: {
+    key: string; name: string; tier: "silver" | "gold" | "platinum";
+    price_paise: number; currency?: string;
+    period: "monthly" | "quarterly" | "yearly";
+    features?: string[]; is_active?: boolean; sort_order?: number;
+  }) => api.post("/api/v1/admin/pricing-plans", body),
+  updatePricingPlan: (planId: string, body: Partial<{
+    key: string; name: string; tier: "silver" | "gold" | "platinum";
+    price_paise: number; currency: string;
+    period: "monthly" | "quarterly" | "yearly";
+    features: string[]; is_active: boolean; sort_order: number;
+  }>) => api.put(`/api/v1/admin/pricing-plans/${planId}`, body),
+  deletePricingPlan: (planId: string) =>
+    api.delete(`/api/v1/admin/pricing-plans/${planId}`),
+  reorderPricingPlans: (order: Array<{ id: string; sort_order: number }>) =>
+    api.post("/api/v1/admin/pricing-plans/reorder", { order }),
+
+  // Enquiries
+  listEnquiries: (params: { q?: string; status_filter?: string; source?: string; page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.status_filter) qs.set("status_filter", params.status_filter);
+    if (params.source) qs.set("source", params.source);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const s = qs.toString();
+    return api.get(`/api/v1/admin/enquiries${s ? "?" + s : ""}`);
+  },
+  enquiryCounts: () => api.get("/api/v1/admin/enquiries/counts"),
+  updateEnquiry: (id: string, body: Partial<{ status: string; admin_notes: string | null; assign_to_me: boolean; assigned_admin_id: string | null }>) =>
+    api.put(`/api/v1/admin/enquiries/${id}`, body),
+  deleteEnquiry: (id: string) => api.delete(`/api/v1/admin/enquiries/${id}`),
+
+  // Site settings
+  getSiteSettings: () => api.get("/api/v1/admin/settings/site"),
+  updateSiteSettings: (body: Partial<{
+    site_name: string; tagline: string | null;
+    support_email: string | null; support_phone: string | null;
+    timezone: string; default_currency: string; default_locale: string;
+    extras: Record<string, unknown>;
+  }>) => api.put("/api/v1/admin/settings/site", body),
+
+  // Mail templates
+  listMailTemplates: () => api.get("/api/v1/admin/mail-templates"),
+  upsertMailTemplate: (key: string, body: { name: string; subject: string; body_html: string; body_text?: string | null; is_active?: boolean }) =>
+    api.put(`/api/v1/admin/mail-templates/${key}`, body),
+  deleteMailTemplate: (key: string) =>
+    api.delete(`/api/v1/admin/mail-templates/${key}`),
+
+  // SEO
+  listSeoSettings: () => api.get("/api/v1/admin/seo"),
+  upsertSeoSetting: (body: { path: string; title: string; description?: string | null; og_image_url?: string | null; robots?: string }) =>
+    api.put("/api/v1/admin/seo", body),
+  deleteSeoSetting: (path: string) =>
+    api.delete(`/api/v1/admin/seo?path=${encodeURIComponent(path)}`),
+
+  // Appearance
+  getAppearance: () => api.get("/api/v1/admin/settings/appearance"),
+  updateAppearance: (body: Partial<{ logo_url: string | null; favicon_url: string | null; brand_primary: string | null; brand_accent: string | null }>) =>
+    api.put("/api/v1/admin/settings/appearance", body),
+
+  // Bulk actions + CSV exports
+  bulkUserAction: (action: "suspend" | "activate", user_ids: string[]) =>
+    api.post("/api/v1/admin/users/bulk", { action, user_ids }),
+  exportUsersCsvUrl: (params: { q?: string; status_filter?: string } = {}) => {
+    const qs = new URLSearchParams({ format: "csv" });
+    if (params.q) qs.set("q", params.q);
+    if (params.status_filter) qs.set("status_filter", params.status_filter);
+    return `/api/v1/admin/users?${qs.toString()}`;
+  },
+  exportPaymentsCsvUrl: (params: { q?: string; gateway?: string; direction?: "credit" | "debit"; days?: number } = {}) => {
+    const qs = new URLSearchParams({ format: "csv" });
+    if (params.q) qs.set("q", params.q);
+    if (params.gateway) qs.set("gateway", params.gateway);
+    if (params.direction) qs.set("direction", params.direction);
+    if (params.days) qs.set("days", String(params.days));
+    return `/api/v1/admin/payments?${qs.toString()}`;
+  },
+  exportEnquiriesCsvUrl: (params: { q?: string; status_filter?: string; source?: string } = {}) => {
+    const qs = new URLSearchParams({ format: "csv" });
+    if (params.q) qs.set("q", params.q);
+    if (params.status_filter) qs.set("status_filter", params.status_filter);
+    if (params.source) qs.set("source", params.source);
+    return `/api/v1/admin/enquiries?${qs.toString()}`;
+  },
+
+  // Payment gateways
+  listPaymentGateways: () => api.get("/api/v1/admin/payment-gateways"),
+  upsertPaymentGateway: (gateway: "razorpay" | "stripe" | "upi", body: Partial<{
+    publishable_key: string | null;
+    secret_key: string | null;
+    webhook_secret: string | null;
+    is_test_mode: boolean;
+    is_active: boolean;
+  }>) => api.put(`/api/v1/admin/payment-gateways/${gateway}`, body),
+  deletePaymentGateway: (gateway: "razorpay" | "stripe" | "upi") =>
+    api.delete(`/api/v1/admin/payment-gateways/${gateway}`),
 
   // Verifications (alias of existing profile admin endpoints)
   listVerifications: (status_filter: "submitted" | "approved" | "rejected" | "all") =>

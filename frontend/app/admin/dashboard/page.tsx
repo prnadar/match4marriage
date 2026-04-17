@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import {
   Users, UserCheck, Clock, ShieldCheck, AlertTriangle,
   CheckCircle2, XCircle, TrendingUp, RefreshCw, ChevronRight,
+  Wallet, CreditCard, CalendarClock, Crown,
 } from "lucide-react";
 import { PageShell, StatCard, Button, GlassCard, fadeUp } from "@/components/admin/PageShell";
 import { adminApi, ApiError } from "@/lib/api";
@@ -14,9 +15,49 @@ interface Stats {
   users: { total: number; active: number; suspended: number; new_today: number; new_7d: number; new_30d: number };
   profiles: { pending: number; approved: number; rejected: number };
   reports: { open: number };
+  earnings?: {
+    total_paise: number;
+    this_month_paise: number;
+    monthly_series: Array<{ month: string; paise: number }>;
+  };
+  plan_distribution?: Array<{ plan: string; count: number }>;
+  renewals_due?: Array<{ user_id: string; name: string; plan: string; amount_paise: number; current_period_end: string | null }>;
   registration_trend: Array<{ date: string; count: number }>;
   religion_distribution: Array<{ religion: string; count: number }>;
   recent_activity: Array<{ user_id: string; name: string; status: string; submitted_at: string | null; reviewed_at: string | null }>;
+}
+
+const PLAN_META: Record<string, { label: string; color: string; gradient: string }> = {
+  free:     { label: "Free",     color: "#9aa3a8", gradient: "linear-gradient(90deg, #c2c8cc, #9aa3a8)" },
+  silver:   { label: "Silver",   color: "#7d8a93", gradient: "linear-gradient(90deg, #b8c2c8, #7d8a93)" },
+  gold:     { label: "Gold",     color: "#c9954a", gradient: "linear-gradient(90deg, #f0c987, #c9954a)" },
+  platinum: { label: "Platinum", color: "#5d4b8a", gradient: "linear-gradient(90deg, #9c87d3, #5d4b8a)" },
+};
+
+function formatRupees(paise: number): string {
+  if (!Number.isFinite(paise) || paise === 0) return "₹0";
+  const rupees = paise / 100;
+  if (rupees >= 1_00_00_000) return `₹${(rupees / 1_00_00_000).toFixed(2)} Cr`;
+  if (rupees >= 1_00_000) return `₹${(rupees / 1_00_000).toFixed(2)} L`;
+  if (rupees >= 1_000) return `₹${(rupees / 1_000).toFixed(1)}k`;
+  return `₹${rupees.toFixed(0)}`;
+}
+
+function shortMonth(yyyymm: string): string {
+  // "2026-04" → "Apr"
+  const [, m] = yyyymm.split("-");
+  const idx = Math.max(0, Math.min(11, parseInt(m || "1", 10) - 1));
+  return ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][idx];
+}
+
+function daysUntil(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const days = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  if (days <= 0) return "today";
+  if (days === 1) return "tomorrow";
+  return `in ${days}d`;
 }
 
 export default function AdminDashboardPage() {
@@ -69,6 +110,12 @@ export default function AdminDashboardPage() {
 
   const maxDay = Math.max(1, ...stats.registration_trend.map((d) => d.count));
   const totalRelig = stats.religion_distribution.reduce((s, x) => s + x.count, 0);
+  const earnings = stats.earnings;
+  const planDist = stats.plan_distribution || [];
+  const totalPlan = planDist.reduce((s, x) => s + x.count, 0);
+  const renewals = stats.renewals_due || [];
+  const earningsSeries = earnings?.monthly_series || [];
+  const maxEarn = Math.max(1, ...earningsSeries.map((d) => d.paise));
 
   return (
     <PageShell
@@ -94,6 +141,182 @@ export default function AdminDashboardPage() {
         <StatCard label="Rejected" value={stats.profiles.rejected} />
         <StatCard label="Suspended" value={stats.users.suspended} tone={stats.users.suspended > 0 ? "bad" : "neutral"} />
       </motion.div>
+
+      {/* Revenue strip */}
+      {earnings && (
+        <motion.div
+          variants={fadeUp}
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14, marginBottom: 28 }}
+        >
+          <StatCard
+            label="Lifetime earnings"
+            value={formatRupees(earnings.total_paise)}
+            tone="good"
+            hint="All non-cancelled subscriptions"
+          />
+          <StatCard
+            label="This month"
+            value={formatRupees(earnings.this_month_paise)}
+            tone="info"
+            hint={`${earningsSeries.length} months tracked`}
+          />
+          <StatCard
+            label="Renewals · next 14d"
+            value={renewals.length}
+            tone={renewals.length > 0 ? "warn" : "neutral"}
+            hint={renewals.length > 0 ? "Send renewal reminders" : "All clear"}
+          />
+        </motion.div>
+      )}
+
+      {/* Earnings + Plan distribution row */}
+      {(earnings || planDist.length > 0) && (
+        <motion.div
+          variants={fadeUp}
+          style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(260px, 1fr)", gap: 16, alignItems: "start", marginBottom: 16 }}
+          className="dashboard-grid"
+        >
+          {earnings && (
+            <GlassCard padding={20}>
+              <SectionHead icon={Wallet} title="Monthly earnings · last 12 months" />
+              {earningsSeries.length === 0 ? (
+                <p style={{ fontSize: 13, color: "#aaa", margin: 0 }}>No paid subscriptions yet.</p>
+              ) : (
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 160, paddingTop: 28 }}>
+                  {earningsSeries.map((d, i) => {
+                    const pct = (d.paise / maxEarn) * 100;
+                    return (
+                      <div key={d.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 0 }}>
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: `${pct}%`, opacity: 1 }}
+                          transition={{ delay: 0.2 + i * 0.04, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                          style={{
+                            width: "100%", minHeight: 2,
+                            background: "linear-gradient(to top, #c9954a, #f0c987)",
+                            borderRadius: 4,
+                            position: "relative",
+                            boxShadow: "0 2px 8px rgba(201,149,74,0.22)",
+                          }}
+                          title={`${d.month}: ${formatRupees(d.paise)}`}
+                        >
+                          {d.paise > 0 && (
+                            <span style={{
+                              position: "absolute", top: -22, left: "50%", transform: "translateX(-50%)",
+                              fontSize: 10, fontWeight: 700, color: "#7a5a1d", whiteSpace: "nowrap",
+                            }}>{formatRupees(d.paise)}</span>
+                          )}
+                        </motion.div>
+                        <span style={{ fontSize: 10, color: "#bbb", fontWeight: 500 }}>
+                          {shortMonth(d.month)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </GlassCard>
+          )}
+
+          <GlassCard padding={20}>
+            <SectionHead icon={Crown} title="Plan distribution" />
+            {planDist.length === 0 || totalPlan === 0 ? (
+              <p style={{ fontSize: 13, color: "#aaa", margin: 0 }}>No users yet.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {planDist.map((r, i) => {
+                  const meta = PLAN_META[r.plan] || { label: r.plan, color: "#999", gradient: "linear-gradient(90deg, #ddd, #999)" };
+                  const pct = totalPlan > 0 ? (r.count / totalPlan) * 100 : 0;
+                  return (
+                    <div key={r.plan}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                        <span style={{ color: "#444", fontWeight: 500 }}>{meta.label}</span>
+                        <span style={{ color: "#888" }}>
+                          <span style={{ fontWeight: 600, color: "#1a0a14" }}>{r.count}</span>
+                          <span style={{ marginLeft: 6, fontSize: 11 }}>{pct.toFixed(0)}%</span>
+                        </span>
+                      </div>
+                      <div style={{ height: 7, background: "rgba(0,0,0,0.05)", borderRadius: 4, overflow: "hidden" }}>
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          transition={{ delay: 0.3 + i * 0.08, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                          style={{
+                            height: "100%",
+                            background: meta.gradient,
+                            borderRadius: 4,
+                            boxShadow: `0 2px 8px ${meta.color}33`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </GlassCard>
+        </motion.div>
+      )}
+
+      {/* Renewals due list */}
+      {renewals.length > 0 && (
+        <motion.div variants={fadeUp} style={{ marginBottom: 16 }}>
+          <GlassCard padding={20}>
+            <SectionHead icon={CalendarClock} title="Renewals due · next 14 days" />
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {renewals.map((r, i) => {
+                const meta = PLAN_META[r.plan] || { label: r.plan, color: "#999", gradient: "" };
+                return (
+                  <motion.div
+                    key={r.user_id + (r.current_period_end || "")}
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.1 + i * 0.03, duration: 0.3 }}
+                  >
+                    <Link
+                      href={`/admin/users/${r.user_id}`}
+                      style={{
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                        padding: "10px 12px", borderRadius: 10, textDecoration: "none", color: "inherit",
+                        transition: "background 0.15s, transform 0.15s",
+                      }}
+                      onMouseEnter={(e) => {
+                        const el = e.currentTarget as HTMLAnchorElement;
+                        el.style.background = "rgba(201,149,74,0.06)";
+                        el.style.transform = "translateX(3px)";
+                      }}
+                      onMouseLeave={(e) => {
+                        const el = e.currentTarget as HTMLAnchorElement;
+                        el.style.background = "transparent";
+                        el.style.transform = "translateX(0)";
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{
+                          width: 30, height: 30, borderRadius: 10,
+                          background: "rgba(201,149,74,0.12)", display: "grid", placeItems: "center",
+                        }}>
+                          <CreditCard style={{ width: 14, height: 14, color: meta.color }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, color: "#1a0a14", fontWeight: 500 }}>{r.name}</div>
+                          <div style={{ fontSize: 11, color: "#888" }}>
+                            {meta.label} · {formatRupees(r.amount_paise)}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#aaa", fontSize: 12 }}>
+                        <span style={{ fontWeight: 600, color: "#9A6B00" }}>{daysUntil(r.current_period_end)}</span>
+                        <ChevronRight style={{ width: 13, height: 13 }} />
+                      </div>
+                    </Link>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </GlassCard>
+        </motion.div>
+      )}
 
       {/* Quick actions */}
       <motion.div

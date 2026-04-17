@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Users, Flag, Settings, LogOut, Heart,
   ChevronLeft, ChevronRight, Menu, ShieldCheck, X,
+  Wallet, CreditCard, Tag, Inbox,
 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { ToastProvider } from "@/components/admin/Toast";
@@ -17,6 +18,10 @@ const navItems = [
   { href: "/admin/dashboard",     label: "Dashboard",     icon: LayoutDashboard },
   { href: "/admin/verifications", label: "Verifications", icon: ShieldCheck },
   { href: "/admin/users",         label: "Users",         icon: Users },
+  { href: "/admin/payments",      label: "Payments",      icon: Wallet },
+  { href: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard },
+  { href: "/admin/pricing",       label: "Pricing",       icon: Tag },
+  { href: "/admin/enquiries",     label: "Enquiries",     icon: Inbox },
   { href: "/admin/reports",       label: "Reports",       icon: Flag },
   { href: "/admin/settings",      label: "Settings",      icon: Settings },
 ];
