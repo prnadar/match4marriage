@@ -39,6 +39,52 @@ const config: Config = {
         deep:    "#1A0A12",
         muted:   "#8A7080",
         sage:    "#7A9E7E",
+
+        // ── shadcn semantic tokens (HSL CSS vars in globals.css) ──────────
+        // Use these in NEW admin code. Existing pages keep using the named
+        // colors above. The two systems coexist.
+        background:    "hsl(var(--background) / <alpha-value>)",
+        foreground:    "hsl(var(--foreground) / <alpha-value>)",
+        card: {
+          DEFAULT:    "hsl(var(--card) / <alpha-value>)",
+          foreground: "hsl(var(--card-foreground) / <alpha-value>)",
+        },
+        popover: {
+          DEFAULT:    "hsl(var(--popover) / <alpha-value>)",
+          foreground: "hsl(var(--popover-foreground) / <alpha-value>)",
+        },
+        primary: {
+          DEFAULT:    "hsl(var(--primary) / <alpha-value>)",
+          foreground: "hsl(var(--primary-foreground) / <alpha-value>)",
+        },
+        secondary: {
+          DEFAULT:    "hsl(var(--secondary) / <alpha-value>)",
+          foreground: "hsl(var(--secondary-foreground) / <alpha-value>)",
+        },
+        muted2: {                          // namespaced to avoid colliding with muted: "#8A7080"
+          DEFAULT:    "hsl(var(--muted) / <alpha-value>)",
+          foreground: "hsl(var(--muted-foreground) / <alpha-value>)",
+        },
+        accent: {
+          DEFAULT:    "hsl(var(--accent) / <alpha-value>)",
+          foreground: "hsl(var(--accent-foreground) / <alpha-value>)",
+        },
+        destructive: {
+          DEFAULT:    "hsl(var(--destructive) / <alpha-value>)",
+          foreground: "hsl(var(--destructive-foreground) / <alpha-value>)",
+        },
+        border:        "hsl(var(--border) / <alpha-value>)",
+        input:         "hsl(var(--input) / <alpha-value>)",
+        ring:          "hsl(var(--ring) / <alpha-value>)",
+
+        sidebar: {
+          DEFAULT:    "hsl(var(--sidebar-background) / <alpha-value>)",
+          foreground: "hsl(var(--sidebar-foreground) / <alpha-value>)",
+          muted:      "hsl(var(--sidebar-muted) / <alpha-value>)",
+          border:     "hsl(var(--sidebar-border) / <alpha-value>)",
+          accent:     "hsl(var(--sidebar-accent) / <alpha-value>)",
+          "accent-soft": "hsl(var(--sidebar-accent-soft) / <alpha-value>)",
+        },
       },
       fontFamily: {
         display:     ["Playfair Display", "Georgia", "serif"],
@@ -74,6 +120,10 @@ const config: Config = {
         "gold":       "0 4px 20px rgba(201, 149, 74, 0.25)",
       },
       borderRadius: {
+        // shadcn convention — radius scale derives from --radius CSS var.
+        lg:   "var(--radius)",
+        md:   "calc(var(--radius) - 2px)",
+        sm:   "calc(var(--radius) - 4px)",
         card: "1.25rem",
       },
     },

@@ -5,21 +5,23 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   Users, UserCheck, Clock, ShieldCheck, AlertTriangle,
-  CheckCircle2, XCircle, TrendingUp, RefreshCw, ChevronRight,
-  Wallet, CreditCard, CalendarClock, Crown,
+  CheckCircle2, XCircle, RefreshCw, ChevronRight, ArrowUpRight, ArrowDownRight,
+  Wallet, CreditCard, CalendarClock, Crown, TrendingUp,
 } from "lucide-react";
-import { PageShell, StatCard, Button, GlassCard, fadeUp } from "@/components/admin/PageShell";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import { PageHeader } from "@/components/admin/PageHeader";
 import { adminApi, ApiError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 interface Stats {
   users: { total: number; active: number; suspended: number; new_today: number; new_7d: number; new_30d: number };
   profiles: { pending: number; approved: number; rejected: number };
   reports: { open: number };
-  earnings?: {
-    total_paise: number;
-    this_month_paise: number;
-    monthly_series: Array<{ month: string; paise: number }>;
-  };
+  earnings?: { total_paise: number; this_month_paise: number; monthly_series: Array<{ month: string; paise: number }> };
   plan_distribution?: Array<{ plan: string; count: number }>;
   renewals_due?: Array<{ user_id: string; name: string; plan: string; amount_paise: number; current_period_end: string | null }>;
   registration_trend: Array<{ date: string; count: number }>;
@@ -27,11 +29,11 @@ interface Stats {
   recent_activity: Array<{ user_id: string; name: string; status: string; submitted_at: string | null; reviewed_at: string | null }>;
 }
 
-const PLAN_META: Record<string, { label: string; color: string; gradient: string }> = {
-  free:     { label: "Free",     color: "#9aa3a8", gradient: "linear-gradient(90deg, #c2c8cc, #9aa3a8)" },
-  silver:   { label: "Silver",   color: "#7d8a93", gradient: "linear-gradient(90deg, #b8c2c8, #7d8a93)" },
-  gold:     { label: "Gold",     color: "#c9954a", gradient: "linear-gradient(90deg, #f0c987, #c9954a)" },
-  platinum: { label: "Platinum", color: "#5d4b8a", gradient: "linear-gradient(90deg, #9c87d3, #5d4b8a)" },
+const PLAN_META: Record<string, { label: string; color: string; bg: string }> = {
+  free:     { label: "Free",     color: "#7d8a93", bg: "bg-slate-100" },
+  silver:   { label: "Silver",   color: "#7d8a93", bg: "bg-slate-200" },
+  gold:     { label: "Gold",     color: "#c9954a", bg: "bg-gold-100" },
+  platinum: { label: "Platinum", color: "#5d4b8a", bg: "bg-purple-100" },
 };
 
 function formatRupees(paise: number): string {
@@ -44,7 +46,6 @@ function formatRupees(paise: number): string {
 }
 
 function shortMonth(yyyymm: string): string {
-  // "2026-04" → "Apr"
   const [, m] = yyyymm.split("-");
   const idx = Math.max(0, Math.min(11, parseInt(m || "1", 10) - 1));
   return ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][idx];
@@ -54,10 +55,23 @@ function daysUntil(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  const days = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const days = Math.ceil((d.getTime() - Date.now()) / 86400000);
   if (days <= 0) return "today";
   if (days === 1) return "tomorrow";
   return `in ${days}d`;
+}
+
+function formatRel(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 export default function AdminDashboardPage() {
@@ -80,481 +94,456 @@ export default function AdminDashboardPage() {
   };
 
   useEffect(() => { load(); }, []);
-
   const refresh = () => { setRefreshing(true); load(); };
 
-  if (loading) {
-    return (
-      <PageShell title="Dashboard">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14 }}>
-          {Array.from({ length: 7 }).map((_, i) => (
-            <div key={i} className="m4m-shimmer" style={{ height: 110 }} />
-          ))}
-        </div>
-      </PageShell>
-    );
-  }
+  if (loading) return <DashboardSkeleton />;
 
   if (error || !stats) {
     return (
-      <PageShell title="Dashboard">
-        <GlassCard>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", color: "#a0153c" }}>
-            <AlertTriangle style={{ width: 16, height: 16, marginTop: 2 }} />
-            <span style={{ fontSize: 13 }}>{error || "No data"}</span>
-          </div>
-        </GlassCard>
-      </PageShell>
+      <>
+        <PageHeader title="Dashboard" description="What's happening on your platform right now." />
+        <Card>
+          <CardContent className="flex items-start gap-3 text-destructive py-8">
+            <AlertTriangle className="w-4 h-4 mt-0.5" />
+            <span className="text-sm">{error || "No data"}</span>
+          </CardContent>
+        </Card>
+      </>
     );
   }
 
-  const maxDay = Math.max(1, ...stats.registration_trend.map((d) => d.count));
-  const totalRelig = stats.religion_distribution.reduce((s, x) => s + x.count, 0);
   const earnings = stats.earnings;
   const planDist = stats.plan_distribution || [];
   const totalPlan = planDist.reduce((s, x) => s + x.count, 0);
   const renewals = stats.renewals_due || [];
   const earningsSeries = earnings?.monthly_series || [];
   const maxEarn = Math.max(1, ...earningsSeries.map((d) => d.paise));
+  const maxDay = Math.max(1, ...stats.registration_trend.map((d) => d.count));
+  const totalRelig = stats.religion_distribution.reduce((s, x) => s + x.count, 0);
+
+  // Compute deltas for KPIs
+  const todayVs7d = stats.users.new_7d > 0 ? (stats.users.new_today * 7 / stats.users.new_7d - 1) * 100 : 0;
 
   return (
-    <PageShell
-      title="Dashboard"
-      subtitle="What's happening on your platform right now."
-      actions={
-        <Button onClick={refresh} variant="secondary">
-          <RefreshCw style={{ width: 13, height: 13, animation: refreshing ? "spin 1s linear infinite" : "none" }} />
-          Refresh
-        </Button>
-      }
-    >
-      {/* KPI grid */}
-      <motion.div
-        variants={fadeUp}
-        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14, marginBottom: 28 }}
-      >
-        <StatCard label="Pending verifications" value={stats.profiles.pending} tone="warn" hint="Awaiting review" />
-        <StatCard label="Open reports" value={stats.reports.open} tone={stats.reports.open > 0 ? "bad" : "neutral"} hint="Need admin attention" />
-        <StatCard label="Total users" value={stats.users.total} hint={`${stats.users.active.toLocaleString()} active`} />
-        <StatCard label="New today" value={stats.users.new_today} tone="info" hint={`${stats.users.new_7d} this week · ${stats.users.new_30d} this month`} />
-        <StatCard label="Approved profiles" value={stats.profiles.approved} tone="good" />
-        <StatCard label="Rejected" value={stats.profiles.rejected} />
-        <StatCard label="Suspended" value={stats.users.suspended} tone={stats.users.suspended > 0 ? "bad" : "neutral"} />
-      </motion.div>
+    <>
+      <PageHeader
+        title="Dashboard"
+        description="What's happening on your platform right now."
+        actions={
+          <Button variant="secondary" size="sm" onClick={refresh} disabled={refreshing}>
+            <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+            Refresh
+          </Button>
+        }
+      />
+
+      {/* KPI grid — 4 across on desktop, 2 on tablet */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <KpiCard
+          label="Total users"
+          value={stats.users.total.toLocaleString()}
+          hint={`${stats.users.active.toLocaleString()} active`}
+          icon={Users}
+        />
+        <KpiCard
+          label="New today"
+          value={stats.users.new_today.toLocaleString()}
+          hint={`${stats.users.new_7d} this week`}
+          icon={TrendingUp}
+          trend={todayVs7d}
+        />
+        <KpiCard
+          label="Pending verifications"
+          value={stats.profiles.pending.toLocaleString()}
+          hint="Awaiting review"
+          icon={ShieldCheck}
+          tone={stats.profiles.pending > 0 ? "warn" : "neutral"}
+          href="/admin/verifications"
+        />
+        <KpiCard
+          label="Open reports"
+          value={stats.reports.open.toLocaleString()}
+          hint="Need attention"
+          icon={AlertTriangle}
+          tone={stats.reports.open > 0 ? "danger" : "neutral"}
+          href="/admin/reports"
+        />
+      </div>
 
       {/* Revenue strip */}
       {earnings && (
-        <motion.div
-          variants={fadeUp}
-          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14, marginBottom: 28 }}
-        >
-          <StatCard
-            label="Lifetime earnings"
-            value={formatRupees(earnings.total_paise)}
-            tone="good"
-            hint="All non-cancelled subscriptions"
-          />
-          <StatCard
-            label="This month"
-            value={formatRupees(earnings.this_month_paise)}
-            tone="info"
-            hint={`${earningsSeries.length} months tracked`}
-          />
-          <StatCard
-            label="Renewals · next 14d"
-            value={renewals.length}
-            tone={renewals.length > 0 ? "warn" : "neutral"}
-            hint={renewals.length > 0 ? "Send renewal reminders" : "All clear"}
-          />
-        </motion.div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+          <KpiCard label="Lifetime earnings" value={formatRupees(earnings.total_paise)} hint="All paid plans" icon={Wallet} tone="good" />
+          <KpiCard label="This month" value={formatRupees(earnings.this_month_paise)} hint={`${earningsSeries.length} months tracked`} icon={CalendarClock} />
+          <KpiCard label="Renewals · 14d" value={renewals.length.toLocaleString()} hint={renewals.length > 0 ? "Send reminders" : "All clear"} icon={CreditCard} tone={renewals.length > 0 ? "warn" : "neutral"} />
+        </div>
       )}
 
-      {/* Earnings + Plan distribution row */}
-      {(earnings || planDist.length > 0) && (
-        <motion.div
-          variants={fadeUp}
-          style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(260px, 1fr)", gap: 16, alignItems: "start", marginBottom: 16 }}
-          className="dashboard-grid"
-        >
-          {earnings && (
-            <GlassCard padding={20}>
-              <SectionHead icon={Wallet} title="Monthly earnings · last 12 months" />
+      {/* Two-column area: left = charts, right = side data */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        {/* Earnings chart */}
+        {earnings && (
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Monthly earnings</CardTitle>
+                  <CardDescription>Last 12 months</CardDescription>
+                </div>
+                <Badge variant="gold">{formatRupees(earnings.this_month_paise)} MTD</Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
               {earningsSeries.length === 0 ? (
-                <p style={{ fontSize: 13, color: "#aaa", margin: 0 }}>No paid subscriptions yet.</p>
+                <EmptyState icon={Wallet} text="No paid subscriptions yet" />
               ) : (
-                <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 160, paddingTop: 28 }}>
+                <div className="flex items-end gap-1.5 h-44 pt-7">
                   {earningsSeries.map((d, i) => {
                     const pct = (d.paise / maxEarn) * 100;
                     return (
-                      <div key={d.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 0 }}>
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: `${pct}%`, opacity: 1 }}
-                          transition={{ delay: 0.2 + i * 0.04, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                          style={{
-                            width: "100%", minHeight: 2,
-                            background: "linear-gradient(to top, #c9954a, #f0c987)",
-                            borderRadius: 4,
-                            position: "relative",
-                            boxShadow: "0 2px 8px rgba(201,149,74,0.22)",
-                          }}
-                          title={`${d.month}: ${formatRupees(d.paise)}`}
-                        >
+                      <div key={d.month} className="flex-1 flex flex-col items-center gap-1.5 min-w-0 group">
+                        <div className="relative w-full flex-1 flex flex-col justify-end">
                           {d.paise > 0 && (
-                            <span style={{
-                              position: "absolute", top: -22, left: "50%", transform: "translateX(-50%)",
-                              fontSize: 10, fontWeight: 700, color: "#7a5a1d", whiteSpace: "nowrap",
-                            }}>{formatRupees(d.paise)}</span>
+                            <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-foreground/70 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                              {formatRupees(d.paise)}
+                            </span>
                           )}
-                        </motion.div>
-                        <span style={{ fontSize: 10, color: "#bbb", fontWeight: 500 }}>
-                          {shortMonth(d.month)}
-                        </span>
+                          <motion.div
+                            initial={{ height: 0 }}
+                            animate={{ height: `${Math.max(pct, 1.5)}%` }}
+                            transition={{ delay: 0.15 + i * 0.04, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                            className="w-full rounded-t-sm bg-gradient-to-t from-gold to-gold-300 group-hover:from-gold-dark group-hover:to-gold transition-colors"
+                          />
+                        </div>
+                        <span className="text-[10px] text-muted2-foreground tabular-nums">{shortMonth(d.month)}</span>
                       </div>
                     );
                   })}
                 </div>
               )}
-            </GlassCard>
-          )}
+            </CardContent>
+          </Card>
+        )}
 
-          <GlassCard padding={20}>
-            <SectionHead icon={Crown} title="Plan distribution" />
+        {/* Plan distribution */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Plan distribution</CardTitle>
+            <CardDescription>Users by tier</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
             {planDist.length === 0 || totalPlan === 0 ? (
-              <p style={{ fontSize: 13, color: "#aaa", margin: 0 }}>No users yet.</p>
+              <EmptyState icon={Crown} text="No users yet" />
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {planDist.map((r, i) => {
-                  const meta = PLAN_META[r.plan] || { label: r.plan, color: "#999", gradient: "linear-gradient(90deg, #ddd, #999)" };
-                  const pct = totalPlan > 0 ? (r.count / totalPlan) * 100 : 0;
-                  return (
-                    <div key={r.plan}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-                        <span style={{ color: "#444", fontWeight: 500 }}>{meta.label}</span>
-                        <span style={{ color: "#888" }}>
-                          <span style={{ fontWeight: 600, color: "#1a0a14" }}>{r.count}</span>
-                          <span style={{ marginLeft: 6, fontSize: 11 }}>{pct.toFixed(0)}%</span>
-                        </span>
-                      </div>
-                      <div style={{ height: 7, background: "rgba(0,0,0,0.05)", borderRadius: 4, overflow: "hidden" }}>
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${pct}%` }}
-                          transition={{ delay: 0.3 + i * 0.08, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-                          style={{
-                            height: "100%",
-                            background: meta.gradient,
-                            borderRadius: 4,
-                            boxShadow: `0 2px 8px ${meta.color}33`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </GlassCard>
-        </motion.div>
-      )}
-
-      {/* Renewals due list */}
-      {renewals.length > 0 && (
-        <motion.div variants={fadeUp} style={{ marginBottom: 16 }}>
-          <GlassCard padding={20}>
-            <SectionHead icon={CalendarClock} title="Renewals due · next 14 days" />
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {renewals.map((r, i) => {
-                const meta = PLAN_META[r.plan] || { label: r.plan, color: "#999", gradient: "" };
+              planDist.map((r, i) => {
+                const meta = PLAN_META[r.plan] || { label: r.plan, color: "#999", bg: "bg-slate-100" };
+                const pct = totalPlan > 0 ? (r.count / totalPlan) * 100 : 0;
                 return (
-                  <motion.div
-                    key={r.user_id + (r.current_period_end || "")}
-                    initial={{ opacity: 0, x: -6 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.1 + i * 0.03, duration: 0.3 }}
-                  >
-                    <Link
-                      href={`/admin/users/${r.user_id}`}
-                      style={{
-                        display: "flex", justifyContent: "space-between", alignItems: "center",
-                        padding: "10px 12px", borderRadius: 10, textDecoration: "none", color: "inherit",
-                        transition: "background 0.15s, transform 0.15s",
-                      }}
-                      onMouseEnter={(e) => {
-                        const el = e.currentTarget as HTMLAnchorElement;
-                        el.style.background = "rgba(201,149,74,0.06)";
-                        el.style.transform = "translateX(3px)";
-                      }}
-                      onMouseLeave={(e) => {
-                        const el = e.currentTarget as HTMLAnchorElement;
-                        el.style.background = "transparent";
-                        el.style.transform = "translateX(0)";
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <div style={{
-                          width: 30, height: 30, borderRadius: 10,
-                          background: "rgba(201,149,74,0.12)", display: "grid", placeItems: "center",
-                        }}>
-                          <CreditCard style={{ width: 14, height: 14, color: meta.color }} />
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 13, color: "#1a0a14", fontWeight: 500 }}>{r.name}</div>
-                          <div style={{ fontSize: 11, color: "#888" }}>
-                            {meta.label} · {formatRupees(r.amount_paise)}
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#aaa", fontSize: 12 }}>
-                        <span style={{ fontWeight: 600, color: "#9A6B00" }}>{daysUntil(r.current_period_end)}</span>
-                        <ChevronRight style={{ width: 13, height: 13 }} />
-                      </div>
-                    </Link>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </GlassCard>
-        </motion.div>
-      )}
-
-      {/* Quick actions */}
-      <motion.div
-        variants={fadeUp}
-        style={{ display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" }}
-      >
-        <ActionLink href="/admin/verifications" icon={ShieldCheck} label="Review verifications" count={stats.profiles.pending} highlight={stats.profiles.pending > 0} />
-        <ActionLink href="/admin/reports" icon={AlertTriangle} label="Handle reports" count={stats.reports.open} highlight={stats.reports.open > 0} tone="bad" />
-        <ActionLink href="/admin/users" icon={Users} label="Manage users" />
-      </motion.div>
-
-      <motion.div
-        variants={fadeUp}
-        style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(260px, 1fr)", gap: 16, alignItems: "start" }}
-        className="dashboard-grid"
-      >
-        {/* Registration trend */}
-        <GlassCard padding={20}>
-          <SectionHead icon={TrendingUp} title="Registrations · last 14 days" />
-          {stats.registration_trend.length === 0 ? (
-            <p style={{ fontSize: 13, color: "#aaa", margin: 0 }}>No data yet.</p>
-          ) : (
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 140, paddingTop: 24 }}>
-              {stats.registration_trend.map((d, i) => (
-                <div key={d.date} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: `${(d.count / maxDay) * 100}px`, opacity: 1 }}
-                    transition={{ delay: 0.2 + i * 0.03, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                    style={{
-                      width: "100%", minHeight: 2,
-                      background: "linear-gradient(to top, #a0153c, #ff7a9a)",
-                      borderRadius: 4,
-                      position: "relative",
-                      boxShadow: "0 2px 8px rgba(220,30,60,0.18)",
-                    }}
-                    title={`${d.date}: ${d.count}`}
-                  >
-                    {d.count > 0 && (
-                      <span style={{
-                        position: "absolute", top: -18, left: "50%", transform: "translateX(-50%)",
-                        fontSize: 10, fontWeight: 700, color: "#666",
-                      }}>{d.count}</span>
-                    )}
-                  </motion.div>
-                  <span style={{ fontSize: 9, color: "#bbb", fontWeight: 500 }}>
-                    {new Date(d.date).getDate()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </GlassCard>
-
-        {/* Religion distribution */}
-        <GlassCard padding={20}>
-          <SectionHead icon={Users} title="Religion distribution" />
-          {stats.religion_distribution.length === 0 ? (
-            <p style={{ fontSize: 13, color: "#aaa", margin: 0 }}>No data yet.</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {stats.religion_distribution.map((r, i) => {
-                const pct = totalRelig > 0 ? (r.count / totalRelig) * 100 : 0;
-                return (
-                  <div key={r.religion}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-                      <span style={{ textTransform: "capitalize", color: "#444", fontWeight: 500 }}>{r.religion}</span>
-                      <span style={{ color: "#888" }}>
-                        <span style={{ fontWeight: 600, color: "#1a0a14" }}>{r.count}</span>
-                        <span style={{ marginLeft: 6, fontSize: 11 }}>{pct.toFixed(0)}%</span>
+                  <div key={r.plan}>
+                    <div className="flex justify-between items-baseline mb-1.5">
+                      <span className="text-[12.5px] font-medium text-foreground">{meta.label}</span>
+                      <span className="text-[12px] text-muted2-foreground tabular-nums">
+                        <span className="font-semibold text-foreground">{r.count}</span>
+                        <span className="ml-1.5">{pct.toFixed(0)}%</span>
                       </span>
                     </div>
-                    <div style={{ height: 7, background: "rgba(0,0,0,0.05)", borderRadius: 4, overflow: "hidden" }}>
+                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${pct}%` }}
-                        transition={{ delay: 0.3 + i * 0.08, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-                        style={{
-                          height: "100%",
-                          background: "linear-gradient(90deg, #dc1e3c, #a0153c)",
-                          borderRadius: 4,
-                          boxShadow: "0 2px 8px rgba(220,30,60,0.22)",
-                        }}
+                        transition={{ delay: 0.2 + i * 0.06, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                        className="h-full rounded-full"
+                        style={{ background: meta.color }}
                       />
                     </div>
                   </div>
                 );
-              })}
-            </div>
-          )}
-        </GlassCard>
-      </motion.div>
+              })
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Recent activity */}
-      <motion.div variants={fadeUp} style={{ marginTop: 16 }}>
-        <GlassCard padding={20}>
-          <SectionHead icon={Clock} title="Recent verification activity" />
-          {stats.recent_activity.length === 0 ? (
-            <p style={{ fontSize: 13, color: "#aaa", margin: 0 }}>No activity yet.</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {stats.recent_activity.map((a, i) => (
-                <motion.div
-                  key={a.user_id + (a.reviewed_at || a.submitted_at || "")}
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.1 + i * 0.03, duration: 0.3 }}
-                >
-                  <Link
-                    href="/admin/verifications"
-                    style={{
-                      display: "flex", justifyContent: "space-between", alignItems: "center",
-                      padding: "10px 12px", borderRadius: 10, textDecoration: "none", color: "inherit",
-                      transition: "background 0.15s, transform 0.15s",
-                    }}
-                    onMouseEnter={(e) => {
-                      const el = e.currentTarget as HTMLAnchorElement;
-                      el.style.background = "rgba(220,30,60,0.04)";
-                      el.style.transform = "translateX(3px)";
-                    }}
-                    onMouseLeave={(e) => {
-                      const el = e.currentTarget as HTMLAnchorElement;
-                      el.style.background = "transparent";
-                      el.style.transform = "translateX(0)";
-                    }}
+      {/* Renewals + Recent activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        {/* Renewals due */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Renewals due</CardTitle>
+                <CardDescription>Next 14 days</CardDescription>
+              </div>
+              {renewals.length > 0 && <Badge variant="warning">{renewals.length}</Badge>}
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {renewals.length === 0 ? (
+              <EmptyState icon={CalendarClock} text="No renewals coming up" />
+            ) : (
+              <ul className="-mx-2">
+                {renewals.map((r, i) => {
+                  const meta = PLAN_META[r.plan] || { label: r.plan, color: "#999", bg: "bg-slate-100" };
+                  return (
+                    <motion.li
+                      key={r.user_id + (r.current_period_end || "")}
+                      initial={{ opacity: 0, x: -4 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.05 + i * 0.03, duration: 0.25 }}
+                    >
+                      <Link
+                        href={`/admin/users/${r.user_id}`}
+                        className="flex items-center justify-between gap-3 px-2 py-2 rounded-md hover:bg-secondary group transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={cn("w-8 h-8 rounded-md grid place-items-center shrink-0", meta.bg)}>
+                            <CreditCard className="w-3.5 h-3.5" style={{ color: meta.color }} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[13px] font-medium text-foreground truncate">{r.name}</div>
+                            <div className="text-[11px] text-muted2-foreground">
+                              {meta.label} · {formatRupees(r.amount_paise)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Badge variant="warning">{daysUntil(r.current_period_end)}</Badge>
+                          <ChevronRight className="w-3.5 h-3.5 text-muted2-foreground/40 group-hover:text-muted2-foreground transition-colors" />
+                        </div>
+                      </Link>
+                    </motion.li>
+                  );
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent verification activity */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Recent verification activity</CardTitle>
+                <CardDescription>Last 20 events</CardDescription>
+              </div>
+              <Link href="/admin/verifications" className="text-[11px] font-medium text-primary hover:underline">
+                View queue →
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {stats.recent_activity.length === 0 ? (
+              <EmptyState icon={Clock} text="No activity yet" />
+            ) : (
+              <ul className="-mx-2 max-h-80 overflow-y-auto">
+                {stats.recent_activity.slice(0, 8).map((a, i) => (
+                  <motion.li
+                    key={a.user_id + (a.reviewed_at || a.submitted_at || "")}
+                    initial={{ opacity: 0, x: -4 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.05 + i * 0.03, duration: 0.25 }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <ActivityIcon status={a.status} />
-                      <div>
-                        <div style={{ fontSize: 13, color: "#1a0a14", fontWeight: 500 }}>{a.name}</div>
-                        <div style={{ fontSize: 11, color: "#888", textTransform: "capitalize" }}>
-                          {a.status.replace(/_/g, " ")}
+                    <Link
+                      href="/admin/verifications"
+                      className="flex items-center justify-between gap-3 px-2 py-2 rounded-md hover:bg-secondary group transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <ActivityIcon status={a.status} />
+                        <div className="min-w-0">
+                          <div className="text-[13px] font-medium text-foreground truncate">{a.name}</div>
+                          <div className="text-[11px] text-muted2-foreground capitalize">
+                            {a.status.replace(/_/g, " ")}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#aaa", fontSize: 12 }}>
-                      {formatRel(a.reviewed_at || a.submitted_at)}
-                      <ChevronRight style={{ width: 13, height: 13 }} />
-                    </div>
-                  </Link>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </GlassCard>
-      </motion.div>
-
-      <style jsx>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 900px) {
-          :global(.dashboard-grid) {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
-    </PageShell>
-  );
-}
-
-function SectionHead({ icon: Icon, title }: { icon: any; title: string }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-      <div style={{
-        width: 26, height: 26, borderRadius: 8,
-        background: "rgba(220,30,60,0.08)",
-        display: "grid", placeItems: "center",
-      }}>
-        <Icon style={{ width: 13, height: 13, color: "#dc1e3c" }} />
+                      <span className="text-[11px] text-muted2-foreground/70 tabular-nums shrink-0">
+                        {formatRel(a.reviewed_at || a.submitted_at)}
+                      </span>
+                    </Link>
+                  </motion.li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       </div>
-      <h3 style={{
-        fontSize: 12, fontWeight: 700, textTransform: "uppercase",
-        letterSpacing: "0.08em", color: "#555", margin: 0,
-      }}>{title}</h3>
-    </div>
+
+      {/* Bottom row: registrations + religion */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Registrations</CardTitle>
+            <CardDescription>Last 14 days</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {stats.registration_trend.length === 0 ? (
+              <EmptyState icon={TrendingUp} text="No registrations in this window" />
+            ) : (
+              <div className="flex items-end gap-1 h-32 pt-5">
+                {stats.registration_trend.map((d, i) => (
+                  <div key={d.date} className="flex-1 flex flex-col items-center gap-1.5 group">
+                    <div className="relative w-full flex-1 flex flex-col justify-end">
+                      {d.count > 0 && (
+                        <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[9.5px] font-semibold text-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {d.count}
+                        </span>
+                      )}
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: `${(d.count / maxDay) * 100}%` }}
+                        transition={{ delay: 0.15 + i * 0.025, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                        className="w-full rounded-t-sm bg-gradient-to-t from-primary to-rose-400 min-h-[2px]"
+                      />
+                    </div>
+                    <span className="text-[9.5px] text-muted2-foreground/70 tabular-nums">
+                      {new Date(d.date).getDate()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Religion distribution</CardTitle>
+            <CardDescription>Top communities</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2.5">
+            {stats.religion_distribution.length === 0 ? (
+              <EmptyState icon={Users} text="No data yet" />
+            ) : (
+              stats.religion_distribution.map((r, i) => {
+                const pct = totalRelig > 0 ? (r.count / totalRelig) * 100 : 0;
+                return (
+                  <div key={r.religion}>
+                    <div className="flex justify-between items-baseline mb-1">
+                      <span className="text-[12px] capitalize text-foreground font-medium">{r.religion}</span>
+                      <span className="text-[11px] text-muted2-foreground tabular-nums">
+                        {r.count} · {pct.toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="h-1 bg-secondary rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ delay: 0.2 + i * 0.05, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                        className="h-full rounded-full bg-gradient-to-r from-primary to-rose-400"
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </>
   );
 }
 
-function ActionLink({ href, icon: Icon, label, count, highlight, tone = "default" }: {
-  href: string; icon: any; label: string; count?: number; highlight?: boolean; tone?: "default" | "bad";
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function KpiCard({
+  label, value, hint, icon: Icon, tone = "neutral", trend, href,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  icon: any;
+  tone?: "neutral" | "good" | "warn" | "danger";
+  trend?: number;
+  href?: string;
 }) {
-  const accent = tone === "bad" ? "#dc1e3c" : "#1a0a14";
-  return (
-    <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} transition={{ type: "spring", stiffness: 400, damping: 26 }}>
-      <Link
-        href={href}
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 8,
-          padding: "10px 16px", borderRadius: 12,
-          background: highlight
-            ? "linear-gradient(135deg, rgba(220,30,60,0.1), rgba(220,30,60,0.04))"
-            : "rgba(255,255,255,0.8)",
-          border: `1px solid ${highlight ? "rgba(220,30,60,0.2)" : "rgba(220,30,60,0.1)"}`,
-          color: accent, fontSize: 13, fontWeight: 600, textDecoration: "none",
-          backdropFilter: "blur(6px)",
-          boxShadow: highlight ? "0 4px 14px rgba(220,30,60,0.15)" : "none",
-          transition: "box-shadow 0.2s",
-        }}
-      >
-        <Icon style={{ width: 14, height: 14 }} /> {label}
-        {count !== undefined && count > 0 && (
-          <span style={{
-            background: "#dc1e3c", color: "#fff", fontSize: 11, fontWeight: 700,
-            padding: "2px 8px", borderRadius: 999, minWidth: 22, textAlign: "center",
-          }}>{count}</span>
-        )}
-      </Link>
-    </motion.div>
+  const toneRing = {
+    neutral: "ring-border/60",
+    good:    "ring-emerald-200",
+    warn:    "ring-amber-200",
+    danger:  "ring-red-200",
+  }[tone];
+  const toneIcon = {
+    neutral: "text-muted2-foreground bg-secondary",
+    good:    "text-emerald-700 bg-emerald-50",
+    warn:    "text-amber-700 bg-amber-50",
+    danger:  "text-red-700 bg-red-50",
+  }[tone];
+
+  const inner = (
+    <Card className={cn("ring-1 transition-all", toneRing, href && "hover:-translate-y-0.5 hover:shadow-md cursor-pointer")}>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted2-foreground/80">
+              {label}
+            </div>
+            <div className="font-display text-[26px] leading-none font-semibold text-foreground mt-2 tabular-nums">
+              {value}
+            </div>
+            {hint && (
+              <div className="text-[11.5px] text-muted2-foreground mt-1.5 flex items-center gap-1.5">
+                {trend !== undefined && Math.abs(trend) > 0.5 && (
+                  <span className={cn(
+                    "inline-flex items-center gap-0.5 font-semibold",
+                    trend > 0 ? "text-emerald-600" : "text-red-600",
+                  )}>
+                    {trend > 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                    {Math.abs(trend).toFixed(0)}%
+                  </span>
+                )}
+                <span>{hint}</span>
+              </div>
+            )}
+          </div>
+          <div className={cn("w-9 h-9 rounded-md grid place-items-center shrink-0", toneIcon)}>
+            <Icon className="w-4 h-4" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
+
+  return href ? <Link href={href}>{inner}</Link> : inner;
 }
 
 function ActivityIcon({ status }: { status: string }) {
-  const map: Record<string, { icon: any; color: string; bg: string }> = {
-    approved:  { icon: CheckCircle2, color: "#5C7A52", bg: "rgba(92,122,82,0.12)" },
-    rejected:  { icon: XCircle,      color: "#dc1e3c", bg: "rgba(220,30,60,0.08)" },
-    submitted: { icon: Clock,        color: "#9A6B00", bg: "rgba(200,144,32,0.12)" },
+  const map: Record<string, { icon: any; cls: string }> = {
+    approved:  { icon: CheckCircle2, cls: "text-emerald-700 bg-emerald-50" },
+    rejected:  { icon: XCircle,      cls: "text-red-700 bg-red-50" },
+    submitted: { icon: Clock,        cls: "text-amber-700 bg-amber-50" },
   };
-  const s = map[status] || { icon: UserCheck, color: "#999", bg: "rgba(0,0,0,0.05)" };
-  const Icon = s.icon;
+  const { icon: Icon, cls } = map[status] || { icon: UserCheck, cls: "text-muted2-foreground bg-secondary" };
   return (
-    <div style={{
-      width: 30, height: 30, borderRadius: 10,
-      background: s.bg, display: "grid", placeItems: "center",
-    }}>
-      <Icon style={{ width: 14, height: 14, color: s.color }} />
+    <div className={cn("w-8 h-8 rounded-md grid place-items-center shrink-0", cls)}>
+      <Icon className="w-3.5 h-3.5" />
     </div>
   );
 }
 
-function formatRel(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const diff = Date.now() - d.getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+function EmptyState({ icon: Icon, text }: { icon: any; text: string }) {
+  return (
+    <div className="py-6 text-center">
+      <Icon className="w-7 h-7 text-muted2-foreground/30 mx-auto mb-2" />
+      <p className="text-[12.5px] text-muted2-foreground">{text}</p>
+    </div>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <>
+      <PageHeader title="Dashboard" description="What's happening on your platform right now." />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[108px] rounded-lg" />)}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-[108px] rounded-lg" />)}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <Skeleton className="lg:col-span-2 h-72 rounded-lg" />
+        <Skeleton className="h-72 rounded-lg" />
+      </div>
+    </>
+  );
 }
