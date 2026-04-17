@@ -1,9 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import {
+  useEffect, useMemo, useRef, useState,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  motion, AnimatePresence,
+  useMotionValue, useSpring, useTransform,
+  type Variants,
+} from "framer-motion";
 import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -15,10 +21,18 @@ import { firebaseAuth, rememberSessionUid } from "@/lib/firebase";
 import { profileApi } from "@/lib/api";
 import {
   Heart, Phone, Mail, Eye, EyeOff, ArrowRight, AlertCircle,
-  CheckCircle2, Sparkles, Loader2,
+  CheckCircle2, Loader2, ArrowLeft,
 } from "lucide-react";
 
+// ─── Easing tokens ────────────────────────────────────────────────────────────
+
+const EASE = [0.22, 1, 0.36, 1] as const;          // ease-out-quart: gentle finish
+const SPRING_SOFT = { type: "spring" as const, stiffness: 260, damping: 26 };
+const SPRING_SNAP = { type: "spring" as const, stiffness: 420, damping: 28 };
+
 type Mode = "email" | "phone";
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,7 +55,7 @@ export default function LoginPage() {
 
   const greeting = useMemo(() => {
     const h = new Date().getHours();
-    if (h < 5) return "Welcome home";
+    if (h < 5)  return "Welcome home";
     if (h < 12) return "Good morning";
     if (h < 17) return "Good afternoon";
     if (h < 21) return "Good evening";
@@ -129,13 +143,9 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="m4m-userlogin-root" style={{
+    <div className="m4m-login" style={{
       minHeight: "100vh",
       display: "grid",
-      // Hero first (left), form second (right). At very wide screens
-      // the hero still wins space; under 1100px we single-column (see
-      // GlobalStyles). Using minmax(0, 1fr) ensures the hero can shrink
-      // down to 0 and then stack cleanly via the media query.
       gridTemplateColumns: "minmax(560px, 1fr) minmax(0, 480px)",
       background: "#fdfbf9",
       position: "relative",
@@ -143,280 +153,38 @@ export default function LoginPage() {
       color: "#fff",
       fontFamily: "var(--font-poppins, sans-serif)",
     }}>
-      <div id="recaptcha-login" />
+      <div id="recaptcha-login" style={{ position: "absolute", left: -9999, top: -9999 }} />
 
-      {/* ═══ LEFT: STORY HERO ═══════════════════════════════════════════ */}
-      <motion.aside
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6 }}
-        className="m4m-userlogin-hero"
-        style={{
-          position: "relative",
-          overflow: "hidden",
-          background: "linear-gradient(135deg, #2a0c18 0%, #4a1528 30%, #7a2a40 60%, #4a1528 100%)",
-          display: "flex",
-          flexDirection: "column",
-          padding: "48px 60px",
-          isolation: "isolate",
-        }}
-      >
-        {/* Aurora */}
-        <span className="u-aurora u-aurora-rose" />
-        <span className="u-aurora u-aurora-gold" />
-        <span className="u-aurora u-aurora-plum" />
+      {/* ═══ LEFT — Cinematic hero ═══════════════════════════════════════ */}
+      <Hero greeting={greeting} />
 
-        {/* Grain + dots */}
-        <span className="u-grain" />
-        <span className="u-dots" />
-
-        {/* Mandala */}
-        <Mandala />
-
-        {/* Floating hearts + sparkles */}
-        <FloatingDecor />
-
-        {/* Vignette */}
-        <span className="u-vignette" />
-
-        {/* Brand header */}
-        <motion.header
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.15 }}
-          style={{
-            position: "relative", zIndex: 5,
-            display: "flex", alignItems: "center", gap: 12,
-          }}
-        >
-          <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 12,
-              background: "linear-gradient(135deg, #ff4d79, #a0153c)",
-              display: "grid", placeItems: "center",
-              boxShadow: "0 8px 24px rgba(220,30,60,0.48), inset 0 0 0 1px rgba(255,255,255,0.12)",
-            }}>
-              <Heart style={{ width: 20, height: 20, color: "#fff" }} fill="#fff" />
-            </div>
-            <span style={{
-              fontFamily: "var(--font-playfair, serif)",
-              fontSize: 22, fontWeight: 700, color: "#fff",
-              letterSpacing: "-0.01em",
-            }}>
-              Match<span style={{ color: "#ffb9c8" }}>4</span>Marriage
-            </span>
-          </Link>
-        </motion.header>
-
-        {/* Centre: testimonial + stats */}
-        <div style={{
-          flex: 1, position: "relative", zIndex: 5,
-          display: "flex", flexDirection: "column", justifyContent: "center",
-          maxWidth: 560,
-          paddingTop: 40,
-        }}>
-          <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.55, delay: 0.3 }}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 8,
-              padding: "5px 14px",
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(255,255,255,0.14)",
-              borderRadius: 999,
-              marginBottom: 22, alignSelf: "flex-start",
-              backdropFilter: "blur(10px)",
-            }}
-          >
-            <Sparkles style={{ width: 12, height: 12, color: "#ffc8a8" }} />
-            <span style={{
-              fontSize: 10.5, fontWeight: 700, color: "rgba(255,255,255,0.82)",
-              letterSpacing: "0.14em", textTransform: "uppercase",
-            }}>
-              A place for forever
-            </span>
-          </motion.div>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.65, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            style={{
-              fontFamily: "var(--font-playfair, serif)",
-              fontSize: "clamp(42px, 5vw, 68px)",
-              fontWeight: 500,
-              lineHeight: 1.05,
-              margin: 0,
-              letterSpacing: "-0.028em",
-              color: "#ffffff",
-            }}
-          >
-            Every great story<br />
-            begins with a{" "}
-            <span style={{ position: "relative", whiteSpace: "nowrap" }}>
-              <em style={{
-                fontStyle: "italic", fontWeight: 400,
-                color: "#ffb9c8", position: "relative", zIndex: 1,
-              }}>hello</em>
-              <motion.span
-                initial={{ scaleX: 0 }}
-                animate={{ scaleX: 1 }}
-                transition={{ delay: 1.0, duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
-                style={{
-                  position: "absolute", left: 0, right: 0, bottom: -4,
-                  height: 4, borderRadius: 2,
-                  background: "linear-gradient(90deg, transparent, #ff98ae 30%, #ffc8a8 70%, transparent)",
-                  transformOrigin: "left center",
-                  boxShadow: "0 0 20px rgba(255,152,174,0.5)",
-                }}
-              />
-            </span>
-            .
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.55 }}
-            style={{
-              fontSize: 16,
-              lineHeight: 1.65,
-              color: "rgba(255,255,255,0.68)",
-              marginTop: 22, maxWidth: 480,
-              fontWeight: 400,
-            }}
-          >
-            Verified profiles, real families, and the warmth of a community that believes in forever.
-            Sign in to pick up where you left off.
-          </motion.p>
-
-          {/* Testimonial card */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.7 }}
-            whileHover={{ y: -2 }}
-            style={{
-              marginTop: 36,
-              padding: "20px 22px",
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 16,
-              backdropFilter: "saturate(140%) blur(14px)",
-              maxWidth: 480,
-              position: "relative",
-              boxShadow: "0 14px 40px rgba(0,0,0,0.25)",
-            }}
-          >
-            {/* Open-quote mark */}
-            <span style={{
-              position: "absolute", top: 10, left: 18,
-              fontFamily: "var(--font-playfair, serif)",
-              fontSize: 68, lineHeight: 0.8,
-              color: "rgba(255,152,174,0.35)",
-              pointerEvents: "none",
-            }}>“</span>
-            <p style={{
-              fontSize: 15, lineHeight: 1.55,
-              color: "rgba(255,255,255,0.85)",
-              margin: "0 0 14px",
-              fontStyle: "italic",
-              paddingLeft: 26,
-            }}>
-              We met here in 2024 and got married the next spring. Match4Marriage made us
-              feel safe from the very first message.
-            </p>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, paddingLeft: 26 }}>
-              <div style={{
-                width: 34, height: 34, borderRadius: "50%",
-                background: "linear-gradient(135deg, #ff7a9a, #a0153c)",
-                display: "grid", placeItems: "center",
-                color: "#fff", fontSize: 13, fontWeight: 700,
-                border: "2px solid rgba(255,255,255,0.2)",
-                flexShrink: 0,
-              }}>P</div>
-              <div style={{ fontSize: 12.5 }}>
-                <div style={{ color: "#fff", fontWeight: 600 }}>Priya &amp; Arjun</div>
-                <div style={{ color: "rgba(255,255,255,0.5)" }}>Married · London · 2025</div>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Mini stats row */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.9, duration: 0.5 }}
-            style={{ display: "flex", gap: 28, marginTop: 28, flexWrap: "wrap" }}
-          >
-            {[
-              { n: "50K+",   label: "Verified members" },
-              { n: "1,200+", label: "Happy couples" },
-              { n: "4.9★",   label: "Average rating" },
-            ].map((s) => (
-              <div key={s.label}>
-                <div style={{
-                  fontFamily: "var(--font-playfair, serif)",
-                  fontSize: 26, fontWeight: 600, color: "#fff",
-                  letterSpacing: "-0.01em",
-                }}>{s.n}</div>
-                <div style={{
-                  fontSize: 11, fontWeight: 500,
-                  color: "rgba(255,255,255,0.5)",
-                  textTransform: "uppercase", letterSpacing: "0.08em",
-                  marginTop: 2,
-                }}>{s.label}</div>
-              </div>
-            ))}
-          </motion.div>
-        </div>
-
-        {/* Footer */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.0, duration: 0.5 }}
-          style={{
-            position: "relative", zIndex: 5,
-            fontSize: 11, color: "rgba(255,255,255,0.35)",
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-            flexWrap: "wrap", gap: 10,
-            paddingTop: 24, borderTop: "1px solid rgba(255,255,255,0.06)",
-          }}
-        >
-          <span style={{ letterSpacing: "0.04em" }}>© {new Date().getFullYear()} Match4Marriage</span>
-          <span style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            <Link href="/privacy" style={{ color: "rgba(255,255,255,0.5)", textDecoration: "none" }}>Privacy</Link>
-            <Link href="/terms"   style={{ color: "rgba(255,255,255,0.5)", textDecoration: "none" }}>Terms</Link>
-            <span style={{ color: "rgba(255,255,255,0.4)" }}>🇬🇧 UK</span>
-          </span>
-        </motion.div>
-      </motion.aside>
-
-      {/* ═══ RIGHT: FORM ═══════════════════════════════════════════════ */}
+      {/* ═══ RIGHT — Form ═══════════════════════════════════════════════ */}
       <motion.section
-        initial={{ opacity: 0, y: 16 }}
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.55, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.5, delay: 0.15, ease: EASE }}
+        className="m4m-login-form"
         style={{
           display: "flex", alignItems: "center", justifyContent: "center",
           padding: "48px 44px", background: "#fdfbf9",
-          position: "relative",
+          position: "relative", overflow: "hidden",
         }}
       >
+        {/* whisper of colour so cream doesn't feel sterile */}
         <div aria-hidden style={{
-          position: "absolute", inset: 0,
-          background: "radial-gradient(ellipse at 50% 25%, rgba(220,30,60,0.04), transparent 65%)",
+          position: "absolute", top: -120, right: -120, width: 360, height: 360,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(220,30,60,0.08), transparent 70%)",
           pointerEvents: "none",
         }} />
 
-        <div style={{ width: "100%", maxWidth: 400, position: "relative" }}>
+        <div style={{ width: "100%", maxWidth: 380, position: "relative" }}>
+          {/* Header */}
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
-            style={{ marginBottom: 32 }}
+            style={{ marginBottom: 34 }}
           >
             <div style={{
               display: "inline-flex", alignItems: "center", gap: 7,
@@ -436,13 +204,13 @@ export default function LoginPage() {
             </div>
             <h2 style={{
               fontFamily: "var(--font-playfair, serif)",
-              fontSize: 34, fontWeight: 500, color: "#1a0a14",
-              margin: 0, letterSpacing: "-0.02em", lineHeight: 1.1,
+              fontSize: 36, fontWeight: 500, color: "#1a0a14",
+              margin: 0, letterSpacing: "-0.022em", lineHeight: 1.08,
             }}>
               {greeting}.
             </h2>
-            <p style={{ fontSize: 14, color: "#777", margin: "8px 0 0", lineHeight: 1.5 }}>
-              Sign in to continue your journey to forever.
+            <p style={{ fontSize: 14, color: "#777", margin: "10px 0 0", lineHeight: 1.5 }}>
+              Continue your journey to forever.
             </p>
           </motion.div>
 
@@ -452,10 +220,10 @@ export default function LoginPage() {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
             style={{
-              display: "flex", gap: 2,
+              display: "flex",
               padding: 3,
-              background: "rgba(220,30,60,0.04)",
-              border: "1px solid rgba(220,30,60,0.1)",
+              background: "rgba(220,30,60,0.035)",
+              border: "1px solid rgba(220,30,60,0.08)",
               borderRadius: 12,
               marginBottom: 22,
             }}
@@ -482,7 +250,7 @@ export default function LoginPage() {
                   {active && (
                     <motion.span
                       layoutId="auth-tab-pill"
-                      transition={{ type: "spring", stiffness: 380, damping: 28 }}
+                      transition={SPRING_SNAP}
                       style={{
                         position: "absolute", inset: 0,
                         background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
@@ -501,12 +269,8 @@ export default function LoginPage() {
 
           {/* Messages */}
           <AnimatePresence mode="wait">
-            {error && (
-              <MessageBanner key="err" tone="error">{error}</MessageBanner>
-            )}
-            {!error && info && (
-              <MessageBanner key="info" tone="info">{info}</MessageBanner>
-            )}
+            {error && <Banner key="err" tone="error">{error}</Banner>}
+            {!error && info && <Banner key="info" tone="info">{info}</Banner>}
           </AnimatePresence>
 
           {/* Forms */}
@@ -514,10 +278,10 @@ export default function LoginPage() {
             {mode === "email" ? (
               <motion.div
                 key="email-form"
-                initial={{ opacity: 0, x: -10 }}
+                initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                transition={{ duration: 0.25 }}
+                exit={{ opacity: 0, x: 8 }}
+                transition={{ duration: 0.25, ease: EASE }}
                 style={{ display: "flex", flexDirection: "column", gap: 14 }}
               >
                 <Field icon={Mail} label="Email">
@@ -533,16 +297,22 @@ export default function LoginPage() {
                   />
                 </Field>
 
-                <Field icon={null} label="Password" right={
-                  <button
-                    type="button"
-                    onClick={handleReset}
-                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
-                      fontSize: 11, fontWeight: 600, color: "#dc1e3c", fontFamily: "inherit" }}
-                  >
-                    Forgot?
-                  </button>
-                }>
+                <Field
+                  icon={null}
+                  label="Password"
+                  right={
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      style={{
+                        background: "none", border: "none", padding: 0, cursor: "pointer",
+                        fontSize: 11, fontWeight: 600, color: "#dc1e3c", fontFamily: "inherit",
+                      }}
+                    >
+                      Forgot?
+                    </button>
+                  }
+                >
                   <input
                     type={showPassword ? "text" : "password"}
                     value={password}
@@ -572,30 +342,18 @@ export default function LoginPage() {
             ) : !otpSent ? (
               <motion.div
                 key="phone-form"
-                initial={{ opacity: 0, x: 10 }}
+                initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.25 }}
+                exit={{ opacity: 0, x: -8 }}
+                transition={{ duration: 0.25, ease: EASE }}
                 style={{ display: "flex", flexDirection: "column", gap: 14 }}
               >
                 <Field icon={Phone} label="Mobile number">
-                  <div style={{
-                    display: "flex", gap: 8,
-                    padding: 4,
-                    background: "rgba(255,255,255,0.95)",
-                    border: "1px solid rgba(26,10,20,0.1)",
-                    borderRadius: 12,
-                    paddingLeft: 36,
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.03), inset 0 1px 2px rgba(0,0,0,0.02)",
-                  }}>
+                  <div style={phoneShell}>
                     <select
                       value={countryCode}
                       onChange={(e) => setCountryCode(e.target.value)}
-                      style={{
-                        border: "none", background: "transparent", fontSize: 13,
-                        color: "#1a0a14", outline: "none", cursor: "pointer",
-                        padding: "8px 4px", fontFamily: "inherit", fontWeight: 600,
-                      }}
+                      style={countrySelect}
                     >
                       <option value="+44">🇬🇧 +44</option>
                       <option value="+91">🇮🇳 +91</option>
@@ -611,11 +369,7 @@ export default function LoginPage() {
                       onKeyDown={(e) => e.key === "Enter" && !loading && handleSendOtp()}
                       placeholder="7700 900000"
                       autoComplete="tel"
-                      style={{
-                        flex: 1, border: "none", outline: "none",
-                        fontSize: 14, color: "#1a0a14", background: "transparent",
-                        fontFamily: "inherit", padding: "9px 8px",
-                      }}
+                      style={phoneNumberInput}
                     />
                   </div>
                 </Field>
@@ -624,9 +378,7 @@ export default function LoginPage() {
                   Send verification code
                 </SubmitButton>
 
-                <p style={{
-                  fontSize: 11.5, color: "#999", textAlign: "center", margin: "4px 0 0", lineHeight: 1.5,
-                }}>
+                <p style={helperText}>
                   We&apos;ll text you a 6-digit code. Standard rates may apply.
                 </p>
               </motion.div>
@@ -636,16 +388,10 @@ export default function LoginPage() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.3 }}
+                transition={{ duration: 0.28, ease: EASE }}
                 style={{ display: "flex", flexDirection: "column", gap: 14 }}
               >
-                <div style={{
-                  padding: "14px 16px",
-                  background: "rgba(92,122,82,0.06)",
-                  border: "1px solid rgba(92,122,82,0.15)",
-                  borderRadius: 12,
-                  display: "flex", alignItems: "center", gap: 10,
-                }}>
+                <div style={otpConfirmBanner}>
                   <CheckCircle2 style={{ width: 17, height: 17, color: "#5C7A52", flexShrink: 0 }} />
                   <div style={{ fontSize: 13, color: "#3F5937", lineHeight: 1.4 }}>
                     Code sent to <strong>{countryCode} {phone}</strong>
@@ -653,7 +399,10 @@ export default function LoginPage() {
                 </div>
 
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
+                  <div style={{
+                    fontSize: 11, fontWeight: 700, color: "#555",
+                    textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8,
+                  }}>
                     6-digit code
                   </div>
                   <input
@@ -666,20 +415,7 @@ export default function LoginPage() {
                     onKeyDown={(e) => e.key === "Enter" && !loading && handleVerifyOtp()}
                     placeholder="••••••"
                     autoComplete="one-time-code"
-                    style={{
-                      width: "100%",
-                      padding: "18px 16px",
-                      background: "rgba(255,255,255,0.95)",
-                      border: "1px solid rgba(26,10,20,0.1)",
-                      borderRadius: 12,
-                      fontSize: 26, fontWeight: 600,
-                      color: "#1a0a14",
-                      outline: "none",
-                      textAlign: "center",
-                      letterSpacing: "0.5em",
-                      fontFamily: "ui-monospace, 'SF Mono', monospace",
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.03), inset 0 1px 2px rgba(0,0,0,0.02)",
-                    }}
+                    style={otpInput}
                   />
                 </div>
 
@@ -693,17 +429,17 @@ export default function LoginPage() {
                   style={{
                     background: "none", border: "none", padding: "6px 0",
                     fontSize: 12, fontWeight: 600, color: "#666",
-                    cursor: "pointer", fontFamily: "inherit",
-                    textAlign: "center",
+                    cursor: "pointer", fontFamily: "inherit", textAlign: "center",
+                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
                   }}
                 >
-                  ← Use a different number
+                  <ArrowLeft style={{ width: 12, height: 12 }} />
+                  Use a different number
                 </button>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Footer link */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -715,10 +451,7 @@ export default function LoginPage() {
             }}
           >
             New to Match4Marriage?{" "}
-            <Link href="/onboarding" style={{
-              color: "#dc1e3c", fontWeight: 600, textDecoration: "none",
-              display: "inline-flex", alignItems: "center", gap: 4,
-            }}>
+            <Link href="/onboarding" style={createAccountLink}>
               Create an account <ArrowRight style={{ width: 12, height: 12 }} />
             </Link>
           </motion.div>
@@ -730,7 +463,446 @@ export default function LoginPage() {
   );
 }
 
-// ─── Small components ────────────────────────────────────────────────────────
+// ─── Hero ─────────────────────────────────────────────────────────────────────
+
+function Hero({ greeting }: { greeting: string }) {
+  // Parallax: mouse -> position, smoothed with springs
+  const mx = useMotionValue(0);
+  const my = useMotionValue(0);
+  const sx = useSpring(mx, { stiffness: 60, damping: 18, mass: 0.6 });
+  const sy = useSpring(my, { stiffness: 60, damping: 18, mass: 0.6 });
+
+  // Tiered parallax depth (far → near)
+  const farX  = useTransform(sx, (v) => v * 12);
+  const farY  = useTransform(sy, (v) => v * 12);
+  const midX  = useTransform(sx, (v) => v * 22);
+  const midY  = useTransform(sy, (v) => v * 22);
+  const nearX = useTransform(sx, (v) => v * 40);
+  const nearY = useTransform(sy, (v) => v * 40);
+
+  const heroRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = heroRef.current;
+    if (!el) return;
+    const onMove = (e: MouseEvent) => {
+      const r = el.getBoundingClientRect();
+      // Normalise to [-1, 1] relative to centre
+      const x = ((e.clientX - r.left) / r.width  - 0.5) * 2;
+      const y = ((e.clientY - r.top)  / r.height - 0.5) * 2;
+      mx.set(x);
+      my.set(y);
+    };
+    const onLeave = () => { mx.set(0); my.set(0); };
+    el.addEventListener("mousemove", onMove);
+    el.addEventListener("mouseleave", onLeave);
+    return () => {
+      el.removeEventListener("mousemove", onMove);
+      el.removeEventListener("mouseleave", onLeave);
+    };
+  }, [mx, my]);
+
+  return (
+    <motion.aside
+      ref={heroRef as any}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.6 }}
+      className="m4m-login-hero"
+      style={{
+        position: "relative",
+        overflow: "hidden",
+        background: "linear-gradient(135deg, #1a0a14 0%, #2d0e1e 30%, #5a1f33 55%, #2d0e1e 85%, #140609 100%)",
+        display: "flex",
+        flexDirection: "column",
+        padding: "48px 60px",
+        isolation: "isolate",
+      }}
+    >
+      {/* Aurora — FAR */}
+      <motion.span style={{ x: farX, y: farY }} className="h-blur h-blur-rose" />
+      <motion.span style={{ x: farX, y: farY }} className="h-blur h-blur-gold" />
+      <motion.span style={{ x: farX, y: farY }} className="h-blur h-blur-plum" />
+
+      {/* Grain */}
+      <span className="h-grain" />
+
+      {/* Dot grid — FAR parallax */}
+      <motion.span style={{ x: useTransform(sx, (v) => v * 8), y: useTransform(sy, (v) => v * 8) }} className="h-dots" />
+
+      {/* Vignette */}
+      <span className="h-vignette" />
+
+      {/* Decorative ring — MID parallax */}
+      <motion.div style={{ x: midX, y: midY }} className="h-ring-wrap">
+        <DecorativeRing />
+      </motion.div>
+
+      {/* Header */}
+      <motion.header
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        style={{
+          position: "relative", zIndex: 5,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}
+      >
+        <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: 12,
+            background: "linear-gradient(135deg, #ff4d79, #a0153c)",
+            display: "grid", placeItems: "center",
+            boxShadow: "0 8px 24px rgba(220,30,60,0.5), inset 0 0 0 1px rgba(255,255,255,0.12)",
+          }}>
+            <Heart style={{ width: 20, height: 20, color: "#fff" }} fill="#fff" />
+          </div>
+          <span style={{
+            fontFamily: "var(--font-playfair, serif)",
+            fontSize: 22, fontWeight: 700, color: "#fff",
+            letterSpacing: "-0.01em",
+          }}>
+            Match<span style={{ color: "#ffb9c8" }}>4</span>Marriage
+          </span>
+        </Link>
+
+        {/* Live pill */}
+        <div style={{
+          display: "inline-flex", alignItems: "center", gap: 7,
+          padding: "6px 11px",
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 999,
+          backdropFilter: "blur(10px)",
+        }}>
+          <span className="pulse-dot" />
+          <span style={{
+            fontSize: 10.5, fontWeight: 600, color: "rgba(255,255,255,0.7)",
+            letterSpacing: "0.08em", textTransform: "uppercase",
+          }}>
+            {greeting}
+          </span>
+        </div>
+      </motion.header>
+
+      {/* ─── Composition: headline + testimonial + stat strip ─── */}
+      <div style={{
+        flex: 1,
+        position: "relative", zIndex: 5,
+        display: "flex", flexDirection: "column", justifyContent: "center",
+        maxWidth: 620,
+        paddingTop: 20,
+      }}>
+        {/* Eyebrow */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3, duration: 0.5 }}
+          style={{
+            fontSize: 11, fontWeight: 700,
+            color: "rgba(255,255,255,0.5)",
+            letterSpacing: "0.22em", textTransform: "uppercase",
+            marginBottom: 24,
+          }}
+        >
+          <span style={{
+            display: "inline-block", verticalAlign: "middle",
+            width: 28, height: 1, background: "rgba(255,255,255,0.25)", marginRight: 14,
+          }} />
+          Since 2024
+        </motion.div>
+
+        {/* Headline with word-stagger + underline draw */}
+        <HeroHeadline />
+
+        {/* Subhead */}
+        <motion.p
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 1.3, ease: EASE }}
+          style={{
+            fontSize: 17,
+            lineHeight: 1.6,
+            color: "rgba(255,255,255,0.6)",
+            marginTop: 28, maxWidth: 510,
+            fontWeight: 400,
+          }}
+        >
+          Sign in to continue your journey — where verified profiles, real families,
+          and the warmth of a community that believes in forever have been waiting for you.
+        </motion.p>
+
+        {/* Testimonial quote */}
+        <motion.blockquote
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 1.55, ease: EASE }}
+          style={{
+            margin: "48px 0 0",
+            paddingLeft: 20,
+            borderLeft: "2px solid rgba(255,152,174,0.45)",
+            maxWidth: 520,
+          }}
+        >
+          <p style={{
+            margin: 0,
+            fontFamily: "var(--font-playfair, serif)",
+            fontSize: 20, lineHeight: 1.45,
+            fontStyle: "italic",
+            color: "rgba(255,255,255,0.82)",
+            letterSpacing: "-0.005em",
+          }}>
+            We met here in 2024 and got married the next spring. Match4Marriage
+            made us feel safe from the very first message.
+          </p>
+          <footer style={{
+            marginTop: 14,
+            fontSize: 12, fontWeight: 600,
+            color: "rgba(255,255,255,0.55)",
+            letterSpacing: "0.08em", textTransform: "uppercase",
+          }}>
+            Priya &amp; Arjun &nbsp;·&nbsp; London &nbsp;·&nbsp; 2025
+          </footer>
+        </motion.blockquote>
+      </div>
+
+      {/* Footer strip */}
+      <motion.footer
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1.8, duration: 0.5 }}
+        style={{
+          position: "relative", zIndex: 5,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          paddingTop: 28, borderTop: "1px solid rgba(255,255,255,0.06)",
+          gap: 16, flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "flex", gap: 28 }}>
+          <Stat big="50K+" small="Verified members" />
+          <Stat big="1,200+" small="Happy couples" />
+          <Stat big="4.9★" small="Average rating" />
+        </div>
+        <div style={{
+          fontSize: 11, color: "rgba(255,255,255,0.4)",
+          display: "flex", gap: 18, alignItems: "center",
+        }}>
+          <Link href="/privacy" style={{ color: "inherit", textDecoration: "none" }}>Privacy</Link>
+          <Link href="/terms" style={{ color: "inherit", textDecoration: "none" }}>Terms</Link>
+          <span>© {new Date().getFullYear()}</span>
+        </div>
+      </motion.footer>
+    </motion.aside>
+  );
+}
+
+function Stat({ big, small }: { big: string; small: string }) {
+  return (
+    <div>
+      <div style={{
+        fontFamily: "var(--font-playfair, serif)",
+        fontSize: 22, fontWeight: 600, color: "#fff",
+        letterSpacing: "-0.01em", lineHeight: 1,
+      }}>{big}</div>
+      <div style={{
+        fontSize: 10, fontWeight: 600,
+        color: "rgba(255,255,255,0.45)",
+        textTransform: "uppercase", letterSpacing: "0.1em",
+        marginTop: 6,
+      }}>{small}</div>
+    </div>
+  );
+}
+
+// ─── Headline with word-stagger + drawn underline ───────────────────────────
+
+const WORDS = ["Every", "great", "story", "begins", "with", "a"];
+const HL_CONTAINER: Variants = {
+  hidden: {},
+  show: { transition: { delayChildren: 0.35, staggerChildren: 0.08 } },
+};
+const HL_WORD: Variants = {
+  hidden: { opacity: 0, y: 24, rotateX: 30 },
+  show:   { opacity: 1, y: 0, rotateX: 0, transition: { duration: 0.7, ease: EASE } },
+};
+const HL_HELLO: Variants = {
+  hidden: { opacity: 0, y: 24 },
+  show:   { opacity: 1, y: 0, transition: { duration: 0.8, ease: EASE } },
+};
+
+function HeroHeadline() {
+  return (
+    <motion.h1
+      variants={HL_CONTAINER}
+      initial="hidden"
+      animate="show"
+      style={{
+        fontFamily: "var(--font-playfair, serif)",
+        fontSize: "clamp(48px, 5.8vw, 84px)",
+        fontWeight: 500,
+        lineHeight: 1.03,
+        margin: 0,
+        letterSpacing: "-0.032em",
+        color: "#ffffff",
+        perspective: 800,
+      }}
+    >
+      <div style={{ display: "inline-flex", flexWrap: "wrap", gap: "0.22em" }}>
+        {WORDS.map((w, i) => (
+          <motion.span
+            key={i}
+            variants={HL_WORD}
+            style={{ display: "inline-block", willChange: "transform, opacity" }}
+          >
+            {w}
+          </motion.span>
+        ))}
+        <motion.span
+          variants={HL_HELLO}
+          style={{ display: "inline-block", position: "relative", whiteSpace: "nowrap" }}
+        >
+          <em style={{
+            fontStyle: "italic", fontWeight: 400,
+            color: "#ffc8d3",
+            paddingBottom: 4,
+            display: "inline-block",
+          }}>
+            hello
+          </em>
+          {/* SVG underline, drawn after reveal */}
+          <motion.svg
+            aria-hidden
+            viewBox="0 0 220 22"
+            preserveAspectRatio="none"
+            style={{
+              position: "absolute",
+              left: 0, right: 0, bottom: -14,
+              width: "100%", height: 18,
+              pointerEvents: "none",
+            }}
+          >
+            <motion.path
+              d="M 4 12 Q 70 2 120 11 T 216 9"
+              fill="none"
+              stroke="url(#hl-gradient)"
+              strokeWidth={3.4}
+              strokeLinecap="round"
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              transition={{ delay: 1.35, duration: 0.95, ease: EASE }}
+            />
+            <defs>
+              <linearGradient id="hl-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%"   stopColor="#ff98ae" stopOpacity="0" />
+                <stop offset="20%"  stopColor="#ff98ae" />
+                <stop offset="80%"  stopColor="#ffc8a8" />
+                <stop offset="100%" stopColor="#ffc8a8" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+          </motion.svg>
+        </motion.span>
+        <span style={{ marginLeft: "-0.15em" }}>.</span>
+      </div>
+    </motion.h1>
+  );
+}
+
+// ─── Decorative ring (animated SVG path draws) ─────────────────────────────
+
+function DecorativeRing() {
+  return (
+    <svg
+      viewBox="0 0 600 600"
+      aria-hidden
+      style={{ width: "100%", height: "100%", display: "block", overflow: "visible" }}
+    >
+      <defs>
+        <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%"   stopColor="#ff98ae" stopOpacity="0.9" />
+          <stop offset="50%"  stopColor="#ffc8a8" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#7c3aed" stopOpacity="0.3" />
+        </linearGradient>
+        <radialGradient id="ring-glow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%"  stopColor="rgba(255,152,174,0.18)" />
+          <stop offset="70%" stopColor="rgba(255,152,174,0.04)" />
+          <stop offset="100%" stopColor="rgba(255,152,174,0)" />
+        </radialGradient>
+      </defs>
+
+      {/* Inner glow halo */}
+      <circle cx="300" cy="300" r="280" fill="url(#ring-glow)" />
+
+      {/* OUTER ring — draws on mount */}
+      <motion.circle
+        cx="300" cy="300" r="240"
+        fill="none"
+        stroke="url(#ring-grad)"
+        strokeWidth="1.5"
+        strokeDasharray="4 6"
+        initial={{ pathLength: 0, opacity: 0, rotate: -45 }}
+        animate={{ pathLength: 1, opacity: 1, rotate: 0 }}
+        transition={{ delay: 0.4, duration: 2.0, ease: EASE }}
+        style={{ transformOrigin: "300px 300px" }}
+      />
+
+      {/* MIDDLE slow-rotating subtle ring */}
+      <motion.g
+        animate={{ rotate: 360 }}
+        transition={{ duration: 180, ease: "linear", repeat: Infinity }}
+        style={{ transformOrigin: "300px 300px" }}
+      >
+        <circle
+          cx="300" cy="300" r="190"
+          fill="none"
+          stroke="rgba(255,200,168,0.22)"
+          strokeWidth="1"
+          strokeDasharray="1 10"
+        />
+      </motion.g>
+
+      {/* Accent ticks on inner ring */}
+      {[...Array(12)].map((_, i) => (
+        <motion.g
+          key={i}
+          transform={`rotate(${i * 30} 300 300)`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.8 + i * 0.04, duration: 0.4 }}
+        >
+          <line x1="300" y1="110" x2="300" y2="118" stroke="rgba(255,200,170,0.5)" strokeWidth="1.2" strokeLinecap="round" />
+        </motion.g>
+      ))}
+
+      {/* Centre orbs — breathing */}
+      <motion.g
+        animate={{ scale: [1, 1.06, 1] }}
+        transition={{ duration: 5, ease: "easeInOut", repeat: Infinity }}
+        style={{ transformOrigin: "300px 300px" }}
+      >
+        <circle cx="300" cy="300" r="3" fill="#ffd7b8" />
+        <circle cx="300" cy="300" r="28" fill="none" stroke="rgba(255,215,184,0.35)" strokeWidth="1" />
+        <circle cx="300" cy="300" r="60" fill="none" stroke="rgba(255,215,184,0.18)" strokeWidth="0.8" />
+      </motion.g>
+
+      {/* Three orbiting dots, each on its own rotation ring */}
+      {[
+        { r: 240, dur: 60,  phase: 0,   size: 4, color: "#ffb9c8" },
+        { r: 190, dur: 90,  phase: 120, size: 3, color: "#ffc8a8" },
+        { r: 140, dur: 45,  phase: 240, size: 2.5, color: "#e0b8ff" },
+      ].map((o, i) => (
+        <motion.g
+          key={i}
+          animate={{ rotate: 360 }}
+          transition={{ duration: o.dur, ease: "linear", repeat: Infinity, delay: 1 }}
+          style={{ transformOrigin: "300px 300px", rotate: o.phase }}
+        >
+          <circle cx={300} cy={300 - o.r} r={o.size} fill={o.color} style={{ filter: `drop-shadow(0 0 6px ${o.color})` }} />
+        </motion.g>
+      ))}
+    </svg>
+  );
+}
+
+// ─── Form building blocks ──────────────────────────────────────────────────
 
 function Field({ icon: Icon, label, right, children }: {
   icon: any; label: string; right?: React.ReactNode; children: React.ReactNode;
@@ -760,7 +932,7 @@ function Field({ icon: Icon, label, right, children }: {
   );
 }
 
-function MessageBanner({ tone, children }: { tone: "error" | "info"; children: React.ReactNode }) {
+function Banner({ tone, children }: { tone: "error" | "info"; children: React.ReactNode }) {
   const isError = tone === "error";
   return (
     <motion.div
@@ -797,6 +969,7 @@ function SubmitButton({ loading, onClick, children }: {
       disabled={loading}
       whileHover={{ y: loading ? 0 : -1 }}
       whileTap={{ scale: loading ? 1 : 0.98 }}
+      transition={SPRING_SNAP}
       style={{
         marginTop: 6,
         padding: "14px 18px",
@@ -829,278 +1002,126 @@ function SubmitButton({ loading, onClick, children }: {
   );
 }
 
-// ─── Mandala (animated decorative SVG) ───────────────────────────────────────
-
-function Mandala() {
-  return (
-    <div aria-hidden style={{
-      position: "absolute",
-      top: "50%", right: "-10%",
-      transform: "translateY(-50%)",
-      width: "70%",
-      maxWidth: 720,
-      aspectRatio: "1",
-      pointerEvents: "none",
-      zIndex: 2,
-      opacity: 0.55,
-    }}>
-      <motion.svg
-        viewBox="0 0 600 600"
-        animate={{ rotate: 360 }}
-        transition={{ duration: 120, ease: "linear", repeat: Infinity }}
-        style={{ width: "100%", height: "100%", display: "block" }}
-      >
-        <defs>
-          <linearGradient id="m-grad-rose" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#ffb9c8" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="#a0153c" stopOpacity="0.6" />
-          </linearGradient>
-          <linearGradient id="m-grad-gold" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#ffc8a8" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="#c89020" stopOpacity="0.4" />
-          </linearGradient>
-        </defs>
-
-        {/* Outer ring of petals */}
-        {Array.from({ length: 24 }).map((_, i) => (
-          <g key={`outer-${i}`} transform={`rotate(${i * 15} 300 300)`}>
-            <ellipse cx="300" cy="80" rx="6" ry="42" fill="url(#m-grad-rose)" />
-          </g>
-        ))}
-
-        {/* Middle ring of dots */}
-        {Array.from({ length: 16 }).map((_, i) => (
-          <g key={`mid-${i}`} transform={`rotate(${i * 22.5} 300 300)`}>
-            <circle cx="300" cy="150" r="4" fill="#ffb9c8" opacity="0.7" />
-          </g>
-        ))}
-
-        {/* Inner ring of long petals */}
-        {Array.from({ length: 12 }).map((_, i) => (
-          <g key={`inner-${i}`} transform={`rotate(${i * 30} 300 300)`}>
-            <path
-              d="M 300,200 Q 310,250 300,290 Q 290,250 300,200 Z"
-              fill="url(#m-grad-gold)"
-              opacity="0.85"
-            />
-          </g>
-        ))}
-
-        {/* 6-pointed star inner */}
-        {Array.from({ length: 6 }).map((_, i) => (
-          <g key={`star-${i}`} transform={`rotate(${i * 60} 300 300)`}>
-            <path
-              d="M 300,240 L 310,300 L 300,310 L 290,300 Z"
-              fill="rgba(255,152,174,0.85)"
-            />
-          </g>
-        ))}
-
-        {/* Centre ring */}
-        <circle cx="300" cy="300" r="20" fill="none" stroke="rgba(255,200,168,0.7)" strokeWidth="1.5" />
-        <circle cx="300" cy="300" r="10" fill="rgba(255,152,174,0.6)" />
-      </motion.svg>
-
-      {/* Counter-rotating inner ring on top */}
-      <motion.svg
-        viewBox="0 0 600 600"
-        animate={{ rotate: -360 }}
-        transition={{ duration: 180, ease: "linear", repeat: Infinity }}
-        style={{ width: "100%", height: "100%", position: "absolute", inset: 0 }}
-      >
-        {Array.from({ length: 8 }).map((_, i) => (
-          <g key={`count-${i}`} transform={`rotate(${i * 45} 300 300)`}>
-            <circle cx="300" cy="230" r="3" fill="#ffc8a8" opacity="0.5" />
-          </g>
-        ))}
-      </motion.svg>
-    </div>
-  );
-}
-
-// ─── Floating decor (hearts + sparkles) ──────────────────────────────────────
-
-function FloatingDecor() {
-  const hearts = [
-    { left: "8%",  top: "18%", size: 16, delay: 0,   dur: 8, color: "#ffb9c8" },
-    { left: "14%", top: "70%", size: 20, delay: 2.5, dur: 10, color: "#ffc8a8" },
-    { left: "48%", top: "12%", size: 13, delay: 1.2, dur: 9, color: "#ffb9c8" },
-    { left: "3%",  top: "45%", size: 11, delay: 4,   dur: 11, color: "#ffd4a8" },
-  ];
-  const sparkles = [
-    { left: "20%", top: "28%", delay: 0.5 },
-    { left: "40%", top: "62%", delay: 2.1 },
-    { left: "12%", top: "32%", delay: 3.4 },
-  ];
-  return (
-    <div aria-hidden style={{ position: "absolute", inset: 0, zIndex: 3, pointerEvents: "none" }}>
-      {hearts.map((h, i) => (
-        <Heart
-          key={i}
-          fill={h.color}
-          className="u-heart"
-          style={{
-            position: "absolute",
-            left: h.left, top: h.top,
-            width: h.size, height: h.size,
-            color: h.color,
-            animationDelay: `${h.delay}s`,
-            animationDuration: `${h.dur}s`,
-            opacity: 0.5,
-          }}
-        />
-      ))}
-      {sparkles.map((s, i) => (
-        <span
-          key={i}
-          className="u-sparkle"
-          style={{
-            position: "absolute",
-            left: s.left, top: s.top,
-            animationDelay: `${s.delay}s`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ─── Global styles ───────────────────────────────────────────────────────────
+// ─── Global styles ──────────────────────────────────────────────────────────
 
 function GlobalStyles() {
   return (
     <style jsx global>{`
-      /* Aurora */
-      .u-aurora {
-        position: absolute; border-radius: 50%;
-        filter: blur(130px); pointer-events: none; will-change: transform;
+      /* Aurora — no runtime animation; parallax drives them */
+      .h-blur {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(140px);
+        pointer-events: none;
+        will-change: transform;
+        z-index: 1;
       }
-      .u-aurora-rose {
-        width: 540px; height: 540px;
-        top: -130px; left: -110px;
-        background: radial-gradient(circle, rgba(255,77,121,0.75), transparent 60%);
-        animation: u-aurora-rose 24s ease-in-out infinite alternate;
+      .h-blur-rose {
+        width: 620px; height: 620px;
+        top: -160px; left: -140px;
+        background: radial-gradient(circle, rgba(255,77,121,0.85), transparent 60%);
         opacity: 0.55;
       }
-      .u-aurora-gold {
-        width: 580px; height: 580px;
-        bottom: -170px; right: -140px;
-        background: radial-gradient(circle, rgba(255,166,77,0.65), transparent 60%);
-        animation: u-aurora-gold 30s ease-in-out infinite alternate;
-        opacity: 0.3;
+      .h-blur-gold {
+        width: 640px; height: 640px;
+        bottom: -180px; right: -160px;
+        background: radial-gradient(circle, rgba(255,166,77,0.7), transparent 60%);
+        opacity: 0.32;
       }
-      .u-aurora-plum {
-        width: 420px; height: 420px;
-        top: 48%; left: 35%;
-        background: radial-gradient(circle, rgba(155,80,180,0.55), transparent 60%);
-        animation: u-aurora-plum 34s ease-in-out infinite alternate;
-        opacity: 0.3;
-      }
-      @keyframes u-aurora-rose {
-        from { transform: translate(0,0) scale(1); }
-        to   { transform: translate(160px, 110px) scale(1.18); }
-      }
-      @keyframes u-aurora-gold {
-        from { transform: translate(0,0) scale(1); }
-        to   { transform: translate(-160px, -90px) scale(0.92); }
-      }
-      @keyframes u-aurora-plum {
-        from { transform: translate(0,0) scale(1); }
-        to   { transform: translate(90px, -60px) scale(1.1); }
+      .h-blur-plum {
+        width: 440px; height: 440px;
+        top: 50%; left: 30%;
+        background: radial-gradient(circle, rgba(135,58,200,0.55), transparent 60%);
+        opacity: 0.28;
       }
 
       /* Grain */
-      .u-grain {
+      .h-grain {
         position: absolute; inset: 0; pointer-events: none; z-index: 2;
         background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.95  0 0 0 0 0.95  0 0 0 0 0.95  0 0 0 0.05 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
         mix-blend-mode: overlay; opacity: 0.5;
       }
 
       /* Dots */
-      .u-dots {
+      .h-dots {
         position: absolute; inset: 0; pointer-events: none; z-index: 2;
         background-image: radial-gradient(rgba(255,255,255,0.3) 1px, transparent 1px);
         background-size: 28px 28px;
-        opacity: 0.1;
-        mask-image: radial-gradient(ellipse at 25% 50%, black 5%, transparent 75%);
-        -webkit-mask-image: radial-gradient(ellipse at 25% 50%, black 5%, transparent 75%);
+        opacity: 0.08;
+        mask-image: radial-gradient(ellipse at 30% 50%, black 5%, transparent 75%);
+        -webkit-mask-image: radial-gradient(ellipse at 30% 50%, black 5%, transparent 75%);
       }
 
       /* Vignette */
-      .u-vignette {
+      .h-vignette {
         position: absolute; inset: 0; z-index: 4; pointer-events: none;
-        background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.5) 100%);
+        background: radial-gradient(ellipse at 35% 50%, transparent 35%, rgba(0,0,0,0.6) 100%);
       }
 
-      /* Floating hearts */
-      .u-heart {
-        animation-name: u-float;
-        animation-iteration-count: infinite;
-        animation-timing-function: ease-in-out;
-      }
-      @keyframes u-float {
-        0%, 100% { transform: translate(0,0) rotate(0deg); opacity: 0.35; }
-        50%      { transform: translate(20px, -30px) rotate(15deg); opacity: 0.85; }
+      /* Decorative ring wrapper — anchored centre-right */
+      .h-ring-wrap {
+        position: absolute;
+        top: 50%; right: -12%;
+        transform: translateY(-50%);
+        width: 58%;
+        max-width: 720px;
+        aspect-ratio: 1;
+        pointer-events: none;
+        z-index: 3;
+        opacity: 0.6;
       }
 
-      /* Sparkles */
-      .u-sparkle {
-        width: 4px; height: 4px; border-radius: 50%;
-        background: #fff;
-        box-shadow: 0 0 10px rgba(255,200,170,0.9);
-        animation: u-sparkle 4.5s ease-in-out infinite;
-        opacity: 0;
+      /* Pulse dot */
+      .pulse-dot {
+        width: 7px; height: 7px; border-radius: 50%;
+        background: #7dd68c;
+        box-shadow: 0 0 10px #7dd68c, 0 0 0 3px rgba(125,214,140,0.25);
+        animation: pulse 2.4s ease-in-out infinite;
       }
-      @keyframes u-sparkle {
-        0%, 100% { opacity: 0; transform: scale(0.5); }
-        45%      { opacity: 1; transform: scale(1.2); }
-        60%      { opacity: 1; transform: scale(1.2); }
+      @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 10px #7dd68c, 0 0 0 3px rgba(125,214,140,0.25); }
+        50%      { box-shadow: 0 0 14px #7dd68c, 0 0 0 6px rgba(125,214,140,0.1); }
       }
 
       /* Spinner */
       @keyframes u-spin { to { transform: rotate(360deg); } }
 
-      /* Input focus */
-      .m4m-userlogin-root input:focus,
-      .m4m-userlogin-root select:focus {
+      /* Focus */
+      .m4m-login input:focus,
+      .m4m-login select:focus {
         border-color: #dc1e3c !important;
         background: #fff !important;
         box-shadow: 0 0 0 4px rgba(220, 30, 60, 0.08) !important;
       }
-      .m4m-userlogin-root input:focus-within {
-        border-color: #dc1e3c !important;
-      }
 
-      /* Responsive
-         Collapse to single column well before the columns start fighting
-         for space. Above 1100px we have confident two-column layout with
-         the hero dominant. */
+      /* Responsive */
       @media (max-width: 1100px) {
-        .m4m-userlogin-root {
+        .m4m-login {
           grid-template-columns: 1fr !important;
           min-height: auto !important;
         }
-        .m4m-userlogin-hero {
-          padding: 44px 36px !important;
-          min-height: 520px;
+        .m4m-login-hero {
+          padding: 48px 40px !important;
+          min-height: 560px;
         }
+        .h-ring-wrap { opacity: 0.35 !important; width: 80% !important; right: -25% !important; }
       }
       @media (max-width: 640px) {
-        .m4m-userlogin-hero {
-          padding: 32px 22px !important;
-          min-height: 420px;
+        .m4m-login-hero {
+          padding: 32px 24px !important;
+          min-height: 440px;
         }
       }
 
       /* Reduced motion */
       @media (prefers-reduced-motion: reduce) {
-        .u-aurora, .u-heart, .u-sparkle { animation: none !important; }
+        .pulse-dot { animation: none !important; }
       }
     `}</style>
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
+// ─── Styles ────────────────────────────────────────────────────────────────
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -1122,4 +1143,59 @@ const eyeBtnStyle: React.CSSProperties = {
   background: "none", border: "none", cursor: "pointer",
   color: "#aaa", padding: 6, display: "grid", placeItems: "center",
   borderRadius: 6, transition: "color 0.15s",
+};
+
+const phoneShell: React.CSSProperties = {
+  display: "flex", gap: 8,
+  padding: 4,
+  background: "rgba(255,255,255,0.95)",
+  border: "1px solid rgba(26,10,20,0.1)",
+  borderRadius: 12,
+  paddingLeft: 36,
+  boxShadow: "0 1px 3px rgba(0,0,0,0.03), inset 0 1px 2px rgba(0,0,0,0.02)",
+};
+
+const countrySelect: React.CSSProperties = {
+  border: "none", background: "transparent", fontSize: 13,
+  color: "#1a0a14", outline: "none", cursor: "pointer",
+  padding: "8px 4px", fontFamily: "inherit", fontWeight: 600,
+};
+
+const phoneNumberInput: React.CSSProperties = {
+  flex: 1, border: "none", outline: "none",
+  fontSize: 14, color: "#1a0a14", background: "transparent",
+  fontFamily: "inherit", padding: "9px 8px",
+};
+
+const helperText: React.CSSProperties = {
+  fontSize: 11.5, color: "#999", textAlign: "center",
+  margin: "4px 0 0", lineHeight: 1.5,
+};
+
+const otpConfirmBanner: React.CSSProperties = {
+  padding: "14px 16px",
+  background: "rgba(92,122,82,0.06)",
+  border: "1px solid rgba(92,122,82,0.15)",
+  borderRadius: 12,
+  display: "flex", alignItems: "center", gap: 10,
+};
+
+const otpInput: React.CSSProperties = {
+  width: "100%",
+  padding: "18px 16px",
+  background: "rgba(255,255,255,0.95)",
+  border: "1px solid rgba(26,10,20,0.1)",
+  borderRadius: 12,
+  fontSize: 28, fontWeight: 600,
+  color: "#1a0a14",
+  outline: "none",
+  textAlign: "center",
+  letterSpacing: "0.5em",
+  fontFamily: "ui-monospace, 'SF Mono', monospace",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.03), inset 0 1px 2px rgba(0,0,0,0.02)",
+};
+
+const createAccountLink: React.CSSProperties = {
+  color: "#dc1e3c", fontWeight: 600, textDecoration: "none",
+  display: "inline-flex", alignItems: "center", gap: 4,
 };
