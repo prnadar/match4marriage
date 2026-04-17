@@ -1,509 +1,336 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft, Edit2, ShieldOff, Ban, Trash2, Crown, KeyRound,
-  User, Briefcase, GraduationCap, Heart, Users, Calendar,
-  MapPin, Phone, Mail, Clock, MessageSquare, Activity,
-  ChevronDown,
+  ArrowLeft, Mail, Phone, MapPin, Briefcase, GraduationCap,
+  Heart, Calendar, Shield, Flag, Loader2, AlertTriangle, ChevronUp,
+  ChevronDown, UserX, UserCheck, Trash2, RotateCcw,
 } from "lucide-react";
-import TopBar from "@/components/admin/TopBar";
-import ConfirmModal from "@/components/admin/ConfirmModal";
+import { PageShell, Button } from "@/components/admin/PageShell";
+import { adminApi, ApiError } from "@/lib/api";
 import { useToast } from "@/components/admin/Toast";
-import { mockUsers, type AdminUser } from "@/lib/admin-mock-data";
 
-// ── Constants ───────────────────────────────────────────────────────────────
-
-const STATUS_BADGES: Record<AdminUser["status"], string> = {
-  active: "bg-emerald-100 text-emerald-700",
-  suspended: "bg-amber-100 text-amber-700",
-  banned: "bg-red-100 text-red-700",
-  pending: "bg-blue-100 text-blue-700",
-};
-
-const SUB_BADGES: Record<AdminUser["subscription"], string> = {
-  Free: "bg-gray-100 text-gray-600",
-  Silver: "bg-slate-200 text-slate-700",
-  Gold: "bg-amber-100 text-amber-700",
-  Diamond: "bg-purple-100 text-purple-700",
-};
-
-const MOCK_ACTIVITY_LOG = [
-  { id: "a1", type: "login", description: "Logged in from Mumbai, Chrome/Win", time: "2 hours ago" },
-  { id: "a2", type: "login", description: "Logged in from Mumbai, Mobile App", time: "1 day ago" },
-  { id: "a3", type: "match", description: "Matched with Priya Sharma (USR0002)", time: "2 days ago" },
-  { id: "a4", type: "message", description: "Sent 4 messages to Kavya Patel", time: "2 days ago" },
-  { id: "a5", type: "login", description: "Logged in from Pune, Safari/Mac", time: "3 days ago" },
-  { id: "a6", type: "match", description: "Matched with Sneha Kumar (USR0006)", time: "5 days ago" },
-  { id: "a7", type: "message", description: "Sent 6 messages to Ishita Singh", time: "5 days ago" },
-  { id: "a8", type: "login", description: "Logged in from Mumbai, Mobile App", time: "1 week ago" },
-  { id: "a9", type: "match", description: "Matched with Ananya Gupta (USR0004)", time: "1 week ago" },
-  { id: "a10", type: "login", description: "Logged in from Delhi, Chrome/Android", time: "2 weeks ago" },
-  { id: "a11", type: "message", description: "Received 3 messages from Nisha Verma", time: "2 weeks ago" },
-  { id: "a12", type: "message", description: "Sent 7 messages to Riya Jain", time: "2 weeks ago" },
-  { id: "a13", type: "message", description: "Sent 2 messages to Meera Reddy", time: "3 weeks ago" },
-];
-
-const ACTIVITY_ICONS: Record<string, typeof Activity> = {
-  login: Clock,
-  match: Heart,
-  message: MessageSquare,
-};
-
-const ACTIVITY_COLORS: Record<string, string> = {
-  login: "text-blue-500 bg-blue-50",
-  match: "text-rose bg-rose/10",
-  message: "text-emerald-500 bg-emerald-50",
-};
-
-// ── Types ───────────────────────────────────────────────────────────────────
-
-interface ConfirmState {
-  open: boolean;
-  title: string;
-  message: string;
-  variant: "danger" | "warning" | "default";
-  confirmLabel: string;
-  onConfirm: () => void;
+interface UserDetail {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  is_active: boolean;
+  is_email_verified: boolean;
+  is_phone_verified: boolean;
+  deleted_at: string | null;
+  trust_score: number;
+  completeness_score: number;
+  verification_status: string;
+  subscription_tier: string;
+  first_name: string;
+  last_name: string;
+  city: string | null;
+  country: string | null;
+  religion: string | null;
+  occupation: string | null;
+  primary_photo_url: string | null;
+  created_at: string | null;
+  last_active_at: string | null;
+  reports_against: number;
+  reports_filed: number;
+  profile: any | null;
 }
 
-const INITIAL_CONFIRM: ConfirmState = {
-  open: false,
-  title: "",
-  message: "",
-  variant: "danger",
-  confirmLabel: "Confirm",
-  onConfirm: () => {},
-};
+export default function AdminUserDetailPage() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const { toast } = useToast();
+  const userId = params?.id as string;
 
-// ── Info Row helper ─────────────────────────────────────────────────────────
+  const [user, setUser] = useState<UserDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between py-2 border-b border-gold/5 last:border-0">
-      <span className="font-body text-xs text-muted">{label}</span>
-      <span className="font-body text-sm text-deep font-medium text-right">{value}</span>
-    </div>
-  );
-}
+  const load = async () => {
+    setError(null);
+    try {
+      const res = await adminApi.getUser(userId);
+      setUser((res.data as any)?.data || null);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-// ── Section Card ────────────────────────────────────────────────────────────
+  useEffect(() => { if (userId) load(); /* eslint-disable-next-line */ }, [userId]);
 
-function SectionCard({
-  title,
-  icon: Icon,
-  children,
-}: {
-  title: string;
-  icon: typeof User;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="glass-card p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <div className="w-8 h-8 rounded-lg bg-rose/10 flex items-center justify-center">
-          <Icon className="w-4 h-4 text-rose" />
+  const act = async (op: string, fn: () => Promise<unknown>) => {
+    if (!user) return;
+    setBusy(true);
+    try {
+      await fn();
+      toast("success", `${op} done`);
+      await load();
+    } catch (e) {
+      toast("error", e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <PageShell title="User">
+        <div style={{ padding: 60, textAlign: "center", color: "#999" }}>
+          <Loader2 style={{ width: 22, height: 22, animation: "spin 1s linear infinite", margin: "0 auto 10px", display: "block" }} />
         </div>
-        <h3 className="font-display text-sm font-semibold text-deep">{title}</h3>
+        <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </PageShell>
+    );
+  }
+
+  if (error || !user) {
+    return (
+      <PageShell title="User" actions={<Link href="/admin/users" style={backLinkStyle}><ArrowLeft style={{ width: 14, height: 14 }} /> Back</Link>}>
+        <div style={{ padding: 20, background: "#ffe9ec", color: "#7B2D3A", borderRadius: 10, fontSize: 13 }}>
+          <AlertTriangle style={{ width: 14, height: 14, display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} />
+          {error || "User not found"}
+        </div>
+      </PageShell>
+    );
+  }
+
+  const name = [user.first_name, user.last_name].filter(Boolean).join(" ") || "(unnamed)";
+
+  return (
+    <PageShell
+      title={name}
+      subtitle={[user.religion, user.city, user.occupation].filter(Boolean).join(" · ") || user.email || user.phone || ""}
+      actions={
+        <Link href="/admin/users" style={backLinkStyle}>
+          <ArrowLeft style={{ width: 14, height: 14 }} /> Back to users
+        </Link>
+      }
+    >
+      {/* Top status strip */}
+      <div style={{
+        background: "#fff", border: "1px solid rgba(220,30,60,0.08)",
+        borderRadius: 14, padding: 18, marginBottom: 16,
+        display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap",
+      }}>
+        <div style={{
+          width: 64, height: 64, borderRadius: "50%",
+          background: user.primary_photo_url
+            ? `center / cover no-repeat url(${user.primary_photo_url})`
+            : "linear-gradient(135deg,#dc1e3c,#a0153c)",
+          color: "#fff", fontSize: 22, fontWeight: 700,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0,
+        }}>
+          {!user.primary_photo_url && (name[0]?.toUpperCase() || "?")}
+        </div>
+
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+            <StatusChip user={user} />
+            <span style={{ fontSize: 11, color: "#666", background: "rgba(0,0,0,0.05)", padding: "3px 8px", borderRadius: 999, textTransform: "capitalize" }}>
+              {user.subscription_tier}
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: "#666", display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {user.email && <span><Mail style={iconStyle} />{user.email} {user.is_email_verified && "✓"}</span>}
+            {user.phone && <span><Phone style={iconStyle} />{user.phone} {user.is_phone_verified && "✓"}</span>}
+            {user.city && <span><MapPin style={iconStyle} />{user.city}{user.country ? `, ${user.country}` : ""}</span>}
+            {user.created_at && <span><Calendar style={iconStyle} />Joined {new Date(user.created_at).toLocaleDateString()}</span>}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 14 }}>
+          <KPI label="Trust" value={user.trust_score} max={100} tone={user.trust_score >= 60 ? "good" : user.trust_score >= 40 ? "warn" : "bad"} />
+          <KPI label="Complete" value={user.completeness_score} max={100} suffix="%" />
+          <KPI label="Reports" value={user.reports_against} tone={user.reports_against > 0 ? "bad" : "neutral"} />
+        </div>
       </div>
-      {children}
+
+      {/* Action bar */}
+      <div style={{
+        background: "#fff", border: "1px solid rgba(220,30,60,0.08)",
+        borderRadius: 14, padding: 14, marginBottom: 16,
+        display: "flex", gap: 8, flexWrap: "wrap",
+      }}>
+        {user.deleted_at ? (
+          <Button onClick={() => act("Restored", () => adminApi.restoreUser(user.id))} disabled={busy} variant="primary">
+            <RotateCcw style={{ width: 13, height: 13 }} /> Restore user
+          </Button>
+        ) : user.is_active ? (
+          <>
+            <Button onClick={() => act("Suspended", () => adminApi.suspendUser(user.id))} disabled={busy} variant="warn">
+              <UserX style={{ width: 13, height: 13 }} /> Suspend
+            </Button>
+            <Button onClick={() => act("Deleted", () => adminApi.softDeleteUser(user.id))} disabled={busy} variant="danger">
+              <Trash2 style={{ width: 13, height: 13 }} /> Soft-delete
+            </Button>
+          </>
+        ) : (
+          <Button onClick={() => act("Activated", () => adminApi.activateUser(user.id))} disabled={busy} variant="primary">
+            <UserCheck style={{ width: 13, height: 13 }} /> Activate
+          </Button>
+        )}
+
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid rgba(220,30,60,0.15)", borderRadius: 10, padding: 4 }}>
+          <span style={{ fontSize: 12, color: "#666", padding: "0 8px" }}>Trust boost</span>
+          <Button onClick={() => act("+10 trust", () => adminApi.trustBoost(user.id, +10))} disabled={busy} variant="ghost">
+            <ChevronUp style={{ width: 14, height: 14 }} /> +10
+          </Button>
+          <Button onClick={() => act("-10 trust", () => adminApi.trustBoost(user.id, -10))} disabled={busy} variant="ghost">
+            <ChevronDown style={{ width: 14, height: 14 }} /> -10
+          </Button>
+        </div>
+
+        {user.verification_status !== "approved" && user.profile && (
+          <Link href="/admin/verifications" style={{ ...backLinkStyle, textDecoration: "none" }}>
+            <Shield style={{ width: 13, height: 13 }} /> Review verification
+          </Link>
+        )}
+      </div>
+
+      {/* Profile sections */}
+      {user.profile ? <ProfileSections profile={user.profile} /> : (
+        <div style={{ background: "#fff", border: "1px solid rgba(220,30,60,0.08)", borderRadius: 14, padding: 20, color: "#888" }}>
+          No profile data yet.
+        </div>
+      )}
+
+      <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </PageShell>
+  );
+}
+
+const iconStyle: React.CSSProperties = {
+  width: 12, height: 12, display: "inline", verticalAlign: "text-bottom", marginRight: 4, color: "#aaa",
+};
+
+const backLinkStyle: React.CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 6,
+  padding: "8px 12px", borderRadius: 10,
+  background: "#fff", border: "1px solid rgba(220,30,60,0.15)",
+  color: "#1a0a14", fontSize: 13, fontWeight: 600, textDecoration: "none",
+};
+
+function StatusChip({ user }: { user: UserDetail }) {
+  let label = "Active"; let color = "#5C7A52"; let bg = "rgba(92,122,82,0.12)";
+  if (user.deleted_at) { label = "Deleted"; color = "#666"; bg = "rgba(0,0,0,0.06)"; }
+  else if (!user.is_active) { label = "Suspended"; color = "#a0153c"; bg = "rgba(220,30,60,0.08)"; }
+  else if (user.verification_status === "approved") { label = "Verified"; color = "#1e4bc8"; bg = "rgba(30,75,200,0.06)"; }
+  else if (user.verification_status === "submitted") { label = "Pending review"; color = "#9A6B00"; bg = "rgba(200,144,32,0.12)"; }
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em",
+      padding: "4px 10px", borderRadius: 999, background: bg, color,
+    }}>{label}</span>
+  );
+}
+
+function KPI({ label, value, max, tone = "neutral", suffix = "" }: { label: string; value: number; max?: number; tone?: "good" | "warn" | "bad" | "neutral"; suffix?: string }) {
+  const color = tone === "good" ? "#3F5937" : tone === "warn" ? "#9A6B00" : tone === "bad" ? "#a0153c" : "#1a0a14";
+  return (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 600, color: "#999", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color, fontFamily: "var(--font-playfair, serif)" }}>
+        {value}{suffix}{max ? <span style={{ fontSize: 12, color: "#aaa", fontWeight: 500 }}> / {max}</span> : null}
+      </div>
     </div>
   );
 }
 
-// ── Status Dropdown ─────────────────────────────────────────────────────────
-
-function StatusDropdown({
-  current,
-  onChange,
-}: {
-  current: AdminUser["status"];
-  onChange: (status: AdminUser["status"]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const statuses: AdminUser["status"][] = ["active", "suspended", "banned", "pending"];
-
+function ProfileSections({ profile }: { profile: Record<string, any> }) {
+  const photos = Array.isArray(profile.photos) ? profile.photos.filter((p: any) => p?.url) : [];
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-3 py-2 rounded-xl border font-body text-sm text-deep hover:bg-blush transition-colors"
-        style={{ borderColor: "rgba(201,149,74,0.2)" }}
-      >
-        <ShieldOff className="w-3.5 h-3.5" />
-        Change Status
-        <ChevronDown className="w-3.5 h-3.5" />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-10 z-40 w-40 bg-white rounded-xl shadow-xl border border-gold/10 py-1 animate-float-in">
-            {statuses
-              .filter((s) => s !== current)
-              .map((s) => (
-                <button
-                  key={s}
-                  onClick={() => {
-                    onChange(s);
-                    setOpen(false);
-                  }}
-                  className="flex items-center gap-2 w-full px-3 py-2 font-body text-sm text-deep hover:bg-blush transition-colors capitalize"
-                >
-                  <span className={`w-2 h-2 rounded-full ${STATUS_BADGES[s].split(" ")[0]}`} />
-                  {s}
-                </button>
-              ))}
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {photos.length > 0 && (
+        <Card title={`Photos (${photos.length})`}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 10 }}>
+            {photos.map((ph: any, i: number) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={ph.key || i} src={ph.url} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 10, border: ph.is_primary ? "2px solid #dc1e3c" : "1px solid rgba(0,0,0,0.06)" }} />
+            ))}
           </div>
-        </>
+        </Card>
+      )}
+
+      <Card title="Basic">
+        <Grid>
+          <Field label="Gender">{profile.gender}</Field>
+          <Field label="Date of birth">{profile.date_of_birth}</Field>
+          <Field label="Height">{profile.height_cm ? `${profile.height_cm} cm` : null}</Field>
+          <Field label="Weight">{profile.weight_kg ? `${profile.weight_kg} kg` : null}</Field>
+          <Field label="Marital status">{profile.marital_status}</Field>
+          <Field label="Religion">{profile.religion}</Field>
+          <Field label="Caste">{profile.caste}</Field>
+          <Field label="Mother tongue">{profile.mother_tongue}</Field>
+        </Grid>
+      </Card>
+
+      <Card title="Location">
+        <Grid>
+          <Field label="City">{profile.city}</Field>
+          <Field label="State">{profile.state}</Field>
+          <Field label="Country">{profile.country}</Field>
+          <Field label="Pincode">{profile.pincode}</Field>
+        </Grid>
+      </Card>
+
+      <Card title="Education & career">
+        <Grid>
+          <Field label="Education">{profile.education_level}</Field>
+          <Field label="Field">{profile.education_field}</Field>
+          <Field label="College">{profile.college}</Field>
+          <Field label="Occupation">{profile.occupation}</Field>
+          <Field label="Employer">{profile.employer}</Field>
+          <Field label="Income">{profile.annual_income_inr ? `£${Number(profile.annual_income_inr).toLocaleString()}` : null}</Field>
+        </Grid>
+      </Card>
+
+      {profile.bio && (
+        <Card title="About">
+          <p style={{ fontSize: 13, color: "#444", lineHeight: 1.6, whiteSpace: "pre-wrap", margin: 0 }}>{profile.bio}</p>
+        </Card>
+      )}
+
+      {profile.about_family && (
+        <Card title="Family">
+          <p style={{ fontSize: 13, color: "#444", lineHeight: 1.6, whiteSpace: "pre-wrap", margin: 0 }}>{profile.about_family}</p>
+        </Card>
       )}
     </div>
   );
 }
 
-// ── Main Page ───────────────────────────────────────────────────────────────
-
-export default function UserDetailPage() {
-  const params = useParams();
-  const userId = params.id as string;
-  const { toast } = useToast();
-
-  const [confirm, setConfirm] = useState<ConfirmState>(INITIAL_CONFIRM);
-  const [user, setUser] = useState<AdminUser | undefined>(() =>
-    mockUsers.find((u) => u.id === userId)
-  );
-
-  // Build subscription history mock based on current user
-  const subscriptionHistory = useMemo(() => {
-    if (!user) return [];
-    return [
-      {
-        plan: user.subscription,
-        startDate: "2026-01-15",
-        endDate: user.subscription === "Free" ? "N/A" : "2026-07-15",
-        status: "Active" as const,
-        amount: user.subscription === "Free" ? 0 : user.subscription === "Silver" ? 1999 : user.subscription === "Gold" ? 4999 : 9999,
-      },
-      {
-        plan: "Silver",
-        startDate: "2025-07-10",
-        endDate: "2025-10-10",
-        status: "Expired" as const,
-        amount: 1999,
-      },
-      {
-        plan: "Free",
-        startDate: "2025-01-01",
-        endDate: "2025-07-10",
-        status: "Upgraded" as const,
-        amount: 0,
-      },
-    ];
-  }, [user]);
-
-  const handleChangeStatus = useCallback(
-    (newStatus: AdminUser["status"]) => {
-      if (!user) return;
-      const needsConfirm = newStatus === "suspended" || newStatus === "banned";
-      if (needsConfirm) {
-        setConfirm({
-          open: true,
-          title: `${newStatus === "suspended" ? "Suspend" : "Ban"} User`,
-          message: `Are you sure you want to ${newStatus === "suspended" ? "suspend" : "ban"} ${user.name}?`,
-          variant: newStatus === "banned" ? "danger" : "warning",
-          confirmLabel: newStatus === "suspended" ? "Suspend" : "Ban",
-          onConfirm: () => {
-            setUser((prev) => (prev ? { ...prev, status: newStatus } : prev));
-            toast("success", `User ${newStatus} successfully`);
-            setConfirm(INITIAL_CONFIRM);
-          },
-        });
-      } else {
-        setUser((prev) => (prev ? { ...prev, status: newStatus } : prev));
-        toast("success", `User status changed to ${newStatus}`);
-      }
-    },
-    [user, toast]
-  );
-
-  const handleGrantPremium = useCallback(() => {
-    if (!user) return;
-    setUser((prev) => (prev ? { ...prev, subscription: "Diamond" } : prev));
-    toast("success", `Diamond subscription granted to ${user.name}`);
-  }, [user, toast]);
-
-  const handleResetPassword = useCallback(() => {
-    if (!user) return;
-    toast("success", `Password reset link sent to ${user.email}`);
-  }, [user, toast]);
-
-  const handleDelete = useCallback(() => {
-    if (!user) return;
-    setConfirm({
-      open: true,
-      title: "Delete User",
-      message: `Are you sure you want to permanently delete ${user.name}? This action cannot be undone.`,
-      variant: "danger",
-      confirmLabel: "Delete",
-      onConfirm: () => {
-        toast("success", `User ${user.name} deleted`);
-        setConfirm(INITIAL_CONFIRM);
-        // In production, redirect after delete
-      },
-    });
-  }, [user, toast]);
-
-  // ── Not Found ─────────────────────────────────────────────────────────────
-
-  if (!user) {
-    return (
-      <div className="min-h-screen">
-        <TopBar title="User Not Found" />
-        <div className="p-6">
-          <div className="glass-card p-12 text-center">
-            <User className="w-12 h-12 text-muted mx-auto mb-4" />
-            <h2 className="font-display text-lg font-semibold text-deep mb-2">User Not Found</h2>
-            <p className="font-body text-sm text-muted mb-6">
-              No user exists with ID &quot;{userId}&quot;.
-            </p>
-            <Link
-              href="/admin/users"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose text-white font-body text-sm font-medium hover:bg-rose/90 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" /> Back to Users
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
-
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="min-h-screen">
-      <TopBar
-        title={user.name}
-        subtitle={`${user.id} / ${user.city}, ${user.state}`}
-        actions={
-          <Link
-            href="/admin/users"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-body text-xs font-medium text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Back
-          </Link>
-        }
-      />
+    <div style={{ background: "#fff", border: "1px solid rgba(220,30,60,0.08)", borderRadius: 14, padding: 18 }}>
+      <h3 style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#666", margin: "0 0 12px" }}>
+        {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
 
-      <div className="p-6 space-y-6">
-        {/* Profile Header Card */}
-        <div className="glass-card p-6">
-          <div className="flex flex-col md:flex-row items-start gap-6">
-            {/* Photo Placeholder */}
-            <div className="w-28 h-28 rounded-2xl bg-rose/10 flex items-center justify-center flex-shrink-0">
-              <span className="font-display text-3xl font-bold text-rose">
-                {user.name.charAt(0)}
-              </span>
-            </div>
+function Grid({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+      {children}
+    </div>
+  );
+}
 
-            {/* Basic Info */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-3 flex-wrap">
-                <h2 className="font-display text-2xl font-bold text-deep">{user.name}</h2>
-                <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${STATUS_BADGES[user.status]}`}>
-                  {user.status}
-                </span>
-                <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${SUB_BADGES[user.subscription]}`}>
-                  {user.subscription}
-                </span>
-              </div>
-              <p className="font-body text-sm text-muted mt-1">
-                {user.age} years, {user.gender} &middot; {user.maritalStatus}
-              </p>
-              <p className="font-body text-sm text-muted mt-0.5">
-                {user.bio}
-              </p>
-              <div className="flex flex-wrap items-center gap-4 mt-3 text-muted">
-                <span className="flex items-center gap-1 font-body text-xs">
-                  <Mail className="w-3.5 h-3.5" /> {user.email}
-                </span>
-                <span className="flex items-center gap-1 font-body text-xs">
-                  <Phone className="w-3.5 h-3.5" /> {user.phone}
-                </span>
-                <span className="flex items-center gap-1 font-body text-xs">
-                  <MapPin className="w-3.5 h-3.5" /> {user.city}, {user.state}
-                </span>
-                <span className="flex items-center gap-1 font-body text-xs">
-                  <Calendar className="w-3.5 h-3.5" /> Joined {user.joined}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2 mt-6 pt-4 border-t border-gold/10">
-            <button
-              onClick={() => toast("info", "Edit mode not available in demo")}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border font-body text-sm text-deep hover:bg-blush transition-colors"
-              style={{ borderColor: "rgba(201,149,74,0.2)" }}
-            >
-              <Edit2 className="w-3.5 h-3.5" /> Edit Profile
-            </button>
-            <StatusDropdown current={user.status} onChange={handleChangeStatus} />
-            <button
-              onClick={handleGrantPremium}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 font-body text-sm text-amber-700 hover:bg-amber-100 transition-colors"
-            >
-              <Crown className="w-3.5 h-3.5" /> Grant Premium
-            </button>
-            <button
-              onClick={handleResetPassword}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border font-body text-sm text-deep hover:bg-blush transition-colors"
-              style={{ borderColor: "rgba(201,149,74,0.2)" }}
-            >
-              <KeyRound className="w-3.5 h-3.5" /> Reset Password
-            </button>
-            <button
-              onClick={handleDelete}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 font-body text-sm text-red-600 hover:bg-red-100 transition-colors ml-auto"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> Delete Account
-            </button>
-          </div>
-        </div>
-
-        {/* Info Sections Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Personal Info */}
-          <SectionCard title="Personal Info" icon={User}>
-            <InfoRow label="Full Name" value={user.name} />
-            <InfoRow label="Age" value={`${user.age} years`} />
-            <InfoRow label="Gender" value={user.gender} />
-            <InfoRow label="Height" value={user.height} />
-            <InfoRow label="Marital Status" value={user.maritalStatus} />
-            <InfoRow label="Mother Tongue" value={user.motherTongue} />
-            <InfoRow label="Manglik" value={user.manglik} />
-            <InfoRow label="City" value={user.city} />
-            <InfoRow label="State" value={user.state} />
-          </SectionCard>
-
-          {/* Religion & Community */}
-          <SectionCard title="Religion & Community" icon={Heart}>
-            <InfoRow label="Religion" value={user.religion} />
-            <InfoRow label="Caste" value={user.caste} />
-            <InfoRow label="Gotra" value={user.gotra} />
-          </SectionCard>
-
-          {/* Education & Career */}
-          <SectionCard title="Education & Career" icon={GraduationCap}>
-            <InfoRow label="Education" value={user.education} />
-            <InfoRow label="Occupation" value={user.occupation} />
-            <InfoRow label="Income" value={user.income} />
-          </SectionCard>
-
-          {/* Family Details */}
-          <SectionCard title="Family Details" icon={Users}>
-            <InfoRow label="Family Type" value={user.familyType} />
-            <InfoRow label="Father's Occupation" value={user.fatherOccupation} />
-            <InfoRow label="Mother's Occupation" value={user.motherOccupation} />
-            <InfoRow label="Siblings" value={user.siblings} />
-          </SectionCard>
-        </div>
-
-        {/* Activity & Subscription Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Activity Log */}
-          <div className="lg:col-span-2 glass-card p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-rose/10 flex items-center justify-center">
-                <Activity className="w-4 h-4 text-rose" />
-              </div>
-              <h3 className="font-display text-sm font-semibold text-deep">Activity Log</h3>
-              <span className="ml-auto font-body text-xs text-muted">
-                5 logins &middot; 3 matches &middot; 10 messages
-              </span>
-            </div>
-            <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-              {MOCK_ACTIVITY_LOG.map((entry) => {
-                const Icon = ACTIVITY_ICONS[entry.type] || Activity;
-                const color = ACTIVITY_COLORS[entry.type] || "text-muted bg-gray-50";
-                return (
-                  <div
-                    key={entry.id}
-                    className="flex items-start gap-3 p-2.5 rounded-xl hover:bg-blush/30 transition-colors"
-                  >
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
-                      <Icon className="w-3.5 h-3.5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-body text-sm text-deep">{entry.description}</p>
-                      <p className="font-body text-xs text-muted mt-0.5">{entry.time}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Subscription History */}
-          <div className="glass-card p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-rose/10 flex items-center justify-center">
-                <Crown className="w-4 h-4 text-rose" />
-              </div>
-              <h3 className="font-display text-sm font-semibold text-deep">Subscription History</h3>
-            </div>
-            <div className="space-y-3">
-              {subscriptionHistory.map((sub, i) => (
-                <div
-                  key={i}
-                  className={`p-3 rounded-xl border ${
-                    i === 0
-                      ? "border-rose/20 bg-rose/5"
-                      : "border-gold/10 bg-white/50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                      SUB_BADGES[sub.plan as AdminUser["subscription"]] || "bg-gray-100 text-gray-600"
-                    }`}>
-                      {sub.plan}
-                    </span>
-                    <span className={`font-body text-xs font-medium ${
-                      sub.status === "Active"
-                        ? "text-emerald-600"
-                        : sub.status === "Expired"
-                        ? "text-red-500"
-                        : "text-blue-500"
-                    }`}>
-                      {sub.status}
-                    </span>
-                  </div>
-                  <div className="font-body text-xs text-muted mt-1">
-                    {sub.startDate} &mdash; {sub.endDate}
-                  </div>
-                  {sub.amount > 0 && (
-                    <div className="font-body text-sm font-medium text-deep mt-1">
-                      &#8377;{sub.amount.toLocaleString("en-IN")}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <ConfirmModal
-        open={confirm.open}
-        title={confirm.title}
-        message={confirm.message}
-        variant={confirm.variant}
-        confirmLabel={confirm.confirmLabel}
-        onConfirm={confirm.onConfirm}
-        onCancel={() => setConfirm(INITIAL_CONFIRM)}
-      />
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const v = children;
+  const empty = v === null || v === undefined || v === "" || v === 0;
+  return (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 600, color: "#999", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
+      <div style={{ fontSize: 13, color: empty ? "#ccc" : "#1a0a14", marginTop: 2 }}>{empty ? "—" : String(v)}</div>
     </div>
   );
 }
