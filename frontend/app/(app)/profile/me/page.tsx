@@ -1687,16 +1687,26 @@ function PhotosTab() {
   const [photos, setPhotos] = useState<{ id: string; url: string; path: string; isPrimary: boolean }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Normalise whatever /profile/me returns into our local shape + sync to the grid.
+  const syncPhotosFromProfile = (raw: any): number => {
+    const list = Array.isArray(raw?.photos) ? raw.photos : [];
+    setPhotos(list
+      .filter((p: any) => p && p.url && p.key)
+      .map((p: any) => ({ id: p.key, url: p.url, path: p.key, isPrimary: !!p.is_primary }))
+    );
+    return list.length;
+  };
 
   // Load existing photos from backend profile
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await api.get<{ success: boolean; data: { photos?: { url: string; key: string; is_primary?: boolean }[] } }>("/api/v1/profile/me");
-        const list = data?.data?.photos || [];
-        setPhotos(list.map((p) => ({ id: p.key, url: p.url, path: p.key, isPrimary: !!p.is_primary })));
+        const { data } = await api.get<{ success: boolean; data: any }>("/api/v1/profile/me");
+        syncPhotosFromProfile(data?.data);
       } catch (err) {
         console.warn("Failed to load photos", err);
       }
@@ -1707,13 +1717,21 @@ function PhotosTab() {
     if (!files || files.length === 0) return;
     setUploading(true);
     setUploadError(null);
+    setUploadSuccess(null);
 
     const toUpload = Array.from(files).slice(0, 6 - photos.length);
-    const uploaded: typeof photos = [];
+    let added = 0;
+    let lastProfile: any = null;
 
     for (const file of toUpload) {
-      if (!file.type.startsWith("image/")) continue;
-      if (file.size > 5 * 1024 * 1024) { setUploadError("Each photo must be under 5MB."); continue; }
+      if (!file.type.startsWith("image/")) {
+        setUploadError("Only image files are allowed.");
+        continue;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setUploadError("Each photo must be under 5MB.");
+        continue;
+      }
 
       try {
         // 1. Get signed Cloudinary params from backend
@@ -1722,11 +1740,7 @@ function PhotosTab() {
         );
         const params = sig.data.data;
 
-        // 2. POST multipart to Cloudinary.
-        // IMPORTANT: send exactly the fields the backend signed — no more,
-        // no less. Any extra signed-style field triggers "Invalid Signature"
-        // from Cloudinary. (file, api_key, signature are transport fields
-        // and are NOT part of the signature; resource_type is in the URL.)
+        // 2. POST multipart to Cloudinary. Only send what was signed.
         const form = new FormData();
         form.append("file", file);
         form.append("api_key", params.api_key);
@@ -1738,25 +1752,49 @@ function PhotosTab() {
         const cldRes = await fetch(params.upload_url, { method: "POST", body: form });
         if (!cldRes.ok) {
           const txt = await cldRes.text();
-          throw new Error(`Cloudinary upload failed: ${txt}`);
+          // Cloudinary error responses are JSON with .error.message
+          try {
+            const parsed = JSON.parse(txt);
+            throw new Error(parsed?.error?.message || `Upload failed (${cldRes.status})`);
+          } catch {
+            throw new Error(`Upload failed (${cldRes.status}): ${txt.slice(0, 200)}`);
+          }
         }
         const cld = await cldRes.json() as { secure_url: string; public_id: string };
 
-        // 3. Save to backend profile
-        await api.post("/api/v1/profile/me/photos", { url: cld.secure_url, key: cld.public_id });
-
-        uploaded.push({ id: cld.public_id, url: cld.secure_url, path: cld.public_id, isPrimary: photos.length === 0 && uploaded.length === 0 });
+        // 3. Save to backend profile. Use the Cloudinary-returned secure_url
+        // and public_id — those are the authoritative values after any
+        // server-side transformation.
+        const saveRes = await api.post<{ success: boolean; data: any }>(
+          "/api/v1/profile/me/photos",
+          { url: cld.secure_url, key: cld.public_id }
+        );
+        // Keep the latest profile payload so we can sync the UI at the end
+        // from the backend's authoritative state (avoids stale-closure bugs).
+        lastProfile = (saveRes.data as any)?.data;
+        added += 1;
       } catch (err) {
-        // Strip the "NNN: " status-code prefix ApiError tacks on so the user
-        // sees just the human-readable reason (e.g. "Photo uploads are
-        // temporarily unavailable…") rather than "500: RuntimeError: …".
         const raw = err instanceof Error ? err.message : "Upload failed";
         const clean = raw.replace(/^\d{3}:\s*/, "").replace(/^RuntimeError:\s*/i, "");
         setUploadError(clean);
+        // Keep going on remaining files — a single failure shouldn't abort the batch.
       }
     }
 
-    setPhotos((prev) => [...prev, ...uploaded]);
+    // Sync from the latest backend response — or re-fetch if no save succeeded.
+    if (lastProfile) {
+      syncPhotosFromProfile(lastProfile);
+    } else if (added === 0) {
+      // Nothing added; don't hide the existing grid. Just leave photos as-is.
+    }
+
+    if (added > 0) {
+      setUploadSuccess(
+        added === 1 ? "Photo uploaded." : `${added} photos uploaded.`
+      );
+      // Auto-clear the success message after 3s
+      setTimeout(() => setUploadSuccess(null), 3000);
+    }
     setUploading(false);
   };
 
@@ -1798,6 +1836,9 @@ function PhotosTab() {
           Upload up to 6 photos. Your primary photo appears on your profile card.
           Profiles with photos get <strong style={{ color: "#dc1e3c" }}>8× more responses</strong>.
         </p>
+        {uploadSuccess && (
+          <p style={{ fontSize: 12, color: "#3F5937", marginTop: 6 }}>✓ {uploadSuccess}</p>
+        )}
         {uploadError && (
           <p style={{ fontSize: 12, color: "#dc1e3c", marginTop: 6 }}>⚠️ {uploadError}</p>
         )}
