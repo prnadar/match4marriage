@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { profileApi, api } from "@/lib/api";
 import {
@@ -8,6 +9,13 @@ import {
   Plus, X, Edit3, Heart, Star, Users, Briefcase, GraduationCap,
   MapPin, Globe,
 } from "lucide-react";
+import { CompletionStrip } from "./_components/CompletionStrip";
+import { SubmitCelebration } from "./_components/SubmitCelebration";
+import { MissingFieldsModal } from "./_components/MissingFieldsModal";
+import { PhotoGrid } from "./_components/PhotoGrid";
+import { SavedPill } from "./_components/SavedPill";
+import { PartnerPrefsVisual } from "./_components/PartnerPrefsVisual";
+import { KundaliCard } from "./_components/KundaliCard";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -114,6 +122,7 @@ const CARD_STYLE: React.CSSProperties = {
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function MyProfilePage() {
+  const reduceMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState("general");
   const [savedTab,  setSavedTab]  = useState<string | null>(null);
 
@@ -291,6 +300,13 @@ export default function MyProfilePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  // Bumps each time autosave reaches the "saved" state, so the completion
+  // strip can refetch without re-running on every render.
+  const [savedTick, setSavedTick] = useState<number>(0);
+  // Celebration overlay shown on successful submit-for-verification.
+  const [showCelebration, setShowCelebration] = useState(false);
+  // Modal listing missing fields when submit fails validation.
+  const [missingFields, setMissingFields] = useState<string[] | null>(null);
   const [saveError, setSaveError] = useState<string>("");
   const loadedRef = useRef(false);
   // Optimistic-lock version. Updated on every successful load/save.
@@ -302,6 +318,12 @@ export default function MyProfilePage() {
   // while it was pending.
   const saveInFlight = useRef<boolean>(false);
   const saveDirty = useRef<boolean>(false);
+
+  // Bump savedTick whenever autosave transitions into "saved" so the
+  // completion strip refetches its score + badges + next-action.
+  useEffect(() => {
+    if (autoSaveState === "saved") setSavedTick((t) => t + 1);
+  }, [autoSaveState]);
 
   // Pick up status + version + completeness from first profile load
   useEffect(() => {
@@ -324,6 +346,7 @@ export default function MyProfilePage() {
     setSubmitting(true);
     setSubmitError(null);
     setSubmitSuccess(false);
+    setMissingFields(null);
     try {
       // Make sure any pending edits are flushed before submitting.
       try { await handleSave("submit"); } catch { /* show the save error inline, but try to submit anyway */ }
@@ -332,29 +355,27 @@ export default function MyProfilePage() {
       if (p) {
         setVerifStatus(p.verification_status || "submitted");
         setRejectionReason(p.rejection_reason || null);
-        setSubmitSuccess(true);
-        // Auto-scroll to the banner so the feedback is always visible
-        window.scrollTo({ top: 0, behavior: "smooth" });
-        // Clear the success banner after 6s
-        setTimeout(() => setSubmitSuccess(false), 6000);
+        // Trigger the celebration overlay; the inline banner stays as a
+        // permanent record of state. submitSuccess is no longer needed for
+        // the transient toast — the overlay handles that.
+        setShowCelebration(true);
       }
     } catch (err: any) {
       // ApiError carries a `detail` which may be a dict with `missing`
       const detail = (err as any)?.detail ?? err?.response?.data?.detail;
-      if (detail && typeof detail === "object" && Array.isArray(detail.missing)) {
-        const pretty = (detail.missing as string[])
-          .map((f) => f.replace(/_/g, " "))
-          .join(", ");
-        setSubmitError(`Please complete these fields before submitting: ${pretty}`);
+      if (detail && typeof detail === "object" && Array.isArray(detail.missing) && detail.missing.length > 0) {
+        // Open the missing-fields modal with click-to-jump per field.
+        setMissingFields(detail.missing as string[]);
       } else if (typeof detail === "string") {
         setSubmitError(detail);
+        window.scrollTo({ top: 0, behavior: "smooth" });
       } else if (detail && typeof detail === "object" && detail.message) {
         setSubmitError(detail.message);
+        window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
         setSubmitError(err?.message || "Could not submit.");
+        window.scrollTo({ top: 0, behavior: "smooth" });
       }
-      // Scroll to top so the error banner is visible
-      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSubmitting(false);
     }
@@ -648,6 +669,15 @@ export default function MyProfilePage() {
         @keyframes m4m-btn-spin { to { transform: rotate(360deg); } }
       `}</style>
 
+      <CompletionStrip
+        fallbackScore={completenessScore}
+        onJumpToTab={(tabId) => {
+          setActiveTab(tabId);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+        refreshKey={`${verifStatus}:${savedTick}`}
+      />
+
       <div style={{
         display: "grid",
         gridTemplateColumns: "280px 1fr",
@@ -684,6 +714,7 @@ export default function MyProfilePage() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   style={{
+                    position: "relative",
                     flex: "0 0 auto",
                     padding: "14px 14px 12px",
                     fontFamily: "var(--font-poppins, sans-serif)",
@@ -692,16 +723,28 @@ export default function MyProfilePage() {
                     color: isActive ? "#dc1e3c" : "#888",
                     background: "transparent",
                     border: "none",
-                    borderBottom: isActive ? "2px solid #dc1e3c" : "2px solid transparent",
                     cursor: "pointer",
                     whiteSpace: "nowrap",
-                    transition: "all 0.2s ease",
+                    transition: "color 0.2s ease",
                     display: "flex",
                     alignItems: "center",
                     gap: 6,
                     marginBottom: -2,
                   }}
                 >
+                  {/* Animated underline that slides between tabs via shared layoutId */}
+                  {isActive && (
+                    <motion.span
+                      layoutId="profile-tab-underline"
+                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                      style={{
+                        position: "absolute", left: 8, right: 8, bottom: -2,
+                        height: 2, borderRadius: 2,
+                        background: "linear-gradient(90deg, #dc1e3c, #a0153c)",
+                        boxShadow: "0 2px 8px rgba(220,30,60,0.35)",
+                      }}
+                    />
+                  )}
                   {tab.label}
                   <span style={{
                     fontSize: "0.65rem",
@@ -715,6 +758,7 @@ export default function MyProfilePage() {
                     color: isComplete ? "#16a34a" : isActive ? "#dc1e3c" : "#bbb",
                     fontWeight: 600,
                     lineHeight: 1.4,
+                    transition: "background 0.2s, color 0.2s",
                   }}>
                     {isComplete ? "✓" : `${filled}/${total}`}
                   </span>
@@ -725,61 +769,87 @@ export default function MyProfilePage() {
 
           {/* Tab Content Area */}
           <div style={{
+            position: "relative",
             background: "#fdfbf9",
             borderLeft: "1px solid rgba(220,30,60,0.08)",
             borderRight: "1px solid rgba(220,30,60,0.08)",
             borderBottom: "1px solid rgba(220,30,60,0.08)",
             borderRadius: "0 0 16px 16px",
             padding: "1.5rem",
-            display: "flex",
-            flexDirection: "column",
-            gap: "1.25rem",
+            overflow: "hidden",
           }}>
-            {activeTab === "general" && (
-              <GeneralTab
-                form={general} update={upGeneral}
-                onSave={() => handleSave("general")} saving={savedTab === "general"}
-              />
-            )}
-            {activeTab === "education" && (
-              <EducationTab
-                form={education} update={upEducation}
-                schools={schools} setSchools={setSchools}
-                colleges={colleges} setColleges={setColleges}
-                employment={employment} setEmployment={setEmployment}
-                onSave={() => handleSave("education")} saving={savedTab === "education"}
-              />
-            )}
-            {activeTab === "family" && (
-              <FamilyTab
-                form={family} update={upFamily}
-                onSave={() => handleSave("family")} saving={savedTab === "family"}
-              />
-            )}
-            {activeTab === "interests" && (
-              <InterestsTab
-                interests={interests} toggle={toggleInterest}
-                onSave={() => handleSave("interests")} saving={savedTab === "interests"}
-              />
-            )}
-            {activeTab === "partner" && (
-              <PartnerTab
-                form={partner} update={upPartner}
-                onSave={() => handleSave("partner")} saving={savedTab === "partner"}
-              />
-            )}
-            {activeTab === "contact" && (
-              <ContactTab
-                form={contact} update={upContact}
-                onSave={() => handleSave("contact")} saving={savedTab === "contact"}
-              />
-            )}
-            {activeTab === "photos" && (
-              <PhotosTab />
-            )}
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={activeTab}
+                initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
+              >
+                {activeTab === "general" && (
+                  <GeneralTab
+                    form={general} update={upGeneral}
+                    onSave={() => handleSave("general")} saving={savedTab === "general"}
+                  />
+                )}
+                {activeTab === "education" && (
+                  <EducationTab
+                    form={education} update={upEducation}
+                    schools={schools} setSchools={setSchools}
+                    colleges={colleges} setColleges={setColleges}
+                    employment={employment} setEmployment={setEmployment}
+                    onSave={() => handleSave("education")} saving={savedTab === "education"}
+                  />
+                )}
+                {activeTab === "family" && (
+                  <FamilyTab
+                    form={family} update={upFamily}
+                    onSave={() => handleSave("family")} saving={savedTab === "family"}
+                  />
+                )}
+                {activeTab === "interests" && (
+                  <InterestsTab
+                    interests={interests} toggle={toggleInterest}
+                    onSave={() => handleSave("interests")} saving={savedTab === "interests"}
+                  />
+                )}
+                {activeTab === "partner" && (
+                  <PartnerPrefsVisual
+                    form={partner} update={upPartner}
+                    onSave={() => handleSave("partner")} saving={savedTab === "partner"}
+                  />
+                )}
+                {activeTab === "contact" && (
+                  <ContactTab
+                    form={contact} update={upContact}
+                    onSave={() => handleSave("contact")} saving={savedTab === "contact"}
+                  />
+                )}
+                {activeTab === "photos" && (
+                  <PhotoGrid />
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
       </div>
+
+      <SavedPill state={autoSaveState} errorText={saveError} />
+
+      <SubmitCelebration
+        open={showCelebration}
+        onDone={() => setShowCelebration(false)}
+      />
+      <MissingFieldsModal
+        open={!!missingFields && missingFields.length > 0}
+        missing={missingFields || []}
+        onClose={() => setMissingFields(null)}
+        onJumpToTab={(tabId) => {
+          setActiveTab(tabId);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+      />
     </div>
   );
 }
@@ -918,6 +988,15 @@ function GeneralTab({
           </Field>
         </TwoCol>
       </SubSection>
+
+      {/* Kundali / Horoscope display */}
+      <KundaliCard
+        birthDay={form.dobDay}
+        birthMonth={form.dobMonth}
+        birthYear={form.dobYear}
+        nakshatra={form.star}
+        chovvaDosham={form.chovvaDosham}
+      />
 
       {/* Location & Lifestyle */}
       <SubSection title="Location & Lifestyle">
@@ -1291,101 +1370,6 @@ function InterestsTab({
   );
 }
 
-// ─── TAB 5: Partner Preferences ────────────────────────────────────────────────
-
-function PartnerTab({
-  form, update, onSave, saving,
-}: {
-  form: Record<string, string>;
-  update: (f: string, v: string) => void;
-  onSave: () => void; saving: boolean;
-}) {
-  return (
-    <>
-      <SubSection title="Age & Physical Preferences">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
-          <Field label="Age From">
-            <FInput type="number" value={form.ageFrom} onChange={(v) => update("ageFrom", v)} placeholder="e.g. 24" />
-          </Field>
-          <Field label="Age To">
-            <FInput type="number" value={form.ageTo} onChange={(v) => update("ageTo", v)} placeholder="e.g. 32" />
-          </Field>
-          <Field label="Height From">
-            <FSelect value={form.heightFrom} onChange={(v) => update("heightFrom", v)} placeholder="Min height">
-              {HEIGHTS.map((h) => <option key={h} value={h}>{h}</option>)}
-            </FSelect>
-          </Field>
-          <Field label="Height To">
-            <FSelect value={form.heightTo} onChange={(v) => update("heightTo", v)} placeholder="Max height">
-              {HEIGHTS.map((h) => <option key={h} value={h}>{h}</option>)}
-            </FSelect>
-          </Field>
-        </div>
-        <TwoCol style={{ marginTop: 16 }}>
-          <Field label="Marital Status" required>
-            <FSelect value={form.maritalStatus} onChange={(v) => update("maritalStatus", v)} placeholder="Any">
-              {["Any","Never Married","Divorced","Widowed"].map((o) => <option key={o} value={o}>{o}</option>)}
-            </FSelect>
-          </Field>
-          <Field label="Diet Preference">
-            <FSelect value={form.diet} onChange={(v) => update("diet", v)} placeholder="Any">
-              {["Any","Vegetarian","Non-Vegetarian","Eggetarian","Vegan"].map((o) => <option key={o} value={o}>{o}</option>)}
-            </FSelect>
-          </Field>
-        </TwoCol>
-      </SubSection>
-
-      <SubSection title="Background Preferences">
-        <TwoCol>
-          <Field label="Religion Preference">
-            <FSelect value={form.religionPref} onChange={(v) => update("religionPref", v)} placeholder="Any">
-              {["Any","Hindu","Christian","Sikh","Jain","Buddhist","Muslim"].map((o) => <option key={o} value={o}>{o}</option>)}
-            </FSelect>
-          </Field>
-          <Field label="Mother Tongue" required>
-            <FSelect value={form.motherTongue} onChange={(v) => update("motherTongue", v)} placeholder="Any">
-              {["Any","Malayalam","Tamil","Telugu","Kannada","Hindi","English"].map((o) => <option key={o} value={o}>{o}</option>)}
-            </FSelect>
-          </Field>
-          <Field label="Denomination / Caste" required>
-            <FInput value={form.denomination} onChange={(v) => update("denomination", v)} placeholder="Any or specify, e.g. Nair" />
-          </Field>
-          <Field label="Education">
-            <FSelect value={form.education} onChange={(v) => update("education", v)} placeholder="Any">
-              {["Any", "High School", "Diploma", "Graduate / Bachelor's", "Post Graduate / Master's", "Doctorate / PhD", "Professional Degree (MBBS / LLB / CA)", "Trade / Vocational"].map((o) => <option key={o} value={o}>{o}</option>)}
-            </FSelect>
-          </Field>
-          <Field label="Occupation" required>
-            <FInput value={form.occupation} onChange={(v) => update("occupation", v)} placeholder="e.g. Software / Doctor / Business" />
-          </Field>
-          <Field label="Country Preference">
-            <FSelect value={form.country} onChange={(v) => update("country", v)} placeholder="Any">
-              {["Any", ...COUNTRIES].map((c) => <option key={c} value={c}>{c}</option>)}
-            </FSelect>
-          </Field>
-          <Field label="Residential Status" required>
-            <FSelect value={form.residentialStatus} onChange={(v) => update("residentialStatus", v)} placeholder="Any">
-              {["Any","Citizen","Permanent Resident","Work Permit","Student Visa"].map((o) => <option key={o} value={o}>{o}</option>)}
-            </FSelect>
-          </Field>
-        </TwoCol>
-      </SubSection>
-
-      <SubSection title="Partner Description">
-        <Field label="About My Ideal Partner">
-          <FTextarea
-            value={form.aboutPartner}
-            onChange={(v) => update("aboutPartner", v)}
-            placeholder="Describe the kind of person you're looking for, their values, personality, and what matters most to you in a life partner..."
-            rows={4}
-          />
-        </Field>
-      </SubSection>
-
-      <SaveButton onSave={onSave} saving={saving} label="Save Partner Preferences" />
-    </>
-  );
-}
 
 // ─── TAB 6: Contact Details ────────────────────────────────────────────────────
 
@@ -1739,312 +1723,6 @@ function SaveButton({
 
 // ─── Left Sidebar Components ───────────────────────────────────────────────────
 
-// ─── Photos Tab ──────────────────────────────────────────────────────────────
-
-function PhotosTab() {
-  const [photos, setPhotos] = useState<{ id: string; url: string; path: string; isPrimary: boolean }[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Normalise whatever /profile/me returns into our local shape + sync to the grid.
-  const syncPhotosFromProfile = (raw: any): number => {
-    const list = Array.isArray(raw?.photos) ? raw.photos : [];
-    setPhotos(list
-      .filter((p: any) => p && p.url && p.key)
-      .map((p: any) => ({ id: p.key, url: p.url, path: p.key, isPrimary: !!p.is_primary }))
-    );
-    return list.length;
-  };
-
-  // Load existing photos from backend profile
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await api.get<{ success: boolean; data: any }>("/api/v1/profile/me");
-        syncPhotosFromProfile(data?.data);
-      } catch (err) {
-        console.warn("Failed to load photos", err);
-      }
-    })();
-  }, []);
-
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    setUploading(true);
-    setUploadError(null);
-    setUploadSuccess(null);
-
-    const toUpload = Array.from(files).slice(0, 6 - photos.length);
-    let added = 0;
-    let lastProfile: any = null;
-
-    for (const file of toUpload) {
-      if (!file.type.startsWith("image/")) {
-        setUploadError("Only image files are allowed.");
-        continue;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        setUploadError("Each photo must be under 5MB.");
-        continue;
-      }
-
-      try {
-        // 1. Get signed Cloudinary params from backend
-        const sig = await api.post<{ success: boolean; data: { upload_url: string; api_key: string; timestamp: number; signature: string; folder: string; public_id: string; resource_type: string; url: string; key: string } }>(
-          `/api/v1/profile/photos/upload-url?content_type=${encodeURIComponent(file.type)}`
-        );
-        const params = sig.data.data;
-
-        // 2. POST multipart to Cloudinary. Only send what was signed.
-        const form = new FormData();
-        form.append("file", file);
-        form.append("api_key", params.api_key);
-        form.append("timestamp", String(params.timestamp));
-        form.append("signature", params.signature);
-        form.append("folder", params.folder);
-        form.append("public_id", params.public_id);
-
-        const cldRes = await fetch(params.upload_url, { method: "POST", body: form });
-        if (!cldRes.ok) {
-          const txt = await cldRes.text();
-          // Cloudinary error responses are JSON with .error.message
-          try {
-            const parsed = JSON.parse(txt);
-            throw new Error(parsed?.error?.message || `Upload failed (${cldRes.status})`);
-          } catch {
-            throw new Error(`Upload failed (${cldRes.status}): ${txt.slice(0, 200)}`);
-          }
-        }
-        const cld = await cldRes.json() as { secure_url: string; public_id: string };
-
-        // 3. Save to backend profile. Use the Cloudinary-returned secure_url
-        // and public_id — those are the authoritative values after any
-        // server-side transformation.
-        const saveRes = await api.post<{ success: boolean; data: any }>(
-          "/api/v1/profile/me/photos",
-          { url: cld.secure_url, key: cld.public_id }
-        );
-        // Keep the latest profile payload so we can sync the UI at the end
-        // from the backend's authoritative state (avoids stale-closure bugs).
-        lastProfile = (saveRes.data as any)?.data;
-        added += 1;
-      } catch (err) {
-        const raw = err instanceof Error ? err.message : "Upload failed";
-        const clean = raw.replace(/^\d{3}:\s*/, "").replace(/^RuntimeError:\s*/i, "");
-        setUploadError(clean);
-        // Keep going on remaining files — a single failure shouldn't abort the batch.
-      }
-    }
-
-    // Sync from the latest backend response — or re-fetch if no save succeeded.
-    if (lastProfile) {
-      syncPhotosFromProfile(lastProfile);
-    } else if (added === 0) {
-      // Nothing added; don't hide the existing grid. Just leave photos as-is.
-    }
-
-    if (added > 0) {
-      setUploadSuccess(
-        added === 1 ? "Photo uploaded." : `${added} photos uploaded.`
-      );
-      // Auto-clear the success message after 3s
-      setTimeout(() => setUploadSuccess(null), 3000);
-    }
-    setUploading(false);
-  };
-
-  const makePrimary = async (id: string) => {
-    try {
-      await api.post("/api/v1/profile/me/photos/primary", { key: id });
-      setPhotos((prev) => prev.map((p) => ({ ...p, isPrimary: p.id === id })));
-    } catch (err) {
-      console.warn("Failed to set primary", err);
-    }
-  };
-
-  const removePhoto = async (id: string) => {
-    try {
-      await api.delete(`/api/v1/profile/me/photos?key=${encodeURIComponent(id)}`);
-    } catch (err) {
-      console.warn("Delete failed", err);
-    }
-    setPhotos((prev) => {
-      const filtered = prev.filter((p) => p.id !== id);
-      if (filtered.length > 0 && !filtered.some((p) => p.isPrimary)) {
-        filtered[0].isPrimary = true;
-      }
-      return filtered;
-    });
-  };
-
-  const remaining = 6 - photos.length;
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-
-      {/* Header */}
-      <div>
-        <h3 style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "1.1rem", fontWeight: 700, color: "#1a0a14", marginBottom: 6 }}>
-          My Photos
-        </h3>
-        <p style={{ fontSize: "0.8125rem", color: "#888", fontFamily: "var(--font-poppins, sans-serif)" }}>
-          Upload up to 6 photos. Your primary photo appears on your profile card.
-          Profiles with photos get <strong style={{ color: "#dc1e3c" }}>8× more responses</strong>.
-        </p>
-        {uploadSuccess && (
-          <p style={{ fontSize: 12, color: "#3F5937", marginTop: 6 }}>✓ {uploadSuccess}</p>
-        )}
-        {uploadError && (
-          <p style={{ fontSize: 12, color: "#dc1e3c", marginTop: 6 }}>⚠️ {uploadError}</p>
-        )}
-      </div>
-
-      {/* Upload zone */}
-      <div
-        onClick={() => fileInputRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
-        style={{
-          border: `2px dashed ${dragOver ? "#dc1e3c" : "rgba(220,30,60,0.25)"}`,
-          borderRadius: 16,
-          padding: "40px 24px",
-          textAlign: "center",
-          cursor: remaining === 0 ? "not-allowed" : "pointer",
-          background: dragOver ? "rgba(220,30,60,0.04)" : "#fdfbf9",
-          transition: "all 0.2s",
-          opacity: remaining === 0 ? 0.5 : 1,
-        }}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          multiple
-          style={{ display: "none" }}
-          onChange={(e) => handleFiles(e.target.files)}
-          disabled={remaining === 0}
-        />
-        <div style={{ marginBottom: 12 }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: "50%",
-            background: "rgba(220,30,60,0.08)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            margin: "0 auto 12px",
-          }}>
-            <Upload style={{ width: 24, height: 24, color: "#dc1e3c" }} />
-          </div>
-          <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontWeight: 600, fontSize: "0.9375rem", color: "#1a0a14", marginBottom: 4 }}>
-            {uploading ? "Uploading…" : remaining === 0 ? "Photo limit reached" : "Drop photos here or click to browse"}
-          </p>
-          <p style={{ fontSize: "0.8125rem", color: "#aaa" }}>
-            JPG, PNG, WebP · Max 5MB each · {remaining} slot{remaining !== 1 ? "s" : ""} remaining
-          </p>
-        </div>
-        {!uploading && remaining > 0 && (
-          <button style={{
-            padding: "10px 24px", borderRadius: 8, fontSize: "0.875rem", fontWeight: 600,
-            background: "linear-gradient(135deg,#dc1e3c,#a0153c)", color: "#fff",
-            border: "none", cursor: "pointer", boxShadow: "0 4px 14px rgba(220,30,60,0.25)",
-          }}>
-            Select Photos
-          </button>
-        )}
-      </div>
-
-      {/* Photo grid */}
-      {photos.length > 0 && (
-        <div>
-          <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.8125rem", fontWeight: 600, color: "#555", marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-            Your Photos ({photos.length}/6)
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
-            {photos.map((photo) => (
-              <div key={photo.id} style={{ position: "relative", borderRadius: 12, overflow: "hidden", aspectRatio: "1", boxShadow: photo.isPrimary ? "0 0 0 3px #dc1e3c" : "0 2px 10px rgba(0,0,0,0.1)" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo.url} alt="Profile photo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-
-                {/* Primary badge */}
-                {photo.isPrimary && (
-                  <div style={{ position: "absolute", top: 8, left: 8, background: "#dc1e3c", color: "#fff", fontSize: "10px", fontWeight: 700, padding: "3px 8px", borderRadius: 20 }}>
-                    PRIMARY
-                  </div>
-                )}
-
-                {/* Actions overlay */}
-                <div style={{
-                  position: "absolute", inset: 0,
-                  background: "rgba(0,0,0,0)", transition: "background 0.2s",
-                  display: "flex", alignItems: "flex-end", justifyContent: "center",
-                  gap: 8, padding: 10,
-                }}
-                  onMouseEnter={(e) => (e.currentTarget as HTMLDivElement).style.background = "rgba(0,0,0,0.45)"}
-                  onMouseLeave={(e) => (e.currentTarget as HTMLDivElement).style.background = "rgba(0,0,0,0)"}
-                >
-                  {!photo.isPrimary && (
-                    <button
-                      onClick={() => makePrimary(photo.id)}
-                      style={{ padding: "5px 10px", borderRadius: 6, fontSize: "11px", fontWeight: 600, background: "rgba(255,255,255,0.9)", color: "#dc1e3c", border: "none", cursor: "pointer" }}
-                    >
-                      Set Primary
-                    </button>
-                  )}
-                  <button
-                    onClick={() => removePhoto(photo.id)}
-                    style={{ padding: "5px 10px", borderRadius: 6, fontSize: "11px", fontWeight: 600, background: "rgba(220,30,60,0.85)", color: "#fff", border: "none", cursor: "pointer" }}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-
-            {/* Empty slots */}
-            {Array.from({ length: remaining }).map((_, i) => (
-              <div
-                key={`empty-${i}`}
-                onClick={() => fileInputRef.current?.click()}
-                style={{
-                  aspectRatio: "1", borderRadius: 12, border: "1.5px dashed rgba(220,30,60,0.18)",
-                  background: "#fdfbf9", display: "flex", flexDirection: "column",
-                  alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer",
-                }}
-              >
-                <Camera style={{ width: 22, height: 22, color: "rgba(220,30,60,0.3)" }} />
-                <span style={{ fontSize: "11px", color: "#ccc", fontFamily: "var(--font-poppins, sans-serif)" }}>Add Photo</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Privacy note */}
-      <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(220,30,60,0.04)", border: "1px solid rgba(220,30,60,0.1)", display: "flex", gap: 10, alignItems: "flex-start" }}>
-        <Shield style={{ width: 16, height: 16, color: "#dc1e3c", flexShrink: 0, marginTop: 1 }} />
-        <div>
-          <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.8125rem", fontWeight: 600, color: "#1a0a14", marginBottom: 2 }}>Privacy Protected</p>
-          <p style={{ fontSize: "0.75rem", color: "#888" }}>Your photos are only visible to verified members. You can set any photo as your primary profile picture.</p>
-        </div>
-      </div>
-
-      {/* Save button */}
-      {photos.length > 0 && (
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button style={{
-            padding: "12px 32px", borderRadius: 10, fontSize: "0.9375rem", fontWeight: 600,
-            background: "linear-gradient(135deg,#dc1e3c,#a0153c)", color: "#fff",
-            border: "none", cursor: "pointer", boxShadow: "0 4px 16px rgba(220,30,60,0.3)",
-          }}>
-            Save Photos
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function PhotoCard({ name }: { name: string }) {
   const [hovered, setHovered] = useState(false);
