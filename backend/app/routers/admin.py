@@ -536,14 +536,14 @@ async def dashboard_stats(
         SELECT COALESCE(SUM(amount_paise), 0)
         FROM subscriptions
         WHERE tenant_id = :tid
-          AND status IN ('active', 'past_due', 'expired', 'paused')
+          AND UPPER(status::text) IN ('ACTIVE', 'PAST_DUE', 'EXPIRED', 'PAUSED')
     """), {"tid": str(tenant_uuid)})).scalar_one()
 
     earnings_month_row = (await db.execute(sa_text("""
         SELECT COALESCE(SUM(amount_paise), 0)
         FROM subscriptions
         WHERE tenant_id = :tid
-          AND status IN ('active', 'past_due', 'expired', 'paused')
+          AND UPPER(status::text) IN ('ACTIVE', 'PAST_DUE', 'EXPIRED', 'PAUSED')
           AND current_period_start >= :month_start
     """), {"tid": str(tenant_uuid), "month_start": month_start})).scalar_one()
 
@@ -552,7 +552,7 @@ async def dashboard_stats(
                COALESCE(SUM(amount_paise), 0) AS p
         FROM subscriptions
         WHERE tenant_id = :tid
-          AND status IN ('active', 'past_due', 'expired', 'paused')
+          AND UPPER(status::text) IN ('ACTIVE', 'PAST_DUE', 'EXPIRED', 'PAUSED')
           AND current_period_start >= NOW() - INTERVAL '12 months'
         GROUP BY m
         ORDER BY m
@@ -580,7 +580,7 @@ async def dashboard_stats(
         FROM subscriptions s
         LEFT JOIN profiles p ON p.user_id = s.user_id
         WHERE s.tenant_id = :tid
-          AND s.status = 'active'
+          AND UPPER(s.status::text) = 'ACTIVE'
           AND s.current_period_end >= NOW()
           AND s.current_period_end <= :until
         ORDER BY s.current_period_end ASC
