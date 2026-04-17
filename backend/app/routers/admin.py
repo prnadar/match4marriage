@@ -563,16 +563,22 @@ async def dashboard_stats(
     earnings_series = [{"month": r[0], "paise": int(r[1])} for r in earnings_series_rows]
 
     # Plan distribution — count of (non-deleted) users per subscription_tier.
+    # Postgres stores the enum by Python *name* (uppercase), but the frontend
+    # PLAN_META lookup keys are the enum *values* (lowercase). Normalise the
+    # DB result to lowercase before counting so we don't end up with both
+    # 'FREE' and 'free' as separate rows.
     plan_rows = (await db.execute(sa_text("""
-        SELECT subscription_tier::text AS t, COUNT(*) AS c
+        SELECT LOWER(subscription_tier::text) AS t, COUNT(*) AS c
         FROM users
         WHERE tenant_id = :tid AND deleted_at IS NULL
-        GROUP BY subscription_tier
+        GROUP BY LOWER(subscription_tier::text)
     """), {"tid": str(tenant_uuid)})).all()
     # Always present all four tiers, even at 0, so the dashboard renders cleanly.
     plan_counts = {t.value: 0 for t in SubscriptionTier}
     for r in plan_rows:
-        plan_counts[r[0]] = int(r[1])
+        key = r[0]
+        if key in plan_counts:
+            plan_counts[key] = int(r[1])
     plan_distribution = [{"plan": k, "count": v} for k, v in plan_counts.items()]
 
     # Renewals due — active subscriptions whose period ends in the next 14 days.
