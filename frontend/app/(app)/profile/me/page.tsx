@@ -1722,7 +1722,11 @@ function PhotosTab() {
         );
         const params = sig.data.data;
 
-        // 2. POST multipart to Cloudinary
+        // 2. POST multipart to Cloudinary.
+        // IMPORTANT: send exactly the fields the backend signed — no more,
+        // no less. Any extra signed-style field triggers "Invalid Signature"
+        // from Cloudinary. (file, api_key, signature are transport fields
+        // and are NOT part of the signature; resource_type is in the URL.)
         const form = new FormData();
         form.append("file", file);
         form.append("api_key", params.api_key);
@@ -1730,7 +1734,6 @@ function PhotosTab() {
         form.append("signature", params.signature);
         form.append("folder", params.folder);
         form.append("public_id", params.public_id);
-        form.append("overwrite", "false");
 
         const cldRes = await fetch(params.upload_url, { method: "POST", body: form });
         if (!cldRes.ok) {
