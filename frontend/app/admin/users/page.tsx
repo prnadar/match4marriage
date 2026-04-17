@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { Search, X, ChevronLeft, ChevronRight, AlertTriangle, Users as UsersIcon } from "lucide-react";
-import { PageShell, GlassCard, fadeUp } from "@/components/admin/PageShell";
-import { adminApi, ApiError } from "@/lib/api";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Search, X, ChevronLeft, ChevronRight, AlertTriangle, Users as UsersIcon,
+  Download, UserX, UserCheck,
+} from "lucide-react";
+import { PageShell, GlassCard, Button, fadeUp } from "@/components/admin/PageShell";
+import { useToast } from "@/components/admin/Toast";
+import { adminApi, ApiError, downloadCsv } from "@/lib/api";
 
 interface AdminUserRow {
   id: string;
@@ -42,6 +46,7 @@ const FILTERS: Array<{ key: Filter; label: string }> = [
 ];
 
 export default function AdminUsersPage() {
+  const { toast } = useToast();
   const [items, setItems] = useState<AdminUserRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -51,6 +56,8 @@ export default function AdminUsersPage() {
   const [qLive, setQLive] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qLive), 250);
@@ -79,13 +86,63 @@ export default function AdminUsersPage() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [filter, q]);
+  useEffect(() => { setSelected(new Set()); }, [filter, q, page]);
 
   const pageCount = Math.max(1, Math.ceil(total / limit));
+
+  const allOnPageSelected = items.length > 0 && items.every((u) => selected.has(u.id));
+  const someOnPageSelected = !allOnPageSelected && items.some((u) => selected.has(u.id));
+
+  const togglePage = () => {
+    const next = new Set(selected);
+    if (allOnPageSelected) {
+      items.forEach((u) => next.delete(u.id));
+    } else {
+      items.forEach((u) => next.add(u.id));
+    }
+    setSelected(next);
+  };
+
+  const toggleOne = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelected(next);
+  };
+
+  const runBulk = async (action: "suspend" | "activate") => {
+    if (busy || selected.size === 0) return;
+    if (!confirm(`${action === "suspend" ? "Suspend" : "Activate"} ${selected.size} user${selected.size === 1 ? "" : "s"}?`)) return;
+    setBusy(true);
+    try {
+      const res = await adminApi.bulkUserAction(action, Array.from(selected));
+      const data = (res.data as any)?.data;
+      toast("success", `${action === "suspend" ? "Suspended" : "Activated"} ${data?.affected ?? 0} user${data?.affected === 1 ? "" : "s"}`);
+      setSelected(new Set());
+      await load();
+    } catch (e: any) {
+      toast("error", e?.message || "Bulk action failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportCsv = () => {
+    const url = adminApi.exportUsersCsvUrl({
+      q: q || undefined,
+      status_filter: filter === "all" ? undefined : filter,
+    });
+    downloadCsv(url, "users.csv").catch((e: any) => toast("error", e?.message || "Export failed"));
+  };
 
   return (
     <PageShell
       title="Users"
       subtitle={`${total.toLocaleString()} user${total === 1 ? "" : "s"} · tenant scoped`}
+      actions={
+        <Button variant="secondary" onClick={exportCsv}>
+          <Download style={{ width: 13, height: 13 }} /> Export CSV
+        </Button>
+      }
     >
       {/* Search + filters */}
       <motion.div variants={fadeUp} style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
@@ -138,6 +195,16 @@ export default function AdminUsersPage() {
       <motion.div variants={fadeUp}>
         <GlassCard padding={0}>
           <div style={tableHeadStyle}>
+            <div style={{ display: "grid", placeItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={allOnPageSelected}
+                ref={(el) => { if (el) el.indeterminate = someOnPageSelected; }}
+                onChange={togglePage}
+                aria-label="Select all on page"
+                style={{ accentColor: "#dc1e3c", cursor: "pointer" }}
+              />
+            </div>
             <div>User</div>
             <div>Contact</div>
             <div>Location</div>
@@ -163,7 +230,15 @@ export default function AdminUsersPage() {
               <p style={{ fontSize: 13, margin: 0 }}>{q ? `No users matching "${q}"` : "No users in this category."}</p>
             </div>
           ) : (
-            items.map((u, i) => <UserRow key={u.id} user={u} index={i} />)
+            items.map((u, i) => (
+              <UserRow
+                key={u.id}
+                user={u}
+                index={i}
+                checked={selected.has(u.id)}
+                onToggle={() => toggleOne(u.id)}
+              />
+            ))
           )}
         </GlassCard>
       </motion.div>
@@ -181,11 +256,83 @@ export default function AdminUsersPage() {
           </button>
         </motion.div>
       )}
+
+      {/* Sticky bulk-action bar */}
+      <AnimatePresence>
+        {selected.size > 0 && (
+          <motion.div
+            initial={{ y: 24, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 24, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 320, damping: 28 }}
+            style={{
+              position: "fixed",
+              bottom: 24, left: "50%", transform: "translateX(-50%)",
+              zIndex: 900,
+              display: "inline-flex", alignItems: "center", gap: 10,
+              padding: "10px 16px",
+              background: "rgba(26,10,20,0.96)",
+              borderRadius: 999,
+              boxShadow: "0 14px 38px rgba(0,0,0,0.32), 0 0 0 1px rgba(255,255,255,0.06) inset",
+              backdropFilter: "blur(10px)",
+              fontFamily: "var(--font-poppins, sans-serif)",
+            }}
+          >
+            <span style={{ fontSize: 13, color: "#fff", fontWeight: 600 }}>
+              {selected.size} selected
+            </span>
+            <span style={{ width: 1, height: 18, background: "rgba(255,255,255,0.14)" }} />
+            <button
+              onClick={() => runBulk("activate")}
+              disabled={busy}
+              style={bulkBtn("good")}
+            >
+              <UserCheck style={{ width: 13, height: 13 }} /> Activate
+            </button>
+            <button
+              onClick={() => runBulk("suspend")}
+              disabled={busy}
+              style={bulkBtn("bad")}
+            >
+              <UserX style={{ width: 13, height: 13 }} /> Suspend
+            </button>
+            <button
+              onClick={() => setSelected(new Set())}
+              disabled={busy}
+              aria-label="Clear selection"
+              style={{
+                background: "transparent", border: "none", padding: 6, marginLeft: 2,
+                color: "rgba(255,255,255,0.6)", cursor: "pointer", display: "grid", placeItems: "center",
+              }}
+            >
+              <X style={{ width: 14, height: 14 }} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </PageShell>
   );
 }
 
-function UserRow({ user, index }: { user: AdminUserRow; index: number }) {
+function bulkBtn(tone: "good" | "bad"): React.CSSProperties {
+  const palette = tone === "good"
+    ? { bg: "rgba(92,122,82,0.22)", fg: "#a8d090", border: "rgba(92,122,82,0.4)" }
+    : { bg: "rgba(220,30,60,0.22)", fg: "#ff98ae", border: "rgba(220,30,60,0.4)" };
+  return {
+    display: "inline-flex", alignItems: "center", gap: 5,
+    padding: "7px 13px", borderRadius: 999,
+    background: palette.bg, border: `1px solid ${palette.border}`,
+    color: palette.fg,
+    fontSize: 12, fontWeight: 600,
+    cursor: "pointer", fontFamily: "inherit",
+  };
+}
+
+function UserRow({
+  user, index, checked, onToggle,
+}: {
+  user: AdminUserRow; index: number; checked: boolean; onToggle: () => void;
+}) {
   const name = [user.first_name, user.last_name].filter(Boolean).join(" ") || "(unnamed)";
   const location = [user.city, user.country].filter(Boolean).join(", ") || "—";
   const joined = user.created_at ? formatShort(user.created_at) : "—";
@@ -203,16 +350,33 @@ function UserRow({ user, index }: { user: AdminUserRow; index: number }) {
     >
       <Link
         href={`/admin/users/${user.id}`}
-        style={tableRowStyle}
+        style={{
+          ...tableRowStyle,
+          background: checked ? "rgba(220,30,60,0.04)" : "transparent",
+        }}
         onMouseEnter={(e) => {
           const el = e.currentTarget as HTMLAnchorElement;
-          el.style.background = "rgba(220,30,60,0.03)";
+          if (!checked) el.style.background = "rgba(220,30,60,0.03)";
         }}
         onMouseLeave={(e) => {
           const el = e.currentTarget as HTMLAnchorElement;
-          el.style.background = "transparent";
+          el.style.background = checked ? "rgba(220,30,60,0.04)" : "transparent";
         }}
       >
+        {/* Selection checkbox — stops propagation so it doesn't navigate. */}
+        <div
+          style={{ display: "grid", placeItems: "center" }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
+        >
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={() => onToggle()}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Select ${name}`}
+            style={{ accentColor: "#dc1e3c", cursor: "pointer" }}
+          />
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
           <div style={{ width: 40, height: 40, padding: 2, borderRadius: "50%", background: ring, flexShrink: 0 }}>
             <div style={{
@@ -322,7 +486,7 @@ const searchInputStyle: React.CSSProperties = {
 
 const tableHeadStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)",
+  gridTemplateColumns: "32px minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)",
   background: "rgba(26,10,20,0.03)",
   borderBottom: "1px solid rgba(0,0,0,0.05)",
   padding: "10px 18px",
@@ -331,7 +495,7 @@ const tableHeadStyle: React.CSSProperties = {
 
 const tableRowStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)",
+  gridTemplateColumns: "32px minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)",
   padding: "12px 18px",
   borderBottom: "1px solid rgba(0,0,0,0.04)",
   alignItems: "center",
