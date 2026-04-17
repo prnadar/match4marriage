@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Heart, Mail, Lock, Eye, EyeOff, AlertCircle,
-  ShieldCheck, Zap, KeyRound, ArrowRight,
+  ShieldCheck, Zap, KeyRound, ArrowRight, Check,
 } from "lucide-react";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { firebaseAuth, clearClientState, rememberSessionUid } from "@/lib/firebase";
@@ -78,249 +78,335 @@ export default function AdminLoginPage() {
     <div className="m4m-login-root" style={{
       minHeight: "100vh",
       display: "grid",
-      gridTemplateColumns: "minmax(0, 1.1fr) minmax(400px, 500px)",
-      background: "#fdfbf9",
+      gridTemplateColumns: "minmax(0, 1.15fr) minmax(420px, 520px)",
+      background: "#0c050a",
       position: "relative",
       overflow: "hidden",
+      color: "#fff",
     }}>
-      {/* ── Hero side ── */}
-      <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+
+      {/* ═══ HERO ═══════════════════════════════════════════════════════ */}
+      <motion.aside
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.6 }}
         className="m4m-login-hero"
         style={{
           position: "relative",
           overflow: "hidden",
-          background: "radial-gradient(ellipse at 30% 20%, #4a1528 0%, #2a0c18 50%, #1a0a14 100%)",
+          background: "linear-gradient(135deg, #1a0a14 0%, #2a0f1e 30%, #1a0a14 70%, #0c050a 100%)",
           display: "flex",
           flexDirection: "column",
-          padding: "52px 60px",
-          color: "#fff",
+          padding: "48px 64px",
+          isolation: "isolate",
         }}
       >
-        {/* Drifting aurora blobs */}
+        {/* Aurora blobs (layer 1) */}
         <span className="aurora aurora-rose" />
         <span className="aurora aurora-gold" />
         <span className="aurora aurora-plum" />
 
-        {/* Subtle dot grid */}
+        {/* Noise / texture overlay (layer 2) */}
+        <span className="hero-grain" />
+
+        {/* Dot grid (layer 3) */}
+        <span className="hero-dots" />
+
+        {/* Hex cluster — absolute positioned in the composition (layer 4) */}
+        <HexCluster />
+
+        {/* Radial edge vignette (layer 5) */}
+        <span className="hero-vignette" />
+
+        {/* ─── Header bar ─── */}
+        <motion.header
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.15 }}
+          style={{
+            position: "relative", zIndex: 4,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 11,
+              background: "linear-gradient(135deg, #ff4d79, #a0153c)",
+              display: "grid", placeItems: "center",
+              boxShadow: "0 6px 22px rgba(220,30,60,0.45), inset 0 0 0 1px rgba(255,255,255,0.12)",
+            }}>
+              <Heart style={{ width: 18, height: 18, color: "#fff" }} fill="#fff" />
+            </div>
+            <div style={{ lineHeight: 1.1 }}>
+              <div style={{
+                fontFamily: "var(--font-playfair, serif)",
+                fontSize: 20, fontWeight: 700, color: "#fff",
+                letterSpacing: "-0.01em",
+              }}>
+                Match<span style={{ color: "#ff98ae" }}>4</span>Marriage
+              </div>
+              <div style={{
+                fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,0.42)",
+                letterSpacing: "0.16em", textTransform: "uppercase", marginTop: 2,
+              }}>
+                Admin Console
+              </div>
+            </div>
+          </div>
+
+          {/* Operational status pill */}
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 7,
+            padding: "6px 11px",
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 999,
+            backdropFilter: "blur(10px)",
+          }}>
+            <span className="pulse-dot" />
+            <span style={{
+              fontSize: 10.5, fontWeight: 600, color: "rgba(255,255,255,0.72)",
+              letterSpacing: "0.08em", textTransform: "uppercase",
+            }}>
+              All systems operational
+            </span>
+          </div>
+        </motion.header>
+
+        {/* ─── Main composition ─── */}
+        <div style={{
+          flex: 1,
+          position: "relative", zIndex: 4,
+          display: "flex", flexDirection: "column", justifyContent: "center",
+          maxWidth: 580,
+          paddingTop: 40,
+        }}>
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.55, delay: 0.3 }}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 8,
+              padding: "5px 12px 5px 8px",
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 999,
+              marginBottom: 24, alignSelf: "flex-start",
+              backdropFilter: "blur(10px)",
+            }}
+          >
+            <span style={{
+              width: 22, height: 22, borderRadius: "50%",
+              background: "linear-gradient(135deg, rgba(92,122,82,0.35), rgba(125,214,140,0.35))",
+              display: "grid", placeItems: "center",
+            }}>
+              <Check style={{ width: 11, height: 11, color: "#9ce3a9" }} strokeWidth={3} />
+            </span>
+            <span style={{
+              fontSize: 10.5, fontWeight: 700, color: "rgba(255,255,255,0.78)",
+              letterSpacing: "0.14em", textTransform: "uppercase",
+            }}>
+              Trusted by families since 2024
+            </span>
+          </motion.div>
+
+          <motion.h1
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.65, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            style={{
+              fontFamily: "var(--font-playfair, serif)",
+              fontSize: "clamp(40px, 5vw, 68px)",
+              fontWeight: 500,
+              lineHeight: 1.05,
+              margin: 0,
+              letterSpacing: "-0.028em",
+              color: "#ffffff",
+            }}
+          >
+            Where every match<br />
+            begins with{" "}
+            <span style={{ position: "relative", whiteSpace: "nowrap" }}>
+              <em style={{
+                fontStyle: "italic",
+                fontWeight: 400,
+                color: "#ffb9c8",
+                position: "relative", zIndex: 1,
+              }}>
+                trust
+              </em>
+              <motion.span
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: 1 }}
+                transition={{ delay: 1.0, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                style={{
+                  position: "absolute",
+                  left: 0, right: 0, bottom: -4,
+                  height: 4, borderRadius: 2,
+                  background: "linear-gradient(90deg, transparent, #ff98ae 25%, #ffc8a8 75%, transparent)",
+                  transformOrigin: "left center",
+                  boxShadow: "0 0 20px rgba(255,152,174,0.4)",
+                }}
+              />
+            </span>
+            .
+          </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.55 }}
+            style={{
+              fontSize: 16,
+              lineHeight: 1.65,
+              color: "rgba(255,255,255,0.62)",
+              marginTop: 22, maxWidth: 500,
+              fontWeight: 400,
+            }}
+          >
+            You&apos;re the keeper. Review profiles, verify identities, and guide the community you&apos;re building — all from one console.
+          </motion.p>
+
+          {/* Feature pills */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.7, duration: 0.5 }}
+            style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 28 }}
+          >
+            {[
+              { icon: ShieldCheck, label: "Verification queue", tone: "rose" },
+              { icon: Zap,         label: "Keyboard-first review", tone: "gold" },
+              { icon: KeyRound,    label: "Tenant-isolated safety", tone: "plum" },
+            ].map(({ icon: Icon, label, tone }, i) => (
+              <motion.span
+                key={label}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.8 + i * 0.08, duration: 0.4 }}
+                whileHover={{ y: -2 }}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 8,
+                  padding: "8px 13px",
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 10,
+                  fontSize: 12.5, fontWeight: 500,
+                  color: "rgba(255,255,255,0.88)",
+                  backdropFilter: "blur(12px)",
+                  cursor: "default",
+                  letterSpacing: "0.01em",
+                }}
+              >
+                <span style={{
+                  width: 22, height: 22, borderRadius: 6,
+                  display: "grid", placeItems: "center",
+                  background: tone === "rose" ? "rgba(255,152,174,0.16)"
+                    : tone === "gold" ? "rgba(255,200,168,0.16)"
+                    : "rgba(180,150,220,0.16)",
+                }}>
+                  <Icon style={{
+                    width: 12, height: 12,
+                    color: tone === "rose" ? "#ffb9c8"
+                      : tone === "gold" ? "#ffc8a8"
+                      : "#c8b0e8",
+                  }} />
+                </span>
+                {label}
+              </motion.span>
+            ))}
+          </motion.div>
+        </div>
+
+        {/* ─── Bottom trust strip ─── */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.0, duration: 0.5 }}
+          style={{
+            position: "relative", zIndex: 4,
+            paddingTop: 28,
+            borderTop: "1px solid rgba(255,255,255,0.06)",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            flexWrap: "wrap", gap: 16,
+          }}
+        >
+          <div style={{ display: "flex", gap: 22, flexWrap: "wrap", alignItems: "center" }}>
+            {[
+              "SOC 2 Type II",
+              "ISO 27001",
+              "GDPR compliant",
+              "End-to-end encrypted",
+            ].map((c) => (
+              <span key={c} style={{
+                fontSize: 11, fontWeight: 500,
+                color: "rgba(255,255,255,0.45)",
+                letterSpacing: "0.04em",
+                display: "inline-flex", alignItems: "center", gap: 6,
+              }}>
+                <ShieldCheck style={{ width: 11, height: 11, color: "rgba(255,255,255,0.3)" }} />
+                {c}
+              </span>
+            ))}
+          </div>
+          <span style={{
+            fontSize: 11, color: "rgba(255,255,255,0.3)", letterSpacing: "0.04em",
+          }}>
+            © {new Date().getFullYear()} Match4Marriage Ltd.
+          </span>
+        </motion.div>
+      </motion.aside>
+
+      {/* ═══ FORM ═══════════════════════════════════════════════════════ */}
+      <motion.section
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.55, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "48px 44px", background: "#fdfbf9",
+          position: "relative",
+        }}
+      >
+        {/* Subtle form-side backdrop */}
         <div aria-hidden style={{
-          position: "absolute", inset: 0, opacity: 0.08,
-          backgroundImage: "radial-gradient(rgba(255,255,255,0.4) 1px, transparent 1px)",
-          backgroundSize: "22px 22px",
-          maskImage: "radial-gradient(ellipse at 40% 45%, black 10%, transparent 75%)",
-          WebkitMaskImage: "radial-gradient(ellipse at 40% 45%, black 10%, transparent 75%)",
+          position: "absolute", inset: 0,
+          background: "radial-gradient(ellipse at 50% 30%, rgba(220,30,60,0.035), transparent 65%)",
           pointerEvents: "none",
         }} />
 
-        {/* Brand mark */}
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          style={{ display: "flex", alignItems: "center", gap: 12, position: "relative", zIndex: 2 }}
-        >
-          <div style={{
-            width: 40, height: 40, borderRadius: 12,
-            background: "linear-gradient(135deg, #ff4d79, #a0153c)",
-            display: "grid", placeItems: "center",
-            boxShadow: "0 8px 24px rgba(220,30,60,0.45), 0 0 0 1px rgba(255,255,255,0.1) inset",
-          }}>
-            <Heart style={{ width: 20, height: 20, color: "#fff" }} fill="#fff" />
-          </div>
-          <div>
-            <span style={{
-              fontFamily: "var(--font-playfair, serif)",
-              fontSize: 22, fontWeight: 700, color: "#fff",
-              letterSpacing: "-0.01em",
-            }}>
-              Match<span style={{ color: "#ff98ae" }}>4</span>Marriage
-            </span>
-            <div style={{
-              fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.5)",
-              letterSpacing: "0.12em", textTransform: "uppercase", marginTop: 1,
-            }}>
-              Admin Console
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Centre: hexagon cluster + headline */}
-        <div style={{
-          flex: 1, position: "relative", zIndex: 2,
-          display: "flex", flexDirection: "column",
-          justifyContent: "center",
-          gap: 32,
-        }}>
-          <HexCluster />
-
-          <div>
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.35 }}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 8,
-                padding: "6px 14px",
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                borderRadius: 999,
-                marginBottom: 20,
-                backdropFilter: "blur(10px)",
-              }}
-            >
-              <span style={{
-                width: 6, height: 6, borderRadius: "50%", background: "#7dd68c",
-                boxShadow: "0 0 10px #7dd68c",
-              }} />
-              <span style={{
-                fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.9)",
-                letterSpacing: "0.1em", textTransform: "uppercase",
-              }}>
-                Trusted by families since 2024
-              </span>
-            </motion.div>
-
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.45, ease: [0.22, 1, 0.36, 1] }}
-              style={{
-                fontFamily: "var(--font-playfair, serif)",
-                fontSize: "clamp(36px, 4.8vw, 56px)",
-                fontWeight: 600,
-                lineHeight: 1.08,
-                margin: 0,
-                letterSpacing: "-0.025em",
-              }}
-            >
-              Where every match <br />
-              begins with{" "}
-              <span style={{
-                background: "linear-gradient(135deg, #ff98ae, #ffc8a8)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-                fontStyle: "italic",
-              }}>trust</span>.
-            </motion.h1>
-
-            <motion.p
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.6 }}
-              style={{
-                fontSize: 15,
-                lineHeight: 1.65,
-                color: "rgba(255,255,255,0.68)",
-                marginTop: 18, maxWidth: 460,
-              }}
-            >
-              You&apos;re the keeper. Review profiles, verify identities, and guide the community you&apos;re building.
-            </motion.p>
-
-            {/* Feature pills */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.75, duration: 0.4 }}
-              style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 28 }}
-            >
-              {[
-                { icon: ShieldCheck, label: "Verification queue" },
-                { icon: Zap,         label: "Keyboard-first review" },
-                { icon: KeyRound,    label: "Tenant-isolated safety" },
-              ].map(({ icon: Icon, label }, i) => (
-                <motion.span
-                  key={label}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.8 + i * 0.08, duration: 0.4 }}
-                  whileHover={{ y: -2, borderColor: "rgba(255,200,100,0.35)" }}
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: 7,
-                    padding: "7px 13px",
-                    background: "rgba(255,255,255,0.05)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 999,
-                    fontSize: 12, fontWeight: 500,
-                    color: "rgba(255,255,255,0.88)",
-                    backdropFilter: "blur(12px)",
-                    cursor: "default",
-                    transition: "border-color 200ms",
-                  }}
-                >
-                  <Icon style={{ width: 13, height: 13, color: "#ffc8a8" }} />
-                  {label}
-                </motion.span>
-              ))}
-            </motion.div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.0, duration: 0.5 }}
-          style={{
-            position: "relative", zIndex: 2,
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            fontSize: 11.5,
-            color: "rgba(255,255,255,0.4)",
-          }}
-        >
-          <span>© {new Date().getFullYear()} Match4Marriage</span>
-          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <ShieldCheck style={{ width: 11, height: 11 }} />
-            End-to-end encrypted · GDPR compliant
-          </span>
-        </motion.div>
-      </motion.div>
-
-      {/* ── Form side ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
-        style={{
-          display: "flex", alignItems: "center", justifyContent: "center",
-          padding: "48px 40px", background: "#fdfbf9", position: "relative",
-        }}
-      >
-        <div style={{ width: "100%", maxWidth: 380 }}>
+        <div style={{ width: "100%", maxWidth: 400, position: "relative" }}>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.35 }}
-            style={{ marginBottom: 34 }}
+            style={{ marginBottom: 36 }}
           >
             <div style={{
-              display: "inline-flex", alignItems: "center", gap: 6,
-              padding: "4px 10px",
+              display: "inline-flex", alignItems: "center", gap: 7,
+              padding: "4px 10px 4px 8px",
               background: "rgba(220,30,60,0.06)",
-              border: "1px solid rgba(220,30,60,0.12)",
+              border: "1px solid rgba(220,30,60,0.14)",
               borderRadius: 999,
-              marginBottom: 14,
+              marginBottom: 18,
             }}>
               <ShieldCheck style={{ width: 11, height: 11, color: "#dc1e3c" }} />
               <span style={{
                 fontSize: 10, fontWeight: 700, color: "#a0153c",
-                letterSpacing: "0.1em", textTransform: "uppercase",
+                letterSpacing: "0.12em", textTransform: "uppercase",
               }}>
                 Admin sign-in
               </span>
             </div>
             <h2 style={{
               fontFamily: "var(--font-playfair, serif)",
-              fontSize: 32, fontWeight: 600, color: "#1a0a14",
-              margin: 0, letterSpacing: "-0.02em", lineHeight: 1.15,
+              fontSize: 34, fontWeight: 500, color: "#1a0a14",
+              margin: 0, letterSpacing: "-0.022em", lineHeight: 1.1,
             }}>
               {greeting}.
             </h2>
-            <p style={{ fontSize: 14, color: "#777", margin: "8px 0 0" }}>
-              Sign in to your admin account to continue.
+            <p style={{ fontSize: 14, color: "#777", margin: "10px 0 0", lineHeight: 1.5 }}>
+              Sign in to continue to your admin console.
             </p>
           </motion.div>
 
@@ -333,13 +419,13 @@ export default function AdminLoginPage() {
                 exit={{ opacity: 0, y: -4, height: 0 }}
                 transition={{ duration: 0.25 }}
                 style={{
-                  display: "flex", alignItems: "flex-start", gap: 8,
+                  display: "flex", alignItems: "flex-start", gap: 9,
                   background: "rgba(220,30,60,0.06)",
                   color: "#a0153c",
                   fontSize: 13,
                   padding: "12px 14px",
                   borderRadius: 10,
-                  marginBottom: 16,
+                  marginBottom: 18,
                   border: "1px solid rgba(220,30,60,0.14)",
                   overflow: "hidden",
                 }}
@@ -371,19 +457,19 @@ export default function AdminLoginPage() {
                 placeholder="••••••••"
                 autoComplete="current-password"
                 required
-                style={{ ...inputStyle, paddingRight: 40 }}
+                style={{ ...inputStyle, paddingRight: 42 }}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 style={{
-                  position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                  position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
                   background: "none", border: "none", cursor: "pointer",
-                  color: "#aaa", padding: 4, display: "grid", placeItems: "center",
+                  color: "#aaa", padding: 6, display: "grid", placeItems: "center",
                   borderRadius: 6,
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#666")}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#1a0a14")}
                 onMouseLeave={(e) => (e.currentTarget.style.color = "#aaa")}
               >
                 {showPassword ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
@@ -409,10 +495,11 @@ export default function AdminLoginPage() {
                 borderRadius: 12,
                 fontSize: 14, fontWeight: 600,
                 cursor: loading ? "wait" : "pointer",
-                boxShadow: loading ? "none" : "0 12px 32px rgba(220,30,60,0.32)",
+                boxShadow: loading ? "none" : "0 10px 28px rgba(220,30,60,0.32), inset 0 0 0 1px rgba(255,255,255,0.1)",
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                 fontFamily: "inherit",
                 transition: "background 0.2s, box-shadow 0.2s",
+                letterSpacing: "0.01em",
               }}
             >
               {loading ? (
@@ -432,16 +519,16 @@ export default function AdminLoginPage() {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.85 }}
             style={{
-              marginTop: 28, paddingTop: 22,
+              marginTop: 32, paddingTop: 24,
               borderTop: "1px solid rgba(0,0,0,0.06)",
-              fontSize: 11.5, color: "#aaa", textAlign: "center", lineHeight: 1.5,
+              fontSize: 11.5, color: "#999", textAlign: "center", lineHeight: 1.6,
             }}
           >
             Admin accounts are managed by super-admins.<br />
             Contact your team to request access.
           </motion.div>
         </div>
-      </motion.div>
+      </motion.section>
 
       <GlobalStyles />
     </div>
@@ -464,9 +551,9 @@ function InputField({
     >
       <span style={{
         display: "block",
-        fontSize: 11, fontWeight: 600, color: "#555",
-        textTransform: "uppercase", letterSpacing: "0.08em",
-        marginBottom: 6,
+        fontSize: 11, fontWeight: 700, color: "#555",
+        textTransform: "uppercase", letterSpacing: "0.1em",
+        marginBottom: 7,
       }}>
         {label}
       </span>
@@ -496,12 +583,14 @@ interface HexAvatarData {
   scalePeak: number;
 }
 
+// Arranged as an asymmetric honeycomb — centre hex + 4 orbiters
+// Coords are in viewBox (800x600) space so they scale cleanly.
 const HEX_AVATARS: HexAvatarData[] = [
-  { size: 200, cx: 400, cy: 290, grad: ["#ff7a9a", "#a0153c"], delay: 0.6,  floatY: -12, floatDur: 6.5, scalePeak: 1.04 }, // centre couple
-  { size: 120, cx: 220, cy: 200, grad: ["#ffc8a8", "#e68a5c"], delay: 0.75, floatY: -10, floatDur: 5.5, scalePeak: 1.06 },
-  { size: 110, cx: 590, cy: 210, grad: ["#8fb4ff", "#5072c4"], delay: 0.85, floatY: -14, floatDur: 7.2, scalePeak: 1.05 },
-  { size: 100, cx: 180, cy: 400, grad: ["#ffd18a", "#c89020"], delay: 0.95, floatY: -9,  floatDur: 6.8, scalePeak: 1.06 },
-  { size: 120, cx: 600, cy: 410, grad: ["#b5d8a6", "#5c7a52"], delay: 1.05, floatY: -11, floatDur: 6.0, scalePeak: 1.04 },
+  { size: 210, cx: 460, cy: 300, grad: ["#ff7a9a", "#a0153c"], delay: 0.55, floatY: -10, floatDur: 6.5, scalePeak: 1.025 }, // CENTRE couple
+  { size: 110, cx: 290, cy: 170, grad: ["#ffd7b8", "#e8a06b"], delay: 0.70, floatY: -8,  floatDur: 5.6, scalePeak: 1.04  },
+  { size: 100, cx: 640, cy: 180, grad: ["#a8c0ff", "#6079c4"], delay: 0.80, floatY: -11, floatDur: 7.2, scalePeak: 1.035 },
+  { size:  96, cx: 250, cy: 460, grad: ["#ffdd95", "#b88420"], delay: 0.90, floatY: -9,  floatDur: 6.8, scalePeak: 1.04  },
+  { size: 110, cx: 640, cy: 460, grad: ["#b5d8a6", "#5c7a52"], delay: 1.00, floatY: -10, floatDur: 6.0, scalePeak: 1.03  },
 ];
 
 function HexCluster() {
@@ -510,15 +599,20 @@ function HexCluster() {
       aria-hidden
       className="hex-cluster"
       style={{
-        position: "relative",
-        width: "100%",
-        maxWidth: 520,
-        aspectRatio: "800/560",
-        margin: "0 auto",
+        position: "absolute",
+        top: "50%",
+        right: "-4%",
+        transform: "translateY(-50%)",
+        width: "60%",
+        maxWidth: 720,
+        aspectRatio: "800/600",
+        pointerEvents: "none",
+        zIndex: 2,
+        opacity: 0.95,
       }}
     >
       <svg
-        viewBox="0 0 800 560"
+        viewBox="0 0 800 600"
         style={{ width: "100%", height: "100%", display: "block", overflow: "visible" }}
       >
         <defs>
@@ -529,28 +623,28 @@ function HexCluster() {
             </linearGradient>
           ))}
           <radialGradient id="hex-glow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="rgba(255,200,180,0.25)" />
-            <stop offset="100%" stopColor="rgba(255,200,180,0)" />
+            <stop offset="0%" stopColor="rgba(255,180,150,0.25)" />
+            <stop offset="100%" stopColor="rgba(255,180,150,0)" />
           </radialGradient>
         </defs>
 
-        {/* Centre glow */}
-        <circle cx="400" cy="290" r="260" fill="url(#hex-glow)" />
+        {/* Centre glow behind cluster */}
+        <circle cx="460" cy="300" r="280" fill="url(#hex-glow)" />
 
-        {/* Connecting lines (softly drawn) */}
+        {/* Connecting lines */}
         {HEX_AVATARS.slice(1).map((a, i) => (
           <motion.line
             key={`line-${i}`}
-            x1={400}
-            y1={290}
+            x1={460}
+            y1={300}
             x2={a.cx}
             y2={a.cy}
-            stroke="rgba(255,152,174,0.22)"
+            stroke="rgba(255,152,174,0.18)"
             strokeWidth="1"
-            strokeDasharray="3 4"
+            strokeDasharray="3 5"
             initial={{ pathLength: 0, opacity: 0 }}
             animate={{ pathLength: 1, opacity: 1 }}
-            transition={{ delay: 0.55 + i * 0.1, duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ delay: 0.6 + i * 0.1, duration: 1.0, ease: [0.22, 1, 0.36, 1] }}
           />
         ))}
 
@@ -560,7 +654,7 @@ function HexCluster() {
         ))}
       </svg>
 
-      {/* Floating sparkle dots (pure CSS) */}
+      {/* Sparkles */}
       <span className="sparkle sparkle-1" />
       <span className="sparkle sparkle-2" />
       <span className="sparkle sparkle-3" />
@@ -570,12 +664,12 @@ function HexCluster() {
 
 function HexAvatar({ data, index }: { data: HexAvatarData; index: number }) {
   const halfSize = data.size / 2;
-  const heartSize = Math.max(10, data.size * 0.18);
+  const heartSize = Math.max(12, data.size * 0.2);
   return (
     <motion.g
-      initial={{ opacity: 0, scale: 0.6 }}
+      initial={{ opacity: 0, scale: 0.55 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: data.delay, duration: 0.7, type: "spring", stiffness: 180, damping: 18 }}
+      transition={{ delay: data.delay, duration: 0.75, type: "spring", stiffness: 180, damping: 20 }}
       style={{ transformOrigin: `${data.cx}px ${data.cy}px` }}
     >
       <motion.g
@@ -587,28 +681,39 @@ function HexAvatar({ data, index }: { data: HexAvatarData; index: number }) {
           duration: data.floatDur,
           repeat: Infinity,
           ease: "easeInOut",
-          delay: data.delay,
+          delay: data.delay + 0.2,
         }}
         style={{ transformOrigin: `${data.cx}px ${data.cy}px` }}
       >
         <g transform={`translate(${data.cx - halfSize}, ${data.cy - halfSize}) scale(${data.size / 200})`}>
-          {/* Outer hex */}
+          {/* Drop shadow hex underneath for extra depth */}
+          <polygon
+            points={HEX_POINTS}
+            fill="rgba(0,0,0,0.35)"
+            transform="translate(2, 8)"
+            style={{ filter: "blur(12px)" }}
+          />
+          {/* Main hex */}
           <polygon
             points={HEX_POINTS}
             fill={`url(#hex-grad-${index})`}
-            stroke="rgba(255,255,255,0.15)"
+            stroke="rgba(255,255,255,0.18)"
             strokeWidth="1.5"
-            style={{ filter: "drop-shadow(0 18px 30px rgba(26,10,20,0.35))" }}
           />
-          {/* Inner highlight */}
+          {/* Inner highlight hex */}
           <polygon
             points={HEX_POINTS}
             fill="none"
             stroke="rgba(255,255,255,0.28)"
             strokeWidth="1"
-            transform="scale(0.88) translate(13.5, 12)"
+            transform="scale(0.86) translate(16, 14)"
           />
-          {/* Heart (only on centre hex, index 0) */}
+          {/* Top-left gloss */}
+          <polygon
+            points="100,10 170,50 170,65 100,25 30,65 30,50"
+            fill="rgba(255,255,255,0.12)"
+          />
+          {/* Centre heart (only on central hex) */}
           {index === 0 && (
             <g transform="translate(100, 90)">
               <HeartPath size={heartSize} />
@@ -621,14 +726,13 @@ function HexAvatar({ data, index }: { data: HexAvatarData; index: number }) {
 }
 
 function HeartPath({ size }: { size: number }) {
-  // Heart shape centered around origin; tuned to read clearly at any size.
   return (
     <path
       d={`M 0,${size * 0.3}
           C ${-size * 0.7},${-size * 0.4} ${-size * 1.5},${size * 0.3} 0,${size * 1.4}
           C ${size * 1.5},${size * 0.3} ${size * 0.7},${-size * 0.4} 0,${size * 0.3}
           Z`}
-      fill="rgba(255,255,255,0.92)"
+      fill="rgba(255,255,255,0.95)"
       style={{ filter: "drop-shadow(0 2px 4px rgba(26,10,20,0.35))" }}
     />
   );
@@ -639,68 +743,107 @@ function HeartPath({ size }: { size: number }) {
 function GlobalStyles() {
   return (
     <style jsx global>{`
-      /* Aurora blobs — ambient motion behind the cluster */
+      /* Aurora blobs */
       .aurora {
         position: absolute;
         border-radius: 50%;
-        filter: blur(120px);
+        filter: blur(130px);
         pointer-events: none;
-        opacity: 0.6;
         will-change: transform;
       }
       .aurora-rose {
-        width: 460px; height: 460px;
-        top: -80px; left: -60px;
-        background: radial-gradient(circle, #ff4d79, transparent 60%);
-        animation: aurora-rose 22s ease-in-out infinite alternate;
+        width: 520px; height: 520px;
+        top: -120px; left: -100px;
+        background: radial-gradient(circle, rgba(255,77,121,0.8), transparent 60%);
+        animation: aurora-rose 24s ease-in-out infinite alternate;
+        opacity: 0.5;
       }
       .aurora-gold {
-        width: 500px; height: 500px;
-        bottom: -120px; right: -100px;
-        background: radial-gradient(circle, #ffa64d, transparent 60%);
-        animation: aurora-gold 28s ease-in-out infinite alternate;
-        opacity: 0.38;
+        width: 560px; height: 560px;
+        bottom: -160px; right: -120px;
+        background: radial-gradient(circle, rgba(255,166,77,0.7), transparent 60%);
+        animation: aurora-gold 30s ease-in-out infinite alternate;
+        opacity: 0.28;
       }
       .aurora-plum {
-        width: 340px; height: 340px;
-        top: 40%; left: 35%;
-        background: radial-gradient(circle, #7c3aed, transparent 60%);
-        animation: aurora-plum 32s ease-in-out infinite alternate;
-        opacity: 0.3;
+        width: 380px; height: 380px;
+        top: 55%; left: 22%;
+        background: radial-gradient(circle, rgba(124,58,237,0.7), transparent 60%);
+        animation: aurora-plum 34s ease-in-out infinite alternate;
+        opacity: 0.22;
       }
       @keyframes aurora-rose {
         from { transform: translate(0,0) scale(1); }
-        to   { transform: translate(140px, 90px) scale(1.18); }
+        to   { transform: translate(160px, 110px) scale(1.2); }
       }
       @keyframes aurora-gold {
         from { transform: translate(0,0) scale(1); }
-        to   { transform: translate(-140px, -70px) scale(0.9); }
+        to   { transform: translate(-160px, -80px) scale(0.9); }
       }
       @keyframes aurora-plum {
         from { transform: translate(0,0) scale(1); }
-        to   { transform: translate(80px, -50px) scale(1.1); }
+        to   { transform: translate(90px, -60px) scale(1.12); }
       }
 
-      /* Tiny sparkle dots in the cluster */
+      /* Grain texture (SVG-encoded noise) */
+      .hero-grain {
+        position: absolute; inset: 0;
+        pointer-events: none; z-index: 2;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.9  0 0 0 0 0.9  0 0 0 0 0.9  0 0 0 0.05 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
+        mix-blend-mode: overlay;
+        opacity: 0.55;
+      }
+
+      /* Dot grid — subtle */
+      .hero-dots {
+        position: absolute; inset: 0;
+        pointer-events: none; z-index: 2;
+        background-image: radial-gradient(rgba(255,255,255,0.28) 1px, transparent 1px);
+        background-size: 26px 26px;
+        opacity: 0.12;
+        mask-image: radial-gradient(ellipse at 30% 50%, black 10%, transparent 75%);
+        -webkit-mask-image: radial-gradient(ellipse at 30% 50%, black 10%, transparent 75%);
+      }
+
+      /* Edge vignette so corners fade to darker */
+      .hero-vignette {
+        position: absolute; inset: 0; z-index: 3;
+        pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.55) 100%);
+      }
+
+      /* Pulsing green dot for status pill */
+      .pulse-dot {
+        width: 7px; height: 7px; border-radius: 50%;
+        background: #7dd68c;
+        box-shadow: 0 0 10px #7dd68c, 0 0 0 3px rgba(125,214,140,0.25);
+        animation: pulse 2.4s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 10px #7dd68c, 0 0 0 3px rgba(125,214,140,0.25); }
+        50%      { box-shadow: 0 0 14px #7dd68c, 0 0 0 6px rgba(125,214,140,0.1); }
+      }
+
+      /* Sparkle dots inside cluster */
       .sparkle {
         position: absolute;
         width: 4px; height: 4px;
         border-radius: 50%;
         background: #fff;
-        box-shadow: 0 0 8px rgba(255,200,170,0.8);
+        box-shadow: 0 0 10px rgba(255,200,170,0.9);
         opacity: 0;
-        animation: sparkle 4s ease-in-out infinite;
+        animation: sparkle 4.5s ease-in-out infinite;
       }
-      .sparkle-1 { top: 22%; left: 18%; animation-delay: 0.4s; }
-      .sparkle-2 { top: 68%; left: 82%; animation-delay: 1.8s; }
-      .sparkle-3 { top: 30%; left: 76%; animation-delay: 3.1s; }
+      .sparkle-1 { top: 20%; right: 42%; animation-delay: 0.5s; }
+      .sparkle-2 { top: 65%; right: 18%; animation-delay: 2.1s; }
+      .sparkle-3 { top: 32%; right: 8%;  animation-delay: 3.4s; }
       @keyframes sparkle {
-        0%, 100% { opacity: 0; transform: scale(0.7); }
-        40%      { opacity: 1; transform: scale(1.3); }
-        60%      { opacity: 1; transform: scale(1.3); }
+        0%, 100% { opacity: 0; transform: scale(0.6); }
+        40%      { opacity: 1; transform: scale(1.2); }
+        60%      { opacity: 1; transform: scale(1.2); }
       }
 
-      /* Spinner in submit button */
+      /* Spinner */
       .spinner {
         width: 14px; height: 14px; border-radius: 50%;
         border: 2px solid rgba(255,255,255,0.3);
@@ -709,30 +852,32 @@ function GlobalStyles() {
       }
       @keyframes spin { to { transform: rotate(360deg); } }
 
-      /* Input focus ring */
+      /* Input focus */
       .m4m-login-root input:focus {
         border-color: #dc1e3c !important;
         background: #fff !important;
         box-shadow: 0 0 0 4px rgba(220, 30, 60, 0.08) !important;
       }
 
-      /* Responsive: collapse to single column */
-      @media (max-width: 960px) {
+      /* Responsive */
+      @media (max-width: 1024px) {
         .m4m-login-root {
           grid-template-columns: 1fr !important;
         }
         .m4m-login-hero {
           padding: 40px 32px !important;
-          min-height: 420px;
+          min-height: 560px;
         }
-        .hex-cluster {
-          max-width: 360px !important;
+        :global(.hex-cluster) {
+          opacity: 0.45 !important;
+          width: 80% !important;
+          right: -20% !important;
         }
       }
 
-      /* Respect reduced-motion */
+      /* Reduced motion */
       @media (prefers-reduced-motion: reduce) {
-        .aurora, .sparkle, .spinner { animation: none !important; }
+        .aurora, .sparkle, .spinner, .pulse-dot { animation: none !important; }
       }
     `}</style>
   );
@@ -743,13 +888,13 @@ function GlobalStyles() {
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "13px 14px 13px 40px",
-  background: "rgba(255,255,255,0.92)",
-  border: "1px solid rgba(220,30,60,0.12)",
+  background: "rgba(255,255,255,0.95)",
+  border: "1px solid rgba(26,10,20,0.1)",
   borderRadius: 12,
   fontSize: 14,
   color: "#1a0a14",
   outline: "none",
   fontFamily: "inherit",
   transition: "border-color 0.2s, box-shadow 0.2s, background 0.2s",
-  boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.03), inset 0 1px 2px rgba(0,0,0,0.02)",
 };
