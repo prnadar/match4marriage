@@ -63,23 +63,37 @@ def generate_photo_upload_signature(
     """
     Generate signed upload parameters for direct client -> Cloudinary photo upload.
     Returns the data the client needs to POST multipart/form-data to Cloudinary.
+
+    Cloudinary's signature covers every custom parameter present in the
+    upload request (excluding `file`, `api_key`, `signature`, `resource_type`,
+    and `cloud_name`). Anything you sign here MUST appear in the client's
+    form POST — and nothing extra.
     """
     _configure_cloudinary()
 
     timestamp = int(time.time())
     file_id = uuid.uuid4().hex
+    # Cloudinary's `public_id` must NOT include the folder path when `folder`
+    # is also passed — Cloudinary concatenates them itself. Bug if you send
+    # both "folder=foo/bar" and "public_id=foo/bar/id": signature mismatch
+    # plus a duplicated folder in the stored path.
     folder = f"{settings.CLOUDINARY_UPLOAD_FOLDER}/{tenant_slug}/{user_id}/photos"
-    public_id = f"{folder}/{file_id}"
+    public_id = file_id  # just the filename portion; Cloudinary prepends folder/
+    full_public_id = f"{folder}/{public_id}"
 
+    # Sign ONLY the fields the client will POST. Order doesn't matter;
+    # cloudinary.utils.api_sign_request sorts alphabetically internally.
     params_to_sign = {
         "folder": folder,
         "public_id": public_id,
         "timestamp": timestamp,
-        "overwrite": False,
-        "resource_type": "image",
     }
-    signature = cloudinary.utils.api_sign_request(params_to_sign, settings.CLOUDINARY_API_SECRET)
-    secure_url = cloudinary.CloudinaryImage(public_id).build_url(secure=True, format=file_extension)
+    signature = cloudinary.utils.api_sign_request(
+        params_to_sign, settings.CLOUDINARY_API_SECRET
+    )
+    secure_url = cloudinary.CloudinaryImage(full_public_id).build_url(
+        secure=True, format=file_extension
+    )
 
     return {
         "upload_url": f"https://api.cloudinary.com/v1_1/{settings.CLOUDINARY_CLOUD_NAME}/image/upload",
@@ -87,11 +101,11 @@ def generate_photo_upload_signature(
         "timestamp": timestamp,
         "signature": signature,
         "folder": folder,
-        "public_id": public_id,
+        "public_id": public_id,       # short id — client must send this verbatim
         "cloud_name": settings.CLOUDINARY_CLOUD_NAME,
         "resource_type": "image",
         "url": secure_url,
-        "key": public_id,
+        "key": full_public_id,        # stored on our Profile row for later deletion
     }
 
 
