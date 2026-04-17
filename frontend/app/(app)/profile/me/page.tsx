@@ -289,6 +289,7 @@ export default function MyProfilePage() {
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string>("");
   const loadedRef = useRef(false);
@@ -322,6 +323,7 @@ export default function MyProfilePage() {
   const handleSubmitForReview = async () => {
     setSubmitting(true);
     setSubmitError(null);
+    setSubmitSuccess(false);
     try {
       // Make sure any pending edits are flushed before submitting.
       try { await handleSave("submit"); } catch { /* show the save error inline, but try to submit anyway */ }
@@ -330,6 +332,11 @@ export default function MyProfilePage() {
       if (p) {
         setVerifStatus(p.verification_status || "submitted");
         setRejectionReason(p.rejection_reason || null);
+        setSubmitSuccess(true);
+        // Auto-scroll to the banner so the feedback is always visible
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        // Clear the success banner after 6s
+        setTimeout(() => setSubmitSuccess(false), 6000);
       }
     } catch (err: any) {
       // ApiError carries a `detail` which may be a dict with `missing`
@@ -346,6 +353,8 @@ export default function MyProfilePage() {
       } else {
         setSubmitError(err?.message || "Could not submit.");
       }
+      // Scroll to top so the error banner is visible
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSubmitting(false);
     }
@@ -576,19 +585,68 @@ export default function MyProfilePage() {
             onClick={handleSubmitForReview}
             disabled={submitting}
             style={{
-              padding: "8px 16px", borderRadius: 6, border: "none",
-              background: "#7B2D3A", color: "#fff", cursor: "pointer", fontWeight: 600,
+              padding: "10px 20px", borderRadius: 10, border: "none",
+              background: submitting
+                ? "rgba(123,45,58,0.5)"
+                : "linear-gradient(135deg, #dc1e3c, #7B2D3A)",
+              color: "#fff", cursor: submitting ? "wait" : "pointer",
+              fontWeight: 600, fontSize: 13,
+              boxShadow: submitting ? "none" : "0 6px 18px rgba(220,30,60,0.28)",
+              display: "inline-flex", alignItems: "center", gap: 6,
+              whiteSpace: "nowrap",
             }}
           >
-            {submitting ? "Submitting…" : "Submit for verification"}
+            {submitting ? (
+              <>
+                <span style={{
+                  width: 12, height: 12, borderRadius: "50%",
+                  border: "2px solid rgba(255,255,255,0.3)",
+                  borderTopColor: "#fff",
+                  animation: "m4m-btn-spin 0.7s linear infinite",
+                }} />
+                Submitting…
+              </>
+            ) : (
+              <>Submit for verification →</>
+            )}
           </button>
         )}
       </div>
       {submitError && (
-        <div style={{ padding: "10px 14px", background: "#ffe9ec", color: "#7B2D3A", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
-          {submitError}
+        <div style={{
+          padding: "14px 16px",
+          background: "#fff4e0",
+          border: "1px solid rgba(200,144,32,0.35)",
+          borderRadius: 10, marginBottom: 16, fontSize: 13,
+          color: "#7B2D3A",
+          display: "flex", gap: 10, alignItems: "flex-start",
+        }}>
+          <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+          <div>
+            <strong style={{ color: "#7B2D3A" }}>Can&apos;t submit yet.</strong>{" "}
+            {submitError}
+          </div>
         </div>
       )}
+      {submitSuccess && (
+        <div style={{
+          padding: "14px 16px",
+          background: "#e8f5e9",
+          border: "1px solid rgba(92,122,82,0.35)",
+          borderRadius: 10, marginBottom: 16, fontSize: 13,
+          color: "#3F5937",
+          display: "flex", gap: 10, alignItems: "flex-start",
+        }}>
+          <span style={{ fontSize: 16, flexShrink: 0 }}>✅</span>
+          <div>
+            <strong style={{ color: "#3F5937" }}>Submitted for review.</strong>{" "}
+            We&apos;ll notify you once the team has looked at it.
+          </div>
+        </div>
+      )}
+      <style jsx>{`
+        @keyframes m4m-btn-spin { to { transform: rotate(360deg); } }
+      `}</style>
 
       <div style={{
         display: "grid",
