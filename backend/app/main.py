@@ -19,7 +19,11 @@ from app.core.rate_limit import limiter  # shared Redis-backed Limiter
 from app.core.redis import close_redis
 from app.core.tenancy import TenantMiddleware
 from app.models import *  # noqa: F401,F403 — register all models with Alembic
-from app.routers import admin, auth, chat, health, matches, notifications, profile, reports
+from app.routers import (
+    admin, admin_cms, admin_payment_gateway, admin_payments, admin_pricing,
+    admin_settings, auth, chat, enquiries, health, matches, notifications,
+    profile, reports,
+)
 # subscriptions router disabled for launch (razorpay/stripe deps removed)
 
 settings = get_settings()
@@ -82,6 +86,11 @@ async def _ensure_verification_columns() -> None:
         # Optimistic locking + rejection history on profiles
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_rejection_reason TEXT",
+        # Appearance — extends site_settings (PR-A7)
+        "ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)",
+        "ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS favicon_url VARCHAR(500)",
+        "ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS brand_primary VARCHAR(9)",
+        "ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS brand_accent VARCHAR(9)",
     ]
     async with engine.begin() as conn:
         for s in stmts:
@@ -175,6 +184,12 @@ PREFIX = settings.API_PREFIX
 app.include_router(auth.router, prefix=PREFIX)
 app.include_router(profile.router, prefix=PREFIX)
 app.include_router(admin.router, prefix=PREFIX)
+app.include_router(admin_payments.router, prefix=PREFIX)
+app.include_router(admin_pricing.router, prefix=PREFIX)
+app.include_router(admin_settings.router, prefix=PREFIX)
+app.include_router(admin_cms.router, prefix=PREFIX)
+app.include_router(admin_payment_gateway.router, prefix=PREFIX)
+app.include_router(enquiries.router, prefix=PREFIX)
 app.include_router(matches.router, prefix=PREFIX)
 app.include_router(chat.router, prefix=PREFIX)
 app.include_router(reports.router, prefix=PREFIX)
