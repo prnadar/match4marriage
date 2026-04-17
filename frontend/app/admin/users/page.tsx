@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Search, X, Loader2, ChevronLeft, ChevronRight, AlertTriangle, Users as UsersIcon } from "lucide-react";
-import { PageShell } from "@/components/admin/PageShell";
+import { motion } from "framer-motion";
+import { Search, X, ChevronLeft, ChevronRight, AlertTriangle, Users as UsersIcon } from "lucide-react";
+import { PageShell, GlassCard, fadeUp } from "@/components/admin/PageShell";
 import { adminApi, ApiError } from "@/lib/api";
 
 interface AdminUserRow {
@@ -34,7 +35,7 @@ type Filter = "all" | "active" | "suspended" | "deleted" | "verified" | "pending
 const FILTERS: Array<{ key: Filter; label: string }> = [
   { key: "all",       label: "All" },
   { key: "active",    label: "Active" },
-  { key: "pending",   label: "Pending verification" },
+  { key: "pending",   label: "Pending" },
   { key: "verified",  label: "Verified" },
   { key: "suspended", label: "Suspended" },
   { key: "deleted",   label: "Deleted" },
@@ -51,9 +52,8 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Debounce search
   useEffect(() => {
-    const t = setTimeout(() => setQ(qLive), 300);
+    const t = setTimeout(() => setQ(qLive), 250);
     return () => clearTimeout(t);
   }, [qLive]);
 
@@ -78,8 +78,6 @@ export default function AdminUsersPage() {
   }, [q, filter, page, limit]);
 
   useEffect(() => { load(); }, [load]);
-
-  // Reset to page 1 when filter or query changes
   useEffect(() => { setPage(1); }, [filter, q]);
 
   const pageCount = Math.max(1, Math.ceil(total / limit));
@@ -87,216 +85,210 @@ export default function AdminUsersPage() {
   return (
     <PageShell
       title="Users"
-      subtitle={`${total.toLocaleString()} user${total === 1 ? "" : "s"}`}
+      subtitle={`${total.toLocaleString()} user${total === 1 ? "" : "s"} · tenant scoped`}
     >
       {/* Search + filters */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 8,
-          background: "#fff", border: "1px solid rgba(220,30,60,0.15)",
-          borderRadius: 10, padding: "8px 12px", width: 360, maxWidth: "100%",
-        }}>
-          <Search style={{ width: 16, height: 16, color: "#aaa" }} />
+      <motion.div variants={fadeUp} style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={searchBoxStyle}>
+          <Search style={{ width: 15, height: 15, color: "#aaa" }} />
           <input
             type="text"
             placeholder="Search name, email, phone…"
             value={qLive}
             onChange={(e) => setQLive(e.target.value)}
-            style={{ flex: 1, border: "none", outline: "none", fontSize: 14, color: "#1a0a14", background: "transparent" }}
+            style={searchInputStyle}
           />
           {qLive && (
-            <button onClick={() => setQLive("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#aaa" }}>
+            <button onClick={() => setQLive("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#aaa", display: "flex" }}>
               <X style={{ width: 14, height: 14 }} />
             </button>
           )}
         </div>
 
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 2, flexWrap: "wrap", background: "rgba(255,255,255,0.6)", padding: 3, borderRadius: 10, border: "1px solid rgba(220,30,60,0.08)", backdropFilter: "blur(6px)" }}>
           {FILTERS.map(({ key, label }) => {
             const active = filter === key;
             return (
               <button
                 key={key}
                 onClick={() => setFilter(key)}
-                style={{
-                  padding: "7px 12px", borderRadius: 8, border: "none",
-                  background: active ? "rgba(220,30,60,0.08)" : "transparent",
-                  color: active ? "#dc1e3c" : "#666",
-                  fontWeight: active ? 600 : 500,
-                  fontSize: 13, cursor: "pointer",
-                }}
+                style={{ position: "relative", padding: "7px 14px", borderRadius: 8, border: "none", background: "transparent", fontSize: 12, fontWeight: active ? 600 : 500, color: active ? "#fff" : "#666", cursor: "pointer", zIndex: 1 }}
               >
+                {active && (
+                  <motion.span
+                    layoutId="user-filter-pill"
+                    transition={{ type: "spring", stiffness: 380, damping: 28 }}
+                    style={{
+                      position: "absolute", inset: 0,
+                      background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
+                      borderRadius: 8,
+                      boxShadow: "0 4px 12px rgba(220,30,60,0.3)",
+                      zIndex: -1,
+                    }}
+                  />
+                )}
                 {label}
               </button>
             );
           })}
         </div>
-      </div>
+      </motion.div>
 
       {/* Table */}
-      <div style={{
-        background: "#fff", border: "1px solid rgba(220,30,60,0.08)",
-        borderRadius: 12, overflow: "hidden",
-      }}>
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)",
-          background: "#fafafa",
-          borderBottom: "1px solid rgba(0,0,0,0.06)",
-          padding: "10px 16px",
-          fontSize: 11, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.06em",
-        }}>
-          <div>User</div>
-          <div>Contact</div>
-          <div>Location</div>
-          <div>Status</div>
-          <div>Trust</div>
-          <div>Joined</div>
-        </div>
+      <motion.div variants={fadeUp}>
+        <GlassCard padding={0}>
+          <div style={tableHeadStyle}>
+            <div>User</div>
+            <div>Contact</div>
+            <div>Location</div>
+            <div>Status</div>
+            <div>Trust</div>
+            <div>Joined</div>
+          </div>
 
-        {loading ? (
-          <div style={{ padding: 40, textAlign: "center", color: "#999" }}>
-            <Loader2 style={{ width: 20, height: 20, animation: "spin 1s linear infinite", margin: "0 auto 10px", display: "block" }} />
-            Loading…
-          </div>
-        ) : error ? (
-          <div style={{ padding: 20, background: "#ffe9ec", color: "#7B2D3A", fontSize: 13 }}>
-            <AlertTriangle style={{ width: 14, height: 14, display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} />
-            {error}
-          </div>
-        ) : items.length === 0 ? (
-          <div style={{ padding: "50px 20px", textAlign: "center", color: "#999" }}>
-            <UsersIcon style={{ width: 32, height: 32, color: "#ddd", margin: "0 auto 12px", display: "block" }} />
-            <p style={{ fontSize: 13, margin: 0 }}>{q ? `No users matching "${q}"` : "No users in this category."}</p>
-          </div>
-        ) : (
-          items.map((u) => <UserRow key={u.id} user={u} />)
-        )}
-      </div>
+          {loading ? (
+            <div style={{ padding: 10 }}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="m4m-shimmer" style={{ height: 58, margin: "6px 8px", borderRadius: 10 }} />
+              ))}
+            </div>
+          ) : error ? (
+            <div style={{ padding: 20, color: "#a0153c", fontSize: 13 }}>
+              <AlertTriangle style={{ width: 14, height: 14, display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} />
+              {error}
+            </div>
+          ) : items.length === 0 ? (
+            <div style={{ padding: "60px 20px", textAlign: "center", color: "#999" }}>
+              <UsersIcon style={{ width: 36, height: 36, color: "#e5e5e5", margin: "0 auto 12px", display: "block" }} />
+              <p style={{ fontSize: 13, margin: 0 }}>{q ? `No users matching "${q}"` : "No users in this category."}</p>
+            </div>
+          ) : (
+            items.map((u, i) => <UserRow key={u.id} user={u} index={i} />)
+          )}
+        </GlassCard>
+      </motion.div>
 
-      {/* Pagination */}
       {pageCount > 1 && (
-        <div style={{ marginTop: 16, display: "flex", justifyContent: "center", alignItems: "center", gap: 8 }}>
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            style={paginationBtn(page <= 1)}
-          >
+        <motion.div variants={fadeUp} style={{ marginTop: 16, display: "flex", justifyContent: "center", alignItems: "center", gap: 10 }}>
+          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} style={paginationBtn(page <= 1)}>
             <ChevronLeft style={{ width: 14, height: 14 }} /> Prev
           </button>
           <span style={{ fontSize: 13, color: "#666" }}>
-            Page {page} of {pageCount}
+            Page <strong style={{ color: "#1a0a14" }}>{page}</strong> of {pageCount}
           </span>
-          <button
-            onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-            disabled={page >= pageCount}
-            style={paginationBtn(page >= pageCount)}
-          >
+          <button onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount} style={paginationBtn(page >= pageCount)}>
             Next <ChevronRight style={{ width: 14, height: 14 }} />
           </button>
-        </div>
+        </motion.div>
       )}
-
-      <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </PageShell>
   );
 }
 
-function UserRow({ user }: { user: AdminUserRow }) {
+function UserRow({ user, index }: { user: AdminUserRow; index: number }) {
   const name = [user.first_name, user.last_name].filter(Boolean).join(" ") || "(unnamed)";
   const location = [user.city, user.country].filter(Boolean).join(", ") || "—";
   const joined = user.created_at ? formatShort(user.created_at) : "—";
+  const ring = user.verification_status === "approved"
+    ? "linear-gradient(135deg, #8DB870, #5C7A52)"
+    : user.verification_status === "submitted"
+    ? "linear-gradient(135deg, #E8C04B, #C89020)"
+    : "linear-gradient(135deg, #dc1e3c, #a0153c)";
 
   return (
-    <Link
-      href={`/admin/users/${user.id}`}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)",
-        padding: "12px 16px",
-        borderBottom: "1px solid rgba(0,0,0,0.04)",
-        alignItems: "center",
-        textDecoration: "none", color: "inherit",
-        transition: "background 0.12s",
-      }}
-      onMouseEnter={(e) => (e.currentTarget as HTMLAnchorElement).style.background = "rgba(220,30,60,0.025)"}
-      onMouseLeave={(e) => (e.currentTarget as HTMLAnchorElement).style.background = "transparent"}
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(0.6, index * 0.02), duration: 0.28 }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: "50%",
-          background: user.primary_photo_url
-            ? `center / cover no-repeat url(${user.primary_photo_url})`
-            : "linear-gradient(135deg,#dc1e3c,#a0153c)",
-          color: "#fff", fontSize: 13, fontWeight: 700,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          flexShrink: 0,
-        }}>
-          {!user.primary_photo_url && (name[0]?.toUpperCase() || "?")}
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a14", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
-          <div style={{ fontSize: 11, color: "#888", textTransform: "capitalize" }}>
-            {user.religion || "—"}{user.occupation ? ` · ${user.occupation}` : ""}
+      <Link
+        href={`/admin/users/${user.id}`}
+        style={tableRowStyle}
+        onMouseEnter={(e) => {
+          const el = e.currentTarget as HTMLAnchorElement;
+          el.style.background = "rgba(220,30,60,0.03)";
+        }}
+        onMouseLeave={(e) => {
+          const el = e.currentTarget as HTMLAnchorElement;
+          el.style.background = "transparent";
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+          <div style={{ width: 40, height: 40, padding: 2, borderRadius: "50%", background: ring, flexShrink: 0 }}>
+            <div style={{
+              width: "100%", height: "100%", borderRadius: "50%",
+              background: user.primary_photo_url
+                ? `center / cover no-repeat url(${user.primary_photo_url})`
+                : "linear-gradient(135deg,#dc1e3c,#a0153c)",
+              color: "#fff", fontSize: 13, fontWeight: 700,
+              display: "grid", placeItems: "center",
+              border: "2px solid #fff",
+            }}>
+              {!user.primary_photo_url && (name[0]?.toUpperCase() || "?")}
+            </div>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a14", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+            <div style={{ fontSize: 11, color: "#888", textTransform: "capitalize" }}>
+              {user.religion || "—"}{user.occupation ? ` · ${user.occupation}` : ""}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div style={{ fontSize: 12, color: "#555", overflow: "hidden" }}>
-        {user.email ? (
-          <div title={user.email} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {user.email}
-            {user.is_email_verified && <span title="Email verified" style={{ color: "#5C7A52", marginLeft: 4 }}>✓</span>}
-          </div>
-        ) : null}
-        {user.phone ? (
-          <div style={{ color: "#888" }}>
-            {user.phone}
-            {user.is_phone_verified && <span title="Phone verified" style={{ color: "#5C7A52", marginLeft: 4 }}>✓</span>}
-          </div>
-        ) : null}
-        {!user.email && !user.phone && <span>—</span>}
-      </div>
+        <div style={{ fontSize: 12, color: "#555", overflow: "hidden" }}>
+          {user.email ? (
+            <div title={user.email} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {user.email}
+              {user.is_email_verified && <span title="Email verified" style={{ color: "#5C7A52", marginLeft: 4 }}>✓</span>}
+            </div>
+          ) : null}
+          {user.phone ? (
+            <div style={{ color: "#888" }}>
+              {user.phone}
+              {user.is_phone_verified && <span title="Phone verified" style={{ color: "#5C7A52", marginLeft: 4 }}>✓</span>}
+            </div>
+          ) : null}
+          {!user.email && !user.phone && <span>—</span>}
+        </div>
 
-      <div style={{ fontSize: 12, color: "#666" }}>{location}</div>
+        <div style={{ fontSize: 12, color: "#666" }}>{location}</div>
 
-      <div>
-        <StatusChip user={user} />
-      </div>
+        <div><StatusChip user={user} /></div>
 
-      <div>
-        <TrustBar value={user.trust_score} />
-      </div>
+        <div><TrustBar value={user.trust_score} /></div>
 
-      <div style={{ fontSize: 12, color: "#888" }}>{joined}</div>
-    </Link>
+        <div style={{ fontSize: 12, color: "#888" }}>{joined}</div>
+      </Link>
+    </motion.div>
   );
 }
 
 function StatusChip({ user }: { user: AdminUserRow }) {
-  let label = "Active";
-  let color = "#5C7A52"; let bg = "rgba(92,122,82,0.12)";
+  let label = "Active", color = "#3F5937", bg = "rgba(92,122,82,0.12)";
   if (user.deleted_at) { label = "Deleted"; color = "#666"; bg = "rgba(0,0,0,0.06)"; }
   else if (!user.is_active) { label = "Suspended"; color = "#a0153c"; bg = "rgba(220,30,60,0.08)"; }
-  else if (user.verification_status === "approved") { label = "Verified"; color = "#1e4bc8"; bg = "rgba(30,75,200,0.06)"; }
-  else if (user.verification_status === "submitted") { label = "Pending"; color = "#9A6B00"; bg = "rgba(200,144,32,0.12)"; }
+  else if (user.verification_status === "approved") { label = "Verified"; color = "#2544a8"; bg = "rgba(90,120,230,0.08)"; }
+  else if (user.verification_status === "submitted") { label = "Pending"; color = "#8A5F00"; bg = "rgba(200,144,32,0.14)"; }
   return (
     <span style={{
-      fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em",
-      padding: "3px 8px", borderRadius: 999, background: bg, color,
+      fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
+      padding: "4px 9px", borderRadius: 999, background: bg, color,
     }}>{label}</span>
   );
 }
 
 function TrustBar({ value }: { value: number }) {
   const pct = Math.max(0, Math.min(100, value));
+  const color = pct >= 60 ? "#5C7A52" : pct >= 40 ? "#C89020" : "#dc1e3c";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <div style={{ flex: 1, height: 5, background: "rgba(0,0,0,0.06)", borderRadius: 3, overflow: "hidden", minWidth: 40 }}>
-        <div style={{
-          width: `${pct}%`, height: "100%",
-          background: pct >= 60 ? "#5C7A52" : pct >= 40 ? "#C89020" : "#dc1e3c",
-        }} />
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          style={{ height: "100%", background: color }}
+        />
       </div>
       <span style={{ fontSize: 11, color: "#666", fontWeight: 600, minWidth: 24, textAlign: "right" }}>{value}</span>
     </div>
@@ -313,14 +305,50 @@ function formatShort(iso: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
 }
 
+const searchBoxStyle: React.CSSProperties = {
+  display: "flex", alignItems: "center", gap: 8,
+  background: "rgba(255,255,255,0.85)",
+  border: "1px solid rgba(220,30,60,0.12)",
+  borderRadius: 12, padding: "9px 14px", width: 340, maxWidth: "100%",
+  backdropFilter: "blur(8px)",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
+};
+
+const searchInputStyle: React.CSSProperties = {
+  flex: 1, border: "none", outline: "none",
+  fontSize: 13.5, color: "#1a0a14", background: "transparent",
+  fontFamily: "inherit",
+};
+
+const tableHeadStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)",
+  background: "rgba(26,10,20,0.03)",
+  borderBottom: "1px solid rgba(0,0,0,0.05)",
+  padding: "10px 18px",
+  fontSize: 11, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.08em",
+};
+
+const tableRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)",
+  padding: "12px 18px",
+  borderBottom: "1px solid rgba(0,0,0,0.04)",
+  alignItems: "center",
+  textDecoration: "none", color: "inherit",
+  transition: "background 0.12s",
+};
+
 function paginationBtn(disabled: boolean): React.CSSProperties {
   return {
-    padding: "7px 12px", borderRadius: 8,
-    background: "#fff", border: "1px solid rgba(220,30,60,0.15)",
+    padding: "8px 14px", borderRadius: 10,
+    background: "rgba(255,255,255,0.85)", border: "1px solid rgba(220,30,60,0.15)",
     color: disabled ? "#ccc" : "#1a0a14",
     fontSize: 13, fontWeight: 600,
     display: "inline-flex", alignItems: "center", gap: 4,
     cursor: disabled ? "not-allowed" : "pointer",
     opacity: disabled ? 0.5 : 1,
+    backdropFilter: "blur(6px)",
+    fontFamily: "inherit",
   };
 }

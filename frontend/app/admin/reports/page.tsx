@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Flag, Loader2, AlertTriangle, User, Calendar, Inbox, CheckCircle2, XCircle, X } from "lucide-react";
-import { PageShell, Button } from "@/components/admin/PageShell";
+import { motion } from "framer-motion";
+import { Flag, AlertTriangle, Calendar, Inbox, CheckCircle2, XCircle, X } from "lucide-react";
+import { PageShell, Button, GlassCard, fadeUp } from "@/components/admin/PageShell";
 import { adminApi, ApiError } from "@/lib/api";
 import { useToast } from "@/components/admin/Toast";
 
@@ -90,7 +91,7 @@ export default function AdminReportsPage() {
   return (
     <PageShell title="Reports" subtitle="User reports that need admin review.">
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 16 }}>
+      <motion.div variants={fadeUp} style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.75)", padding: 3, borderRadius: 12, border: "1px solid rgba(220,30,60,0.08)", backdropFilter: "blur(6px)", marginBottom: 16, flexWrap: "wrap", width: "fit-content" }}>
         {TABS.map(({ key, label }) => {
           const active = filter === key;
           return (
@@ -98,44 +99,66 @@ export default function AdminReportsPage() {
               key={key}
               onClick={() => setFilter(key)}
               style={{
-                padding: "7px 12px", borderRadius: 8, border: "none",
-                background: active ? "rgba(220,30,60,0.08)" : "transparent",
-                color: active ? "#dc1e3c" : "#666",
+                position: "relative", padding: "7px 14px", borderRadius: 9, border: "none",
+                background: "transparent",
+                color: active ? "#fff" : "#666",
                 fontWeight: active ? 600 : 500,
-                fontSize: 13, cursor: "pointer",
+                fontSize: 12.5, cursor: "pointer", zIndex: 1,
+                fontFamily: "inherit",
               }}
             >
+              {active && (
+                <motion.span
+                  layoutId="report-tab-pill"
+                  transition={{ type: "spring", stiffness: 380, damping: 28 }}
+                  style={{
+                    position: "absolute", inset: 0,
+                    background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
+                    borderRadius: 9,
+                    boxShadow: "0 4px 12px rgba(220,30,60,0.3)",
+                    zIndex: -1,
+                  }}
+                />
+              )}
               {label}
             </button>
           );
         })}
-      </div>
+      </motion.div>
 
-      <div style={{ display: "grid", gridTemplateColumns: selected ? "1fr 1fr" : "1fr", gap: 16, alignItems: "start" }}>
+      <motion.div variants={fadeUp} className="reports-grid" style={{ display: "grid", gridTemplateColumns: selected ? "1fr 1fr" : "1fr", gap: 16, alignItems: "start" }}>
 
         {/* List */}
-        <div style={{ background: "#fff", border: "1px solid rgba(220,30,60,0.08)", borderRadius: 12, overflow: "hidden" }}>
+        <GlassCard padding={0}>
           {loading ? (
-            <div style={{ padding: 40, textAlign: "center", color: "#999" }}>
-              <Loader2 style={{ width: 20, height: 20, animation: "spin 1s linear infinite", margin: "0 auto 10px", display: "block" }} />
+            <div style={{ padding: 10 }}>
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="m4m-shimmer" style={{ height: 76, margin: "6px 10px", borderRadius: 12 }} />
+              ))}
             </div>
           ) : error ? (
-            <div style={{ padding: 20, background: "#ffe9ec", color: "#7B2D3A", fontSize: 13 }}>
+            <div style={{ padding: 20, color: "#a0153c", fontSize: 13 }}>
               <AlertTriangle style={{ width: 14, height: 14, display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} /> {error}
             </div>
           ) : items.length === 0 ? (
-            <div style={{ padding: "50px 20px", textAlign: "center", color: "#999" }}>
-              <Inbox style={{ width: 32, height: 32, color: "#ddd", margin: "0 auto 12px", display: "block" }} />
+            <div style={{ padding: "60px 20px", textAlign: "center", color: "#999" }}>
+              <Inbox style={{ width: 36, height: 36, color: "#e5e5e5", margin: "0 auto 12px", display: "block" }} />
               <p style={{ fontSize: 13, margin: 0 }}>No reports in this category.</p>
             </div>
           ) : items.map((r) => (
             <ReportRowEl key={r.id} report={r} active={selected?.id === r.id} onClick={() => { setSelected(r); setNotes(r.admin_notes || ""); setAction(r.action_taken || ""); }} />
           ))}
-        </div>
+        </GlassCard>
 
         {/* Detail panel */}
         {selected && (
-          <div style={{ background: "#fff", border: "1px solid rgba(220,30,60,0.08)", borderRadius: 12, padding: 20, position: "sticky", top: 96 }}>
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ type: "spring", stiffness: 260, damping: 26 }}
+            style={{ position: "sticky", top: 96 }}
+          >
+            <GlassCard padding={22}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <h2 style={{ fontSize: 16, fontWeight: 600, color: "#1a0a14", margin: 0 }}>Investigate</h2>
               <button onClick={() => setSelected(null)} style={{ background: "rgba(0,0,0,0.04)", border: "none", borderRadius: 8, width: 28, height: 28, cursor: "pointer" }}>
@@ -211,11 +234,18 @@ export default function AdminReportsPage() {
                 Mark under review
               </Button>
             </div>
-          </div>
+            </GlassCard>
+          </motion.div>
         )}
-      </div>
+      </motion.div>
 
-      <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style jsx>{`
+        @media (max-width: 900px) {
+          :global(.reports-grid) {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </PageShell>
   );
 }
@@ -226,15 +256,21 @@ function ReportRowEl({ report, active, onClick }: { report: ReportRow; active: b
       onClick={onClick}
       style={{
         width: "100%", textAlign: "left",
-        background: active ? "rgba(220,30,60,0.04)" : "transparent",
+        background: active ? "rgba(220,30,60,0.05)" : "transparent",
         border: "none",
         borderLeft: active ? "3px solid #dc1e3c" : "3px solid transparent",
         borderBottom: "1px solid rgba(0,0,0,0.04)",
         padding: "14px 18px", cursor: "pointer",
+        transition: "background 0.15s",
+        fontFamily: "inherit",
       }}
+      onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(220,30,60,0.03)"; }}
+      onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-        <Flag style={{ width: 13, height: 13, color: "#dc1e3c" }} />
+        <div style={{ width: 22, height: 22, borderRadius: 7, background: "rgba(220,30,60,0.08)", display: "grid", placeItems: "center" }}>
+          <Flag style={{ width: 11, height: 11, color: "#dc1e3c" }} />
+        </div>
         <span style={{ fontSize: 13, fontWeight: 600, color: "#1a0a14", textTransform: "capitalize" }}>
           {report.category?.replace(/_/g, " ")}
         </span>
