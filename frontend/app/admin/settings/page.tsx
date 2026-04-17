@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, AlertTriangle, ShieldCheck, Plus, Trash2, Lock } from "lucide-react";
-import { PageShell, Button } from "@/components/admin/PageShell";
+import { motion } from "framer-motion";
+import { AlertTriangle, ShieldCheck, Plus, Trash2, Lock } from "lucide-react";
+import { PageShell, Button, GlassCard, fadeUp } from "@/components/admin/PageShell";
 import { adminApi, ApiError } from "@/lib/api";
 import { useToast } from "@/components/admin/Toast";
 
@@ -98,10 +99,10 @@ export default function AdminSettingsPage() {
   if (loading) {
     return (
       <PageShell title="Settings">
-        <div style={{ padding: 60, textAlign: "center", color: "#999" }}>
-          <Loader2 style={{ width: 22, height: 22, animation: "spin 1s linear infinite", margin: "0 auto 10px", display: "block" }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="m4m-shimmer" style={{ height: 80, borderRadius: 16 }} />
+          <div className="m4m-shimmer" style={{ height: 220, borderRadius: 16 }} />
         </div>
-        <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </PageShell>
     );
   }
@@ -109,12 +110,16 @@ export default function AdminSettingsPage() {
   return (
     <PageShell title="Settings" subtitle="Admin identities and platform configuration.">
       {error && (
-        <div style={{ padding: 14, background: "#ffe9ec", color: "#7B2D3A", borderRadius: 10, fontSize: 13, marginBottom: 16 }}>
+        <motion.div
+          variants={fadeUp}
+          style={{ padding: 14, background: "rgba(220,30,60,0.06)", color: "#a0153c", borderRadius: 12, fontSize: 13, marginBottom: 16, border: "1px solid rgba(220,30,60,0.12)" }}
+        >
           <AlertTriangle style={{ width: 14, height: 14, display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} /> {error}
-        </div>
+        </motion.div>
       )}
 
       {/* Current user */}
+      <motion.div variants={fadeUp} style={{ marginBottom: 14 }}>
       <Card title="Signed in as" icon={ShieldCheck}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ fontSize: 14, color: "#1a0a14", fontWeight: 500 }}>{me?.email || "—"}</div>
@@ -132,9 +137,10 @@ export default function AdminSettingsPage() {
           </div>
         </div>
       </Card>
+      </motion.div>
 
       {/* Admin users */}
-      <div style={{ marginTop: 16 }}>
+      <motion.div variants={fadeUp}>
         <Card
           title="Admin accounts"
           icon={ShieldCheck}
@@ -225,9 +231,7 @@ export default function AdminSettingsPage() {
             </form>
           )}
         </Card>
-      </div>
-
-      <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </motion.div>
     </PageShell>
   );
 }
@@ -240,17 +244,19 @@ const inputStyle: React.CSSProperties = {
 
 function Card({ icon: Icon, title, action, children }: { icon: any; title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div style={{ background: "#fff", border: "1px solid rgba(220,30,60,0.08)", borderRadius: 14, padding: 18 }}>
+    <GlassCard>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Icon style={{ width: 14, height: 14, color: "#dc1e3c" }} />
-          <h3 style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#555", margin: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 9, background: "rgba(220,30,60,0.08)", display: "grid", placeItems: "center" }}>
+            <Icon style={{ width: 14, height: 14, color: "#dc1e3c" }} />
+          </div>
+          <h3 style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#555", margin: 0 }}>
             {title}
           </h3>
         </div>
         {action}
       </div>
       {children}
-    </div>
+    </GlassCard>
   );
 }
