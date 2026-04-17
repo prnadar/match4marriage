@@ -116,21 +116,91 @@ async def _ensure_schema() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
 
+# Module-level guard so we only run the boot DDL phase once per process. On
+# Vercel's serverless runtime each lambda instance gets a fresh module load,
+# so this still runs on every *cold* start — but never twice within the same
+# warm container, which is the common case.
+_boot_ddl_done = False
+
+# Stable, app-wide key for pg_advisory_lock. Random 64-bit int chosen once.
+_BOOT_DDL_LOCK_KEY = 7427261984412719104
+
+
+async def _run_boot_ddl_serialized() -> None:
+    """
+    Run the boot-time DDL (create_all + schema-guard ALTERs + tenant seed)
+    serialized across concurrent processes via a Postgres advisory lock.
+
+    Without this guard, two cold-booting Vercel lambdas can both try to take
+    an AccessExclusiveLock on the same table at the same time, which deadlocks
+    with any concurrent SELECT request that holds an AccessShareLock. The
+    advisory lock makes parallel cold-boots queue instead of fighting.
+
+    Idempotent: every DDL statement in here is `IF NOT EXISTS` / `create_all`,
+    so running once or many times is safe.
+    """
+    global _boot_ddl_done
+    if _boot_ddl_done:
+        return
+
+    from sqlalchemy import text
+
+    # AUTOCOMMIT so the advisory lock isn't trapped inside the same tx as the
+    # DDL statements (we want to release it via pg_advisory_unlock at the end).
+    async with engine.connect() as conn:
+        await conn.execution_options(isolation_level="AUTOCOMMIT")
+
+        # Try to grab the advisory lock with a short timeout. If we can't get
+        # it within ~5s, another instance is doing the work — skip and serve
+        # traffic. We'll still benefit from any ALTERs they applied because
+        # they're at the schema level, not per-process.
+        try:
+            await conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+        except Exception:
+            pass
+        try:
+            got_lock = (await conn.execute(
+                text("SELECT pg_try_advisory_lock(:k)"),
+                {"k": _BOOT_DDL_LOCK_KEY},
+            )).scalar()
+        except Exception as e:
+            logger.warning("boot_ddl_lock_acquire_failed", error=str(e))
+            got_lock = False
+
+        if not got_lock:
+            logger.info("boot_ddl_skipped_another_instance_holds_lock")
+            _boot_ddl_done = True
+            return
+
+        try:
+            try:
+                await _ensure_schema()
+            except Exception as e:
+                logger.warning("create_all_error", error=str(e))
+            try:
+                await _ensure_verification_columns()
+            except Exception as e:
+                logger.warning("schema_guard_error", error=str(e))
+            try:
+                await _ensure_default_tenant()
+            except Exception as e:
+                logger.warning("tenant_seed_error", error=str(e))
+        finally:
+            try:
+                await conn.execute(
+                    text("SELECT pg_advisory_unlock(:k)"),
+                    {"k": _BOOT_DDL_LOCK_KEY},
+                )
+            except Exception as e:
+                logger.warning("boot_ddl_lock_release_failed", error=str(e))
+
+    _boot_ddl_done = True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("startup", environment=settings.ENVIRONMENT, version=settings.APP_VERSION)
-    try:
-        await _ensure_schema()
-    except Exception as e:
-        logger.warning("create_all_error", error=str(e))
-    try:
-        await _ensure_verification_columns()
-    except Exception as e:
-        logger.warning("schema_guard_error", error=str(e))
-    try:
-        await _ensure_default_tenant()
-    except Exception as e:
-        logger.warning("tenant_seed_error", error=str(e))
+    await _run_boot_ddl_serialized()
     yield
     await close_redis()
     await engine.dispose()

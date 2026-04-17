@@ -93,30 +93,65 @@ async def _run_schema_guard_once(db: AsyncSession) -> None:
     AUTOCOMMIT connection off the engine — NOT on `db` — so a DDL error
     cannot poison the caller's request transaction.
 
+    Coordination: serialized cross-process via a Postgres advisory lock so
+    concurrent first-requests from different lambda instances don't race for
+    AccessExclusiveLock on the same table (which deadlocks with concurrent
+    SELECTs holding AccessShareLock — observed on Vercel).
+
     The `db` parameter is kept for API compatibility but unused.
     """
     global _schema_guard_ran
     if _schema_guard_ran:
         return
+    # Mark intent BEFORE we attempt the lock so concurrent in-process requests
+    # within this lambda don't all stack up at the lock.
     _schema_guard_ran = True
 
     from app.core.database import engine
 
+    # App-wide advisory lock key — distinct from the boot-DDL key in main.py.
+    GUARD_LOCK_KEY = 7427261984412719105
+
     try:
         async with engine.connect() as conn:
             await conn.execution_options(isolation_level="AUTOCOMMIT")
-            for s in _SCHEMA_GUARD_DDL:
+            try:
+                got_lock = (await conn.execute(
+                    sa_text("SELECT pg_try_advisory_lock(:k)"),
+                    {"k": GUARD_LOCK_KEY},
+                )).scalar()
+            except Exception as e:
+                logger.warning("schema_guard_lock_failed", error=str(e))
+                got_lock = False
+
+            if not got_lock:
+                # Another instance is doing the work — let it finish; our
+                # _schema_guard_ran flag is already set so we won't retry.
+                logger.info("schema_guard_skipped_another_instance_holds_lock")
+                return
+
+            try:
+                for s in _SCHEMA_GUARD_DDL:
+                    try:
+                        await conn.execute(sa_text(s))
+                    except Exception as e:
+                        logger.warning("schema_guard_stmt_failed", stmt=s, error=str(e))
+                for type_name, value in _SCHEMA_GUARD_ENUM_ADDITIONS:
+                    try:
+                        await conn.execute(sa_text(
+                            f"ALTER TYPE {type_name} ADD VALUE IF NOT EXISTS '{value}'"
+                        ))
+                    except Exception as e:
+                        logger.warning("schema_guard_enum_failed", type_name=type_name, value=value, error=str(e))
+            finally:
+                # Always release the advisory lock so other lambdas can proceed.
                 try:
-                    await conn.execute(sa_text(s))
+                    await conn.execute(
+                        sa_text("SELECT pg_advisory_unlock(:k)"),
+                        {"k": GUARD_LOCK_KEY},
+                    )
                 except Exception as e:
-                    logger.warning("schema_guard_stmt_failed", stmt=s, error=str(e))
-            for type_name, value in _SCHEMA_GUARD_ENUM_ADDITIONS:
-                try:
-                    await conn.execute(sa_text(
-                        f"ALTER TYPE {type_name} ADD VALUE IF NOT EXISTS '{value}'"
-                    ))
-                except Exception as e:
-                    logger.warning("schema_guard_enum_failed", type_name=type_name, value=value, error=str(e))
+                    logger.warning("schema_guard_unlock_failed", error=str(e))
     except Exception as e:
         logger.error("schema_guard_connect_failed", error=str(e))
 
