@@ -7,7 +7,18 @@ const BASE = process.env.NEXT_PUBLIC_API_URL || "";
 // cause the backend to crash trying to cast it to UUID.
 const RAW_TENANT = (process.env.NEXT_PUBLIC_TENANT_ID || "").toLowerCase();
 const ALLOWED_TENANTS = new Set(["bandhan", "match4marriage"]);
-const TENANT = ALLOWED_TENANTS.has(RAW_TENANT) ? RAW_TENANT : "bandhan";
+const TENANT = ALLOWED_TENANTS.has(RAW_TENANT) ? RAW_TENANT : "match4marriage";
+
+// Surface a useful diagnostic if the API URL was never configured. Loud once
+// per session, in dev only — production deploys should have this set in
+// Vercel env vars.
+if (typeof window !== "undefined" && !BASE && process.env.NODE_ENV !== "production") {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[m4m/api] NEXT_PUBLIC_API_URL is not set. All API calls will fail. " +
+    "Set it in .env.local for local dev, or in your Vercel project env vars."
+  );
+}
 
 export type ApiResponse<T = any> = { data: T; status: number };
 
@@ -34,7 +45,19 @@ async function request<T = any>(path: string, init: RequestInit = {}): Promise<A
   try {
     res = await fetch(`${BASE}${path}`, { ...init, headers });
   } catch (err: any) {
-    throw new ApiError(0, `Network error: ${err?.message || err}`);
+    // Translate the browser's generic "Failed to fetch" into something the
+    // user (and oncall) can act on. Three things commonly cause this:
+    //   1. NEXT_PUBLIC_API_URL is empty → the request goes to `/api/...`
+    //      relative, which Vercel can't serve.
+    //   2. The configured URL is unreachable (backend down, wrong host).
+    //   3. The configured URL is HTTP while the page is HTTPS (mixed content).
+    if (!BASE) {
+      throw new ApiError(
+        0,
+        "API URL is not configured. Set NEXT_PUBLIC_API_URL on the host (Vercel) and redeploy.",
+      );
+    }
+    throw new ApiError(0, `Cannot reach the server at ${BASE}. ${err?.message || err}`);
   }
 
   if (res.status === 401) {
