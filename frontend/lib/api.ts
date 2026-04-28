@@ -395,9 +395,10 @@ export const adminApi = {
 export const matchApi = {
   list: () => api.get("/api/v1/matches"),
   feed: () => api.get("/api/v1/matches/feed"),
+  /** Browse / discover profiles — backend mounts this on the *profile* router. */
   browseProfiles: (params?: Record<string, string | number>) => {
     const qs = params ? "?" + new URLSearchParams(params as Record<string, string>).toString() : "";
-    return api.get(`/api/v1/matches/browse${qs}`);
+    return api.get(`/api/v1/profile/browse${qs}`);
   },
   getDailyMatches: () => api.get("/api/v1/matches/daily"),
   getReceivedInterests: () => api.get("/api/v1/matches/interests/received"),
