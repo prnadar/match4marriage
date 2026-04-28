@@ -87,9 +87,11 @@ const config: Config = {
         },
       },
       fontFamily: {
-        display:     ["Playfair Display", "Georgia", "serif"],
+        display:     ["Fraunces", "Playfair Display", "Georgia", "serif"],
+        editorial:   ["Cormorant", "Playfair Display", "Georgia", "serif"],
+        script:      ["Great Vibes", "cursive"],
         devanagari:  ["Noto Serif Devanagari", "serif"],
-        body:        ["DM Sans", "system-ui", "sans-serif"],
+        body:        ["Inter", "system-ui", "-apple-system", "sans-serif"],
       },
       fontSize: {
         body: ["1rem", { lineHeight: "1.6" }],

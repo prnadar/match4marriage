@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { FileText, Building2, MapPin, Mail } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
 
@@ -168,7 +170,9 @@ export default function TermsPage() {
             marginBottom: "48px",
             display: "flex", gap: "12px", alignItems: "flex-start",
           }}>
-            <span style={{ fontSize: "20px", flexShrink: 0 }}>📋</span>
+            <span style={{ flexShrink: 0, color: "#dc1e3c", marginTop: 1 }}>
+              <FileText className="h-5 w-5" strokeWidth={1.6} />
+            </span>
             <p style={{ fontSize: "13px", color: "#555", lineHeight: 1.7, margin: 0 }}>
               Please read these Terms and Conditions carefully before using the Match4Marriage service. By registering or continuing to use our platform, you agree to be bound by these terms. If you have any questions, contact us at{" "}
               <a href="mailto:enquiry@match4marriage.com" style={{ color: "#dc1e3c", textDecoration: "none", fontWeight: 600 }}>enquiry@match4marriage.com</a>.
@@ -201,14 +205,16 @@ export default function TermsPage() {
                       padding: "24px",
                       marginTop: "8px",
                     }}>
-                      {[
-                        { icon: "🏢", label: "Company", value: "Match4Marriage Limited" },
-                        { icon: "📋", label: "Company No.", value: "15272378" },
-                        { icon: "📍", label: "Address", value: "282 Warwick Road, Solihull, England, B92 7AF" },
-                        { icon: "✉️", label: "Email", value: "enquiry@match4marriage.com", href: "mailto:enquiry@match4marriage.com" },
-                      ].map((item) => (
-                        <div key={item.label} style={{ display: "flex", gap: "16px", marginBottom: "14px", alignItems: "flex-start" }}>
-                          <span style={{ fontSize: "16px", flexShrink: 0, marginTop: "1px" }}>{item.icon}</span>
+                      {([
+                        { Icon: Building2, label: "Company",     value: "Match4Marriage Limited" },
+                        { Icon: FileText,  label: "Company No.", value: "15272378" },
+                        { Icon: MapPin,    label: "Address",     value: "282 Warwick Road, Solihull, England, B92 7AF" },
+                        { Icon: Mail,      label: "Email",       value: "enquiry@match4marriage.com", href: "mailto:enquiry@match4marriage.com" },
+                      ] as Array<{ Icon: LucideIcon; label: string; value: string; href?: string }>).map((item) => (
+                        <div key={item.label} style={{ display: "flex", gap: 14, marginBottom: 14, alignItems: "flex-start" }}>
+                          <span style={{ flexShrink: 0, marginTop: 1, color: "#dc1e3c" }}>
+                            <item.Icon className="h-4 w-4" strokeWidth={1.6} />
+                          </span>
                           <div>
                             <p style={{ fontSize: "11px", fontWeight: 700, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 2px" }}>{item.label}</p>
                             {item.href ? (

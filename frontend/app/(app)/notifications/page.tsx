@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Bell, Heart, MessageCircle, Shield, Star, CheckCheck, Settings, Trash2, Check, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Bell, Heart, MessageCircle, Shield, Star, CheckCheck, Settings, Trash2, Check, Loader2, AlertCircle } from "lucide-react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { notificationsApi } from "@/lib/api";
 
 type NotifType = "interest" | "message" | "match" | "trust" | "system";
 
@@ -77,33 +77,42 @@ export default function NotificationsPage() {
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [filter, setFilter] = useState<NotifType | "all">("all");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const res = await api.get("/notifications");
-        const data = res.data;
-        const list = Array.isArray(data) ? data : data?.results ?? data?.notifications ?? data?.data ?? [];
-        setNotifs(list.map(mapNotif));
-      } catch {
-        // API may not have notifications endpoint yet — show empty state
-        setNotifs([]);
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await notificationsApi.list(1, 50);
+      const data = res.data as any;
+      const list = data?.items ?? data?.results ?? data?.data?.items ?? data?.data ?? [];
+      setNotifs((Array.isArray(list) ? list : []).map(mapNotif));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not load notifications");
+      setNotifs([]);
+    } finally {
+      setLoading(false);
     }
-    load();
   }, []);
 
-  const markRead = (id: string) =>
+  useEffect(() => { load(); }, [load]);
+
+  const markRead = async (id: string) => {
     setNotifs((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
+    try { await notificationsApi.markRead(id); }
+    catch { /* optimistic — surface on next refresh if needed */ }
+  };
 
-  const markAllRead = () =>
+  const markAllRead = async () => {
     setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
+    try { await notificationsApi.markAllRead(); }
+    catch { /* optimistic */ }
+  };
 
-  const remove = (id: string) =>
+  const remove = async (id: string) => {
     setNotifs((prev) => prev.filter((n) => n.id !== id));
+    try { await notificationsApi.delete(id); }
+    catch { /* optimistic */ }
+  };
 
   const filtered = filter === "all" ? notifs : notifs.filter((n) => n.type === filter);
   const unreadCount = notifs.filter((n) => !n.read).length;
@@ -239,8 +248,23 @@ export default function NotificationsPage() {
           </div>
         )}
 
+        {/* Error */}
+        {!loading && error && (
+          <div className="rounded-3xl border border-rose-100/70 bg-white px-6 py-12 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
+            <AlertCircle className="mx-auto h-9 w-9 text-rose-700/60" />
+            <h3 className="font-display mt-3 text-[18px] font-semibold text-[#1a0a14]">Couldn't load notifications</h3>
+            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-[#6a5560]">{error}</p>
+            <button
+              onClick={load}
+              className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_20px_rgba(220,30,60,0.28)] hover:shadow-[0_10px_26px_rgba(220,30,60,0.38)]"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Notifications list */}
-        {!loading && (
+        {!loading && !error && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {filtered.length === 0 && (
               <div style={{ textAlign: "center", padding: "64px 0" }}>

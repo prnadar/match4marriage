@@ -3,19 +3,16 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  Gem, Mail, Phone, MessageCircle, MapPin, Lock, Handshake, Sparkles,
+  Star, Check, ChevronDown, ShieldCheck, BadgeCheck,
+} from "lucide-react";
 import { firebaseAuth } from "@/lib/firebase";
 import { profileApi } from "@/lib/api";
+import { CountryFlag, type CountryCode } from "@/components/ui/country-flag";
+import { FloatingHearts } from "@/components/ui/floating-hearts";
 
-/* ── Data ──────────────────────────────────────────────────────────── */
-
-const profiles = [
-  { name: "Priya S.", age: 26, profession: "Software Engineer", location: "Mumbai", religion: "Hindu", gender: "female", verified: true, premium: true },
-  { name: "Rahul M.", age: 29, profession: "Doctor", location: "Delhi", religion: "Hindu", gender: "male", verified: true, premium: false },
-  { name: "Ananya K.", age: 24, profession: "Architect", location: "Bangalore", religion: "Christian", gender: "female", verified: true, premium: true },
-  { name: "Vikram R.", age: 31, profession: "Business Owner", location: "Pune", religion: "Sikh", gender: "male", verified: true, premium: false },
-  { name: "Meera P.", age: 27, profession: "CA", location: "Chennai", religion: "Hindu", gender: "female", verified: true, premium: true },
-  { name: "Arjun N.", age: 28, profession: "Civil Engineer", location: "Hyderabad", religion: "Muslim", gender: "male", verified: true, premium: false },
-];
+/* ── Marketing content (curated testimonials, not user data) ──────────── */
 
 const stories = [
   {
@@ -50,19 +47,6 @@ const features = [
   { title: "Secure & GDPR Compliant", desc: "SSL encrypted, fully compliant with UK data protection standards" },
 ];
 
-
-const couples = [
-  { url: "/images/banner1.png", name: "Priya & Rahul" },
-  { url: "https://images.unsplash.com/photo-1519741497674-611481863552?w=800&q=90&auto=format&fit=crop", name: "Anjali & Suresh" },
-  { url: "https://images.unsplash.com/photo-1583939003579-730e3918a45a?w=800&q=90&auto=format&fit=crop", name: "Meera & Vikram" },
-  { url: "https://images.unsplash.com/photo-1606216794074-735e91aa2c92?w=800&q=90&auto=format&fit=crop", name: "Kavya & Arjun" },
-  { url: "https://images.unsplash.com/photo-1522673607200-164d1b6ce486?w=800&q=90&auto=format&fit=crop", name: "Divya & Rohit" },
-  { url: "https://images.unsplash.com/photo-1537633552985-df8429e8048b?w=800&q=90&auto=format&fit=crop", name: "Sneha & Kartik" },
-  { url: "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?w=800&q=90&auto=format&fit=crop", name: "Nisha & Dev" },
-  { url: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=90&auto=format&fit=crop", name: "Pooja & Arun" },
-];
-
-const filterTabs = ["All", "Hindu", "Christian", "Sikh", "Muslim"];
 
 /* ── Component ─────────────────────────────────────────────────────── */
 
@@ -126,12 +110,17 @@ export default function HomePage() {
     <div className="min-h-screen overflow-x-hidden font-poppins">
 
       {/* ── 1. Top Bar ───────────────────────────────────────────────── */}
-      <div className="w-full text-white text-sm py-2 px-4" style={{ backgroundColor: "#dc1e3c" }}>
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1">
-          <span>💍 Elite Indian Matrimony, Established in the UK 🇬🇧</span>
-          <div className="flex items-center gap-4 text-xs sm:text-sm">
-            <span>✉️ enquiry@match4marriage.com</span>
-          </div>
+      <div className="w-full text-white py-2 px-4" style={{ backgroundColor: "#dc1e3c" }}>
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1.5 text-[12.5px] tracking-[0.02em]">
+          <span className="inline-flex items-center gap-2">
+            <Gem className="h-3.5 w-3.5" strokeWidth={1.6} />
+            Elite Indian Matrimony — Established in the United Kingdom
+            <CountryFlag code="GB" rounded="sm" className="ml-0.5" />
+          </span>
+          <a href="mailto:enquiry@match4marriage.com" className="inline-flex items-center gap-1.5 text-white/95 hover:text-white">
+            <Mail className="h-3.5 w-3.5" strokeWidth={1.6} />
+            enquiry@match4marriage.com
+          </a>
         </div>
       </div>
 
@@ -343,7 +332,8 @@ export default function HomePage() {
           }}
         />
 
-        {/* Drifting petals */}
+        {/* Drifting petals + animated love hearts (premium hero motion) */}
+        <FloatingHearts count={14} density="balanced" />
         {[
           { left: "8%",  delay: "0s",    dur: "14s", scale: 1 },
           { left: "22%", delay: "3s",    dur: "17s", scale: 0.7 },
@@ -366,6 +356,35 @@ export default function HomePage() {
           />
         ))}
 
+        {/* Animated unity rings (SVG, top-right corner of hero) */}
+        <svg
+          aria-hidden
+          width="180" height="180" viewBox="0 0 180 180"
+          style={{ position: "absolute", top: "10%", right: "6%", zIndex: 4, opacity: 0.55, mixBlendMode: "screen" }}
+          className="hidden md:block drift"
+        >
+          <defs>
+            <linearGradient id="unityRingGradLeft" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#ffd87a" stopOpacity="0.0" />
+              <stop offset="50%" stopColor="#ffd87a" stopOpacity="0.9" />
+              <stop offset="100%" stopColor="#ffd87a" stopOpacity="0.0" />
+            </linearGradient>
+            <linearGradient id="unityRingGradRight" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#ffb5c5" stopOpacity="0.0" />
+              <stop offset="50%" stopColor="#ffb5c5" stopOpacity="0.85" />
+              <stop offset="100%" stopColor="#ffb5c5" stopOpacity="0.0" />
+            </linearGradient>
+          </defs>
+          <circle cx="70" cy="90" r="44" fill="none" stroke="url(#unityRingGradLeft)" strokeWidth="2" />
+          <circle cx="110" cy="90" r="44" fill="none" stroke="url(#unityRingGradRight)" strokeWidth="2" />
+          <circle cx="70"  cy="90" r="44" fill="none" stroke="rgba(255,216,122,0.25)" strokeWidth="0.7" strokeDasharray="2 4">
+            <animateTransform attributeName="transform" type="rotate" from="0 70 90" to="360 70 90" dur="40s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="110" cy="90" r="44" fill="none" stroke="rgba(255,181,197,0.25)" strokeWidth="0.7" strokeDasharray="2 4">
+            <animateTransform attributeName="transform" type="rotate" from="360 110 90" to="0 110 90" dur="48s" repeatCount="indefinite" />
+          </circle>
+        </svg>
+
         {/* Content overlay */}
         <div
           className="hero-reveal"
@@ -386,7 +405,7 @@ export default function HomePage() {
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: "6px",
+              gap: "8px",
               background: "rgba(220,30,60,0.9)",
               backdropFilter: "blur(8px)",
               borderRadius: "9999px",
@@ -395,8 +414,9 @@ export default function HomePage() {
               border: "1px solid rgba(255,255,255,0.2)",
             }}
           >
-            <span style={{ color: "#fff", fontSize: "12px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase" }}>
-              🇬🇧 Elite Indian Matrimony, UK
+            <CountryFlag code="GB" rounded="sm" />
+            <span style={{ color: "#fff", fontSize: "12px", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase" }}>
+              Elite Indian Matrimony · UK
             </span>
           </div>
 
@@ -498,18 +518,19 @@ export default function HomePage() {
               border: "1px solid rgba(255,255,255,0.15)",
             }}
           >
-            {[
-              { val: "100+", label: "Elite Profiles" },
-              { val: "UK 🇬🇧", label: "Headquarters" },
-              { val: "Est.", label: "2020 🇬🇧" },
-              { val: "4.9★", label: "Rated" },
-            ].map((s, i, arr) => (
+            {([
+              { val: "100+", label: "Elite Profiles", icon: <Sparkles className="h-3.5 w-3.5 text-[#ffd87a]" /> },
+              { val: "UK",    label: "Headquarters",   icon: <CountryFlag code="GB" rounded="sm" /> },
+              { val: "2020",  label: "Established",    icon: <Gem        className="h-3.5 w-3.5 text-[#ffd87a]" /> },
+              { val: "4.9",   label: "Rated",          icon: <Star       className="h-3.5 w-3.5 text-[#ffd87a]" fill="#ffd87a" /> },
+            ] as const).map((s, i, arr) => (
               <span key={s.label} style={{ display: "flex", alignItems: "center", gap: "24px" }}>
-                <span>
-                  <span style={{ color: "#ffd87a", fontWeight: 700, fontSize: "16px" }}>{s.val}</span>
-                  <span style={{ color: "rgba(255,255,255,0.75)", fontSize: "12px", marginLeft: "4px" }}>{s.label}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {s.icon}
+                  <span style={{ color: "#ffd87a", fontWeight: 700, fontSize: "15px", letterSpacing: "0.02em" }}>{s.val}</span>
+                  <span style={{ color: "rgba(255,255,255,0.75)", fontSize: "12px", marginLeft: 2 }}>{s.label}</span>
                 </span>
-                {i < arr.length - 1 && <span style={{ color: "rgba(255,255,255,0.2)" }}>|</span>}
+                {i < arr.length - 1 && <span style={{ color: "rgba(255,255,255,0.2)" }}>·</span>}
               </span>
             ))}
           </div>
@@ -687,19 +708,19 @@ export default function HomePage() {
       <section style={{ background: "#fff", borderBottom: "1px solid rgba(220,30,60,0.08)", padding: "0 24px" }}>
         <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4" >
           {[
-            { icon: "✦", title: "Hand-Picked Profiles", desc: "Every member personally vetted" },
-            { icon: "🇬🇧", title: "UK Registered", desc: "Based & regulated in the United Kingdom" },
-            { icon: "🔒", title: "Discreet & Private", desc: "Your data is never shared without consent" },
-            { icon: "🤝", title: "Personal Advisors", desc: "Real people guiding your journey" },
+            { icon: <Sparkles  className="h-5 w-5" strokeWidth={1.6} />, title: "Hand-Picked Profiles", desc: "Every member personally vetted" },
+            { icon: <BadgeCheck className="h-5 w-5" strokeWidth={1.6} />, title: "UK Registered",       desc: "Based & regulated in the United Kingdom" },
+            { icon: <Lock      className="h-5 w-5" strokeWidth={1.6} />, title: "Discreet & Private",   desc: "Your data is never shared without consent" },
+            { icon: <Handshake className="h-5 w-5" strokeWidth={1.6} />, title: "Personal Advisors",    desc: "Real people guiding your journey" },
           ].map((item, i) => (
             <div key={item.title} style={{
               padding: "28px 20px",
               textAlign: "center",
               borderRight: i < 3 ? "1px solid rgba(220,30,60,0.07)" : "none",
             }}>
-              <div style={{ fontSize: "22px", marginBottom: "10px" }}>{item.icon}</div>
-              <p style={{ fontSize: "13px", fontWeight: 700, color: "#1a0a14", marginBottom: "4px", fontFamily: "Playfair Display, serif" }}>{item.title}</p>
-              <p style={{ fontSize: "11px", color: "#999", lineHeight: 1.5 }}>{item.desc}</p>
+              <div style={{ display: "inline-flex", marginBottom: 12, color: "#dc1e3c" }}>{item.icon}</div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#1a0a14", marginBottom: 4, fontFamily: "var(--font-display, serif)", letterSpacing: "-0.01em" }}>{item.title}</p>
+              <p style={{ fontSize: 11.5, color: "#777", lineHeight: 1.55 }}>{item.desc}</p>
             </div>
           ))}
         </div>
@@ -772,88 +793,46 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── 5b. Featured Profiles Teaser ─────────────────────────────── */}
+      {/* ── 5b. Membership Invitation (no mock profiles shown publicly) ── */}
       <section className="reveal" style={{ padding: "80px 24px", background: "#fff" }}>
-        <div className="max-w-5xl mx-auto">
-          <div style={{ textAlign: "center", marginBottom: "48px" }}>
-            <span style={{ fontSize: "12px", fontWeight: 700, color: "#dc1e3c", textTransform: "uppercase", letterSpacing: "0.15em" }}>Exclusively Curated</span>
-            <h2 className="font-playfair" style={{ fontSize: "clamp(26px, 3.5vw, 40px)", fontWeight: 700, color: "#1a0a14", marginTop: "12px", marginBottom: "12px" }}>A Glimpse of Our Members</h2>
-            <p style={{ color: "#888", fontSize: "14px", maxWidth: "480px", margin: "0 auto" }}>Register to view full profiles. Every member is personally verified and approved by our team.</p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6" style={{ marginBottom: "40px" }}>
+        <div className="max-w-4xl mx-auto" style={{ textAlign: "center" }}>
+          <span style={{ fontSize: "12px", fontWeight: 700, color: "#dc1e3c", textTransform: "uppercase", letterSpacing: "0.15em" }}>
+            Exclusively curated · By invitation
+          </span>
+          <h2 className="font-playfair" style={{ fontSize: "clamp(26px, 3.5vw, 40px)", fontWeight: 700, color: "#1a0a14", marginTop: "12px", marginBottom: "16px" }}>
+            Members are personally introduced
+          </h2>
+          <p style={{ color: "#666", fontSize: "15px", maxWidth: "640px", margin: "0 auto 32px", lineHeight: 1.7 }}>
+            For their privacy and discretion, member profiles are not displayed publicly. Every introduction is hand-selected by our advisors after a confidential call with you and your family.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" style={{ maxWidth: "780px", margin: "0 auto 40px" }}>
             {[
-              { age: "28", city: "London", profession: "Doctor", religion: "Hindu", gender: "F" },
-              { age: "31", city: "Birmingham", profession: "Barrister", religion: "Hindu", gender: "M" },
-              { age: "26", city: "Manchester", profession: "Engineer", religion: "Muslim", gender: "F" },
-            ].map((p, i) => (
-              <div key={i} style={{
+              { kicker: "01", title: "Confidential intake", body: "A 30-minute call with one of our advisors to understand what matters to you." },
+              { kicker: "02", title: "Hand-picked profiles", body: "We curate three to five compatible introductions per month — no algorithms, no swiping." },
+              { kicker: "03", title: "Guided introduction", body: "When you're both interested, we facilitate the family meeting with discretion." },
+            ].map((step) => (
+              <div key={step.kicker} style={{
                 background: "#fdfbf9",
-                borderRadius: "20px",
-                overflow: "hidden",
                 border: "1px solid rgba(220,30,60,0.08)",
-                boxShadow: "0 2px 20px rgba(26,10,20,0.05)",
-                position: "relative",
+                borderRadius: "16px",
+                padding: "20px",
+                textAlign: "left",
               }}>
-                {/* Blurred avatar */}
-                <div style={{
-                  height: "180px",
-                  background: `linear-gradient(135deg, ${i === 1 ? "#3b3fa0" : "#dc1e3c"}22, ${i === 1 ? "#dc1e3c" : "#3b3fa0"}11)`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  position: "relative",
-                }}>
-                  <div style={{
-                    width: "80px", height: "80px", borderRadius: "50%",
-                    background: `linear-gradient(135deg, ${i === 1 ? "#3b3fa0" : "#dc1e3c"}44, rgba(255,255,255,0.2))`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "32px",
-                  }}>
-                    {p.gender === "F" ? "👩" : "👨"}
-                  </div>
-                  {/* Blur overlay */}
-                  <div style={{
-                    position: "absolute", inset: 0,
-                    backdropFilter: "blur(8px)",
-                    background: "rgba(255,255,255,0.3)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    <div style={{
-                      background: "rgba(255,255,255,0.9)",
-                      borderRadius: "9999px",
-                      padding: "6px 16px",
-                      fontSize: "11px", fontWeight: 600, color: "#dc1e3c",
-                      letterSpacing: "0.05em",
-                    }}>
-                      🔒 Register to View
-                    </div>
-                  </div>
-                </div>
-                <div style={{ padding: "20px" }}>
-                  <p className="font-playfair" style={{ fontSize: "16px", fontWeight: 700, color: "#1a0a14", marginBottom: "6px" }}>
-                    {p.age} yrs &nbsp;·&nbsp; {p.city}
-                  </p>
-                  <p style={{ fontSize: "13px", color: "#777", marginBottom: "4px" }}>🎓 {p.profession}</p>
-                  <p style={{ fontSize: "13px", color: "#777" }}>🕊 {p.religion}</p>
-                  <span style={{
-                    display: "inline-block", marginTop: "10px",
-                    fontSize: "11px", fontWeight: 600, color: "#dc1e3c",
-                    background: "rgba(220,30,60,0.07)", borderRadius: "9999px",
-                    padding: "3px 10px",
-                  }}>✓ Verified</span>
-                </div>
+                <span className="font-playfair" style={{ fontSize: "12px", fontWeight: 700, color: "#dc1e3c", letterSpacing: "0.18em" }}>{step.kicker}</span>
+                <p className="font-playfair" style={{ fontSize: "16px", fontWeight: 700, color: "#1a0a14", margin: "8px 0 6px" }}>{step.title}</p>
+                <p style={{ fontSize: "13px", color: "#777", lineHeight: 1.6, margin: 0 }}>{step.body}</p>
               </div>
             ))}
           </div>
-          <div style={{ textAlign: "center" }}>
-            <Link href="/auth/register" style={{
-              display: "inline-block",
-              background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
-              color: "#fff", padding: "14px 40px", borderRadius: "9999px",
-              fontSize: "14px", fontWeight: 600, textDecoration: "none",
-              boxShadow: "0 4px 20px rgba(220,30,60,0.25)",
-            }}>
-              Register to View Profiles
-            </Link>
-          </div>
+          <Link href="/auth/register" style={{
+            display: "inline-block",
+            background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
+            color: "#fff", padding: "14px 40px", borderRadius: "9999px",
+            fontSize: "14px", fontWeight: 600, textDecoration: "none",
+            boxShadow: "0 4px 20px rgba(220,30,60,0.25)",
+          }}>
+            Begin your private intake
+          </Link>
         </div>
       </section>
 
@@ -877,15 +856,17 @@ export default function HomePage() {
                 <div className="p-6">
                   <div className="flex items-center gap-1 mb-3">
                     {[1,2,3,4,5].map((s) => (
-                      <span key={s} style={{ color: "#f59e0b", fontSize: "14px" }}>★</span>
+                      <Star key={s} className="h-3.5 w-3.5" style={{ color: "#f59e0b", fill: "#f59e0b" }} />
                     ))}
                   </div>
-                  <p className="text-sm italic mb-4" style={{ color: "#666", lineHeight: 1.8 }}>
+                  <p className="text-sm italic mb-4" style={{ color: "#555", lineHeight: 1.85, fontFamily: "var(--font-display-alt, serif)" }}>
                     &ldquo;{story.quote}&rdquo;
                   </p>
-                  <p className="font-playfair font-semibold" style={{ color: "#1a0a14", fontSize: "17px" }}>{story.names}</p>
-                  <p style={{ fontSize: "12px", color: "#999", marginTop: "2px" }}>📍 {story.location}</p>
-                  <span className="inline-block mt-3 text-xs px-3 py-1 rounded-full font-medium" style={{ backgroundColor: "rgba(220,30,60,0.08)", color: "#dc1e3c" }}>
+                  <p className="font-display font-semibold" style={{ color: "#1a0a14", fontSize: 17 }}>{story.names}</p>
+                  <p style={{ fontSize: 12, color: "#888", marginTop: 4, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <MapPin className="h-3 w-3" /> {story.location}
+                  </p>
+                  <span className="ml-2 inline-block mt-3 text-xs px-3 py-1 rounded-full font-medium" style={{ backgroundColor: "rgba(220,30,60,0.08)", color: "#dc1e3c" }}>
                     {story.year}
                   </span>
                 </div>
@@ -915,13 +896,13 @@ export default function HomePage() {
               {features.map((f) => (
                 <div key={f.title} className="flex gap-4">
                   <div
-                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold"
+                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white"
                     style={{ backgroundColor: "#dc1e3c" }}
                   >
-                    ✓
+                    <Check className="h-4 w-4" strokeWidth={2.5} />
                   </div>
                   <div>
-                    <h3 className="font-playfair font-semibold text-lg" style={{ color: "#1a0a14" }}>{f.title}</h3>
+                    <h3 className="font-display font-semibold text-lg" style={{ color: "#1a0a14", letterSpacing: "-0.01em" }}>{f.title}</h3>
                     <p className="text-sm mt-1" style={{ color: "#555" }}>{f.desc}</p>
                   </div>
                 </div>
@@ -937,16 +918,29 @@ export default function HomePage() {
           <p style={{ textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.2em", marginBottom: "28px" }}>
             Trusted by families across the world
           </p>
-          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "12px 32px" }}>
-            {["🇬🇧 United Kingdom", "🇺🇸 United States", "🇮🇳 India", "🇨🇦 Canada", "🇩🇪 Germany", "🇦🇺 Australia", "🇦🇪 UAE", "🇸🇬 Singapore", "🇳🇿 New Zealand", "🇫🇷 France"].map((city) => (
-              <span key={city} style={{
-                fontSize: "13px", fontWeight: 600, color: "#999",
-                padding: "6px 16px",
-                border: "1px solid rgba(220,30,60,0.12)",
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "12px 16px" }}>
+            {([
+              { code: "GB", label: "United Kingdom" },
+              { code: "US", label: "United States"  },
+              { code: "IN", label: "India"          },
+              { code: "CA", label: "Canada"         },
+              { code: "DE", label: "Germany"        },
+              { code: "AU", label: "Australia"      },
+              { code: "AE", label: "UAE"            },
+              { code: "SG", label: "Singapore"      },
+              { code: "NZ", label: "New Zealand"    },
+              { code: "FR", label: "France"         },
+            ] as const).map((c) => (
+              <span key={c.code} style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                fontSize: 13, fontWeight: 600, color: "#666",
+                padding: "6px 14px",
+                border: "1px solid rgba(220,30,60,0.10)",
                 borderRadius: "9999px",
                 background: "#fff",
               }}>
-                {city}
+                <CountryFlag code={c.code as CountryCode} rounded="sm" />
+                {c.label}
               </span>
             ))}
           </div>
@@ -1019,23 +1013,24 @@ export default function HomePage() {
               Have a question? Want to learn more before registering? Our advisors are here to help, no pressure, just a friendly conversation.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {[
-                { icon: "✉️", label: "Email Us", value: "enquiry@match4marriage.com", href: "mailto:enquiry@match4marriage.com" },
-                { icon: "📞", label: "Call Us", value: "+44 7476 212655", href: "tel:+447476212655" },
-                { icon: "💬", label: "WhatsApp", value: "Message us on WhatsApp", href: "https://wa.me/447476212655" },
-              ].map((c) => (
-                <a key={c.label} href={c.href} target={c.href.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: "16px", textDecoration: "none" }}>
+              {([
+                { Icon: Mail,           label: "Email Us",  value: "enquiry@match4marriage.com",    href: "mailto:enquiry@match4marriage.com", brand: false },
+                { Icon: Phone,          label: "Call Us",   value: "+44 7476 212655",                href: "tel:+447476212655",                  brand: false },
+                { Icon: MessageCircle,  label: "WhatsApp",  value: "Message us on WhatsApp",         href: "https://wa.me/447476212655",         brand: true  },
+              ] as const).map((c) => (
+                <a key={c.label} href={c.href} target={c.href.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 16, textDecoration: "none" }}>
                   <div style={{
-                    width: "44px", height: "44px", borderRadius: "12px",
-                    background: c.label === "WhatsApp" ? "rgba(37,211,102,0.1)" : "rgba(220,30,60,0.07)",
+                    width: 44, height: 44, borderRadius: 12,
+                    background: c.brand ? "rgba(37,211,102,0.10)" : "rgba(220,30,60,0.08)",
+                    color: c.brand ? "#25d366" : "#dc1e3c",
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "18px", flexShrink: 0,
+                    flexShrink: 0,
                   }}>
-                    {c.icon}
+                    <c.Icon className="h-5 w-5" strokeWidth={1.6} />
                   </div>
                   <div>
-                    <p style={{ fontSize: "11px", fontWeight: 700, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.1em", margin: 0 }}>{c.label}</p>
-                    <p style={{ fontSize: "14px", color: c.label === "WhatsApp" ? "#25d366" : "#1a0a14", fontWeight: 600, margin: 0 }}>{c.value}</p>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.12em", margin: 0 }}>{c.label}</p>
+                    <p style={{ fontSize: 14, color: c.brand ? "#25d366" : "#1a0a14", fontWeight: 600, margin: 0 }}>{c.value}</p>
                   </div>
                 </a>
               ))}
@@ -1092,15 +1087,18 @@ export default function HomePage() {
       {/* ── 9. Community Stats Banner ────────────────────────────────── */}
       <section className="py-16 px-4 sm:px-6" style={{ background: "linear-gradient(to right, #dc1e3c, #3b3fa0)" }}>
         <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-center text-white">
-          {[
-            { num: "100+", label: "Elite Verified Profiles" },
-            { num: "🇬🇧 UK", label: "Headquarters" },
-            { num: "Est. 2020", label: "Established" },
-            { num: "4.9★", label: "Client Satisfaction" },
-          ].map((stat) => (
+          {([
+            { num: "100+",      label: "Elite Verified Profiles", icon: <Sparkles  className="h-5 w-5 text-white/80" /> },
+            { num: "UK",        label: "Headquarters",            icon: <CountryFlag code="GB" rounded="sm" className="!text-base" /> },
+            { num: "Est. 2020", label: "Established",              icon: <Gem       className="h-5 w-5 text-white/80" /> },
+            { num: "4.9",       label: "Client Satisfaction",      icon: <Star      className="h-5 w-5 text-white/80" fill="currentColor" /> },
+          ] as const).map((stat) => (
             <div key={stat.label}>
-              <p className="text-3xl sm:text-4xl font-bold font-playfair">{stat.num}</p>
-              <p className="text-sm mt-1 opacity-80">{stat.label}</p>
+              <div className="flex items-center justify-center gap-2.5">
+                {stat.icon}
+                <p className="text-3xl sm:text-4xl font-display font-semibold tracking-tight">{stat.num}</p>
+              </div>
+              <p className="text-sm mt-1.5 opacity-80">{stat.label}</p>
             </div>
           ))}
         </div>
@@ -1200,9 +1198,13 @@ export default function HomePage() {
             <div>
               <p style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "14px" }}>Contact</p>
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                <a href="mailto:enquiry@match4marriage.com" style={{ fontSize: "13px", color: "rgba(255,255,255,0.45)", textDecoration: "none" }}>✉️ enquiry@match4marriage.com</a>
-                <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.45)", margin: 0 }}>📍 Solihull, England, B92 7AF</p>
-                <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)", margin: 0 }}>Co. No. 15272378</p>
+                <a href="mailto:enquiry@match4marriage.com" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "rgba(255,255,255,0.45)", textDecoration: "none" }}>
+                  <Mail className="h-3.5 w-3.5" strokeWidth={1.6} /> enquiry@match4marriage.com
+                </a>
+                <p style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "rgba(255,255,255,0.45)", margin: 0 }}>
+                  <MapPin className="h-3.5 w-3.5" strokeWidth={1.6} /> Solihull, England, B92 7AF
+                </p>
+                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", margin: 0 }}>Co. No. 15272378</p>
               </div>
             </div>
           </div>
@@ -1212,7 +1214,9 @@ export default function HomePage() {
             <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)", margin: 0 }}>
               © 2026 Match4Marriage Limited. All rights reserved. Registered in England & Wales.
             </p>
-            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.2)", margin: 0 }}>🔒 SSL Secured · GDPR Compliant</p>
+            <p style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0 }}>
+              <Lock className="h-3 w-3" strokeWidth={1.8} /> SSL Secured · GDPR Compliant
+            </p>
           </div>
 
         </div>

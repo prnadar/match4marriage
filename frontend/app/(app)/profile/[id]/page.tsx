@@ -1,299 +1,457 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { motion, useScroll, useTransform, useReducedMotion } from "framer-motion";
 import {
   Shield, MapPin, Briefcase, GraduationCap, Heart, MessageCircle,
-  CheckCircle, ArrowLeft, Brain, Star, Users, Music, Book,
-  Globe, Calendar, Ruler, Sparkles,
+  CheckCircle, ArrowLeft, Star, Users, Globe, Calendar, Ruler,
+  Sparkles, Lock, AlertCircle, Loader2,
 } from "lucide-react";
+import { profileApi, matchApi, ApiError } from "@/lib/api";
+import { Portrait } from "@/components/ui/portrait";
+import { LuxeButton } from "@/components/ui/luxe-button";
+import { RevealText } from "@/components/ui/reveal-text";
 
-const profileData: Record<string, {
-  name: string; age: number; city: string; state: string;
-  profession: string; company: string; education: string;
-  religion: string; caste: string; height: string; language: string;
-  verified: boolean; trustScore: number; compatibility: number;
-  photo: string; grad: string;
-  about: string; hobbies: string[]; familyType: string; siblings: string;
-  diet: string; smoke: string; drink: string;
-  income: string; partnerPrefs: string;
-  dimensions: Record<string, number>;
-  verifications: { label: string; done: boolean }[];
-}> = {
-  "1": {
-    name: "Priya Sharma", age: 27, city: "Mumbai", state: "Maharashtra",
-    profession: "Senior Software Engineer", company: "Google",
-    education: "IIT Bombay · B.Tech CSE", religion: "Hindu", caste: "Brahmin",
-    height: "5'4\"", language: "Hindi, English, Marathi", verified: true,
-    trustScore: 96, compatibility: 92,
-    photo: "PS", grad: "linear-gradient(135deg,#dc1e3c,#a0153c)",
-    about: "Love Carnatic music, trekking in Himalayas, and building side projects on weekends. Currently building a EdTech startup on the side. Looking for a partner who values growth, laughter, and deep conversations equally.",
-    hobbies: ["Carnatic Music", "Trekking", "Side Projects", "Cooking", "Photography"],
-    familyType: "Nuclear", siblings: "1 younger brother",
-    diet: "Vegetarian", smoke: "No", drink: "Occasionally",
-    income: "₹40–50 LPA", partnerPrefs: "Engineer / Doctor, 27–32, open to all states",
-    dimensions: { values: 94, lifestyle: 90, family: 96, ambition: 88, communication: 92 },
-    verifications: [
-      { label: "Aadhaar Verified", done: true },
-      { label: "PAN Verified", done: true },
-      { label: "Photo Liveness", done: true },
-      { label: "Education Verified", done: true },
-      { label: "LinkedIn Verified", done: false },
-    ],
-  },
-  "2": {
-    name: "Anjali Patel", age: 26, city: "Ahmedabad", state: "Gujarat",
-    profession: "Resident Doctor", company: "AIIMS Delhi",
-    education: "AIIMS Delhi · MBBS", religion: "Hindu", caste: "Patel",
-    height: "5'3\"", language: "Gujarati, Hindi, English", verified: true,
-    trustScore: 92, compatibility: 87,
-    photo: "AP", grad: "linear-gradient(135deg,#dc1e3c,#a0153c)",
-    about: "Passionate about medicine and mental health advocacy. Enjoy cooking Gujarati food, reading, and travelling off the beaten path. Family-oriented, looking for a life partner who understands the demands of medicine.",
-    hobbies: ["Cooking", "Reading", "Travel", "Mental Health", "Yoga"],
-    familyType: "Joint", siblings: "1 elder sister",
-    diet: "Vegetarian", smoke: "No", drink: "No",
-    income: "₹12–15 LPA (residency)",
-    partnerPrefs: "Any profession, 27–32, Gujarat or pan-India",
-    dimensions: { values: 90, lifestyle: 85, family: 92, ambition: 84, communication: 86 },
-    verifications: [
-      { label: "Aadhaar Verified", done: true },
-      { label: "PAN Verified", done: true },
-      { label: "Photo Liveness", done: true },
-      { label: "Education Verified", done: true },
-      { label: "LinkedIn Verified", done: true },
-    ],
-  },
-};
+/* ── Types ─────────────────────────────────────────────────────────── */
 
-const fallback = profileData["1"];
+interface RemoteProfile {
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  marital_status?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  religion?: string | null;
+  caste?: string | null;
+  sub_caste?: string | null;
+  mother_tongue?: string | null;
+  languages?: string[];
+  height_cm?: number | null;
+  education_level?: string | null;
+  education_field?: string | null;
+  college?: string | null;
+  occupation?: string | null;
+  employer?: string | null;
+  annual_income_inr?: number | null;
+  bio?: string | null;
+  about_family?: string | null;
+  photos?: Array<{ url?: string; key?: string; is_primary?: boolean }>;
+  completeness_score?: number;
+  is_manglik?: boolean | null;
+  birth_time?: string | null;
+  birth_place?: string | null;
+  visa_status?: string | null;
+  willing_to_relocate?: boolean;
+  verification_status?: string;
+  family_details?: Record<string, unknown>;
+  partner_prefs?: Record<string, unknown>;
+  kundali_data?: Record<string, unknown>;
+}
+
+/* ── Helpers ───────────────────────────────────────────────────────── */
+
+function ageFromDob(dob?: string | null): number | undefined {
+  if (!dob) return undefined;
+  const d = new Date(dob);
+  if (isNaN(d.getTime())) return undefined;
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  return age;
+}
+
+function cmToFeetInches(cm?: number | null): string | undefined {
+  if (!cm) return undefined;
+  const total = cm / 2.54;
+  const feet = Math.floor(total / 12);
+  const inches = Math.round(total % 12);
+  return `${feet}'${inches}"`;
+}
+
+function lakhsFromInr(inr?: number | null): string | undefined {
+  if (inr == null) return undefined;
+  if (inr >= 10_000_000) return `₹${(inr / 10_000_000).toFixed(1)} Cr`;
+  if (inr >= 100_000)    return `₹${(inr / 100_000).toFixed(1)} LPA`;
+  return `₹${inr.toLocaleString("en-IN")}`;
+}
+
+function titleCase(s?: string | null): string | undefined {
+  if (!s) return undefined;
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/* ── Page ──────────────────────────────────────────────────────────── */
 
 export default function ProfilePage({ params }: { params: { id: string } }) {
-  const profile = profileData[params.id] || { ...fallback, name: "Profile", id: params.id };
+  const [profile, setProfile] = useState<RemoteProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<{ status: number; message: string } | null>(null);
   const [interestSent, setInterestSent] = useState(false);
+  const [interestPending, setInterestPending] = useState(false);
 
-  return (
-    <div style={{ padding: "2rem", maxWidth: "56rem", background: "#fdfbf9", minHeight: "100%" }}>
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await profileApi.getById(params.id);
+      const data = (res.data as any)?.data ?? res.data;
+      setProfile(data);
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setError({ status: err.status, message: err.message });
+      } else {
+        setError({ status: 0, message: err instanceof Error ? err.message : "Could not load profile" });
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [params.id]);
 
-      {/* Back */}
-      <Link
-        href="/matches"
-        style={{ display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.875rem", color: "#888", textDecoration: "none", marginBottom: "1.5rem" }}
-      >
-        <ArrowLeft style={{ width: 16, height: 16 }} />
-        Back to Browse
-      </Link>
+  useEffect(() => { load(); }, [load]);
 
-      <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "1.5rem", alignItems: "start" }}>
+  const sendInterest = async () => {
+    if (!profile || interestPending || interestSent) return;
+    setInterestPending(true);
+    try {
+      await matchApi.sendInterest(profile.user_id);
+      setInterestSent(true);
+    } catch {
+      // silently revert on failure; user can retry
+    } finally {
+      setInterestPending(false);
+    }
+  };
 
-        {/* ── Left column ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-
-          {/* Photo card */}
-          <div style={{ borderRadius: 16, overflow: "hidden", background: "#fff", border: "1px solid rgba(220,30,60,0.08)", boxShadow: "0 4px 24px rgba(220,30,60,0.08)" }}>
-
-            {/* Crimson hero */}
-            <div style={{ height: 288, background: "linear-gradient(135deg,#dc1e3c,#a0153c)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-
-              {/* Profile initial circle */}
-              <div style={{
-                width: 112, height: 112, borderRadius: "50%",
-                background: "rgba(255,255,255,0.18)",
-                border: "3px solid rgba(255,255,255,0.45)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-              }}>
-                <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "2.5rem", fontWeight: 400, color: "#fff" }}>
-                  {profile.photo}
-                </span>
-              </div>
-
-              {/* Badges */}
-              <div style={{ position: "absolute", bottom: 16, left: 16, right: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                  fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.75rem", fontWeight: 600,
-                  color: "#fff", padding: "5px 12px", borderRadius: 9999,
-                  background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)",
-                  border: "1px solid rgba(255,255,255,0.3)",
-                }}>
-                  <Shield style={{ width: 12, height: 12 }} />
-                  Trust {profile.trustScore}
-                </span>
-                <span style={{
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                  fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.75rem", fontWeight: 600,
-                  color: "#fff", padding: "5px 12px", borderRadius: 9999,
-                  background: "rgba(200,144,32,0.85)", backdropFilter: "blur(8px)",
-                  border: "1px solid rgba(200,144,32,0.4)",
-                  boxShadow: "0 2px 8px rgba(200,144,32,0.4)",
-                }}>
-                  <Sparkles style={{ width: 12, height: 12 }} />
-                  {profile.compatibility}% match
-                </span>
-              </div>
-            </div>
-
-            {/* Name / location */}
-            <div style={{ padding: "1rem 1.25rem" }}>
-              <h2 style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "1.25rem", fontWeight: 600, color: "#1a0a14" }}>
-                {profile.name}, {profile.age}
-              </h2>
-              <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, color: "#888" }}>
-                <MapPin style={{ width: 14, height: 14 }} />
-                <span style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.875rem" }}>
-                  {profile.city}, {profile.state}
-                </span>
-              </div>
-
-              {/* Verifications */}
-              <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                {profile.verifications.map((v) => (
-                  <div key={v.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <CheckCircle style={{ width: 16, height: 16, flexShrink: 0, color: v.done ? "#dc1e3c" : "rgba(26,10,20,0.18)" }} />
-                    <span style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.75rem", color: v.done ? "rgba(26,10,20,0.7)" : "rgba(26,10,20,0.3)" }}>
-                      {v.label}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* CTA buttons */}
-              <div style={{ marginTop: "1.25rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                <button
-                  onClick={() => setInterestSent(true)}
-                  disabled={interestSent}
-                  style={{
-                    width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                    fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.875rem", fontWeight: 600,
-                    color: "#fff", padding: "12px 24px", borderRadius: 10,
-                    background: interestSent ? "rgba(220,30,60,0.4)" : "linear-gradient(135deg,#dc1e3c,#a0153c)",
-                    boxShadow: interestSent ? "none" : "0 4px 16px rgba(220,30,60,0.25)",
-                    border: "none", cursor: interestSent ? "default" : "pointer",
-                    transition: "all 0.2s ease",
-                  }}
-                >
-                  <Heart style={{ width: 16, height: 16, fill: interestSent ? "transparent" : "#fff" }} />
-                  {interestSent ? "Interest Sent ✓" : "Send Interest"}
-                </button>
-                <Link
-                  href="/messages"
-                  style={{
-                    width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                    fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.875rem", fontWeight: 500,
-                    color: "rgba(26,10,20,0.6)", padding: "12px 24px", borderRadius: 10,
-                    border: "1px solid rgba(220,30,60,0.15)", textDecoration: "none",
-                    transition: "border-color 0.2s ease",
-                  }}
-                >
-                  <MessageCircle style={{ width: 16, height: 16 }} />
-                  Send Message
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Right column ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-
-          {/* About */}
-          <Section title="About" icon={<Sparkles style={{ width: 16, height: 16, color: "#dc1e3c" }} />}>
-            <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.875rem", color: "rgba(26,10,20,0.65)", lineHeight: 1.7 }}>
-              {profile.about}
-            </p>
-          </Section>
-
-          {/* Basic Info */}
-          <Section title="Basic Info" icon={<Star style={{ width: 16, height: 16, color: "#C89020" }} />}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-              <InfoRow icon={<GraduationCap style={{ width: 14, height: 14 }} />} label="Education"       value={profile.education} />
-              <InfoRow icon={<Briefcase     style={{ width: 14, height: 14 }} />} label="Works at"        value={`${profile.profession} · ${profile.company}`} />
-              <InfoRow icon={<Ruler         style={{ width: 14, height: 14 }} />} label="Height"          value={profile.height} />
-              <InfoRow icon={<Globe         style={{ width: 14, height: 14 }} />} label="Languages"       value={profile.language} />
-              <InfoRow icon={<Book          style={{ width: 14, height: 14 }} />} label="Religion / Caste" value={`${profile.religion} · ${profile.caste}`} />
-              <InfoRow icon={<Users         style={{ width: 14, height: 14 }} />} label="Family"          value={`${profile.familyType} · ${profile.siblings}`} />
-              <InfoRow icon={<Calendar      style={{ width: 14, height: 14 }} />} label="Diet"            value={profile.diet} />
-              <InfoRow icon={<Star          style={{ width: 14, height: 14 }} />} label="Income"          value={profile.income} />
-            </div>
-          </Section>
-
-          {/* AI Compatibility */}
-          <Section title="AI Compatibility Breakdown" icon={<Brain style={{ width: 16, height: 16, color: "#dc1e3c" }} />}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              {Object.entries(profile.dimensions).map(([dim, score]) => (
-                <div key={dim}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.75rem", fontWeight: 500, color: "rgba(26,10,20,0.65)", textTransform: "capitalize" }}>
-                      {dim}
-                    </span>
-                    <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "0.875rem", fontWeight: 700, color: "#C89020" }}>
-                      {score}%
-                    </span>
-                  </div>
-                  <div style={{ height: 6, borderRadius: 99, overflow: "hidden", background: "rgba(26,10,20,0.06)" }}>
-                    <div style={{ height: "100%", borderRadius: 99, width: `${score}%`, background: "linear-gradient(90deg,#dc1e3c,#C89020)", transition: "width 0.8s ease" }} />
-                  </div>
+  /* ── Loading skeleton ──────────────────────────────────────────── */
+  if (loading) {
+    return (
+      <div className="min-h-screen" style={{ background: "#fdfbf9" }}>
+        <div className="mx-auto max-w-[1100px] px-6 py-6 lg:px-8 lg:py-8">
+          <div className="m4m-skeleton mb-5 h-4 w-32" />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
+            <div className="m4m-skeleton aspect-[4/5] w-full rounded-3xl" />
+            <div className="space-y-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-3xl border border-rose-100/70 bg-white p-5">
+                  <div className="m4m-skeleton mb-3 h-5 w-40" />
+                  <div className="m4m-skeleton mb-2 h-3 w-full" />
+                  <div className="m4m-skeleton h-3 w-3/4" />
                 </div>
               ))}
             </div>
-            <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.75rem", color: "#888", marginTop: "0.75rem", fontStyle: "italic" }}>
-              Based on 60-question psychometric assessment
-            </p>
-          </Section>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-          {/* Hobbies */}
-          <Section title="Hobbies & Interests" icon={<Music style={{ width: 16, height: 16, color: "#C89020" }} />}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-              {profile.hobbies.map((h) => (
-                <span
-                  key={h}
-                  style={{
-                    fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.75rem", fontWeight: 500,
-                    padding: "0.375rem 0.875rem", borderRadius: 9999,
-                    background: "rgba(220,30,60,0.06)", border: "1px solid rgba(220,30,60,0.18)", color: "#dc1e3c",
-                  }}
-                >
-                  {h}
-                </span>
-              ))}
+  /* ── Error / not-found ─────────────────────────────────────────── */
+  if (error || !profile) {
+    return (
+      <div className="min-h-screen" style={{ background: "#fdfbf9" }}>
+        <div className="mx-auto flex max-w-[680px] flex-col items-center px-6 py-24 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-50">
+            <AlertCircle className="h-7 w-7 text-rose-700/70" />
+          </div>
+          <h1 className="font-display mt-4 text-[24px] font-semibold text-[#1a0a14]">
+            {error?.status === 404 ? "Profile not found" : "We couldn't load this profile"}
+          </h1>
+          <p className="mt-2 max-w-md text-[14px] leading-relaxed text-[#6a5560]">
+            {error?.status === 404
+              ? "This member's profile may have been removed or is not visible to you."
+              : error?.message ?? "Please try again in a moment."}
+          </p>
+          <div className="mt-5 flex gap-2">
+            <LuxeButton asChild variant="outline" size="md">
+              <Link href="/matches">Back to browse</Link>
+            </LuxeButton>
+            {error?.status !== 404 && (
+              <LuxeButton onClick={load} size="md">
+                <Loader2 /> Retry
+              </LuxeButton>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Derived display values ────────────────────────────────────── */
+  const fullName  = `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() || "Member";
+  const age       = ageFromDob(profile.date_of_birth);
+  const height    = cmToFeetInches(profile.height_cm);
+  const income    = lakhsFromInr(profile.annual_income_inr);
+  const isVerified = profile.verification_status === "approved";
+  const photoUrl  = profile.photos?.find((p) => p.is_primary)?.url
+                 ?? profile.photos?.[0]?.url
+                 ?? null;
+
+  const educationLine = [profile.education_level, profile.education_field, profile.college]
+    .filter(Boolean).join(" · ") || undefined;
+  const careerLine = [profile.occupation, profile.employer]
+    .filter(Boolean).join(" · ") || undefined;
+  const religionLine = [titleCase(profile.religion), profile.caste, profile.sub_caste]
+    .filter(Boolean).join(" · ") || undefined;
+  const familyLine = profile.about_family || (profile.family_details && Object.keys(profile.family_details).length
+      ? Object.entries(profile.family_details).map(([k, v]) => `${titleCase(k)}: ${String(v)}`).join(" · ")
+      : undefined);
+
+  const partnerLines: string[] = [];
+  if (profile.partner_prefs) {
+    const pp: any = profile.partner_prefs;
+    if (pp.age_min || pp.age_max) partnerLines.push(`Age ${pp.age_min ?? "?"}–${pp.age_max ?? "?"}`);
+    if (pp.religion) partnerLines.push(`Religion: ${pp.religion}`);
+    if (pp.country)  partnerLines.push(`Country: ${pp.country}`);
+    if (pp.education_level) partnerLines.push(`Education: ${pp.education_level}`);
+    if (pp.occupation) partnerLines.push(`Profession: ${pp.occupation}`);
+  }
+
+  return (
+    <div className="min-h-screen" style={{ background: "#fdfbf9" }}>
+      <div className="mx-auto max-w-[1100px] px-6 py-6 lg:px-8 lg:py-8">
+
+        <Link
+          href="/matches"
+          className="mb-5 inline-flex items-center gap-1.5 text-[13px] font-medium text-rose-700/70 transition-colors hover:text-rose-700"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to browse
+        </Link>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr] lg:items-start">
+
+          {/* ── Left ─────────────────────────────────────────────── */}
+          <aside className="fade-in-up flex flex-col gap-4 lg:sticky lg:top-[80px]">
+            <div className="overflow-hidden rounded-3xl border border-rose-100/70 bg-white shadow-luxe">
+              <ParallaxPortrait
+                src={photoUrl}
+                name={fullName}
+                seed={profile.user_id}
+                gender={profile.gender ?? undefined}
+              >
+                <div className="absolute right-3 top-3 z-[2] flex flex-col items-end gap-1.5">
+                  {isVerified && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-semibold text-rose-700 backdrop-blur"
+                      style={{ boxShadow: "0 4px 14px rgba(0,0,0,0.10)" }}
+                    >
+                      <Shield className="h-3 w-3" /> Verified
+                    </span>
+                  )}
+                  {profile.completeness_score !== undefined && profile.completeness_score >= 80 && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur"
+                      style={{
+                        background: "linear-gradient(135deg,#C9954A,#8A5E20)",
+                        boxShadow: "0 4px 14px rgba(201,149,74,0.32)",
+                      }}
+                    >
+                      <Sparkles className="h-3 w-3" /> Complete
+                    </span>
+                  )}
+                </div>
+              </ParallaxPortrait>
+
+              <div className="px-5 py-4">
+                <h1 className="font-display text-[22px] font-semibold leading-tight text-[#1a0a14]">
+                  <RevealText as="span" split="char" className="font-display">
+                    {fullName}
+                  </RevealText>
+                  {age ? <span className="font-normal text-[#1a0a14]/85">, {age}</span> : null}
+                </h1>
+                {(profile.city || profile.state || profile.country) && (
+                  <div className="mt-1 flex items-center gap-1 text-[13px] text-[#6a5560]">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {[profile.city, profile.state, profile.country].filter(Boolean).join(", ")}
+                  </div>
+                )}
+
+                {/* CTAs */}
+                <div className="mt-5 space-y-2">
+                  {interestSent ? (
+                    <div className="flex w-full items-center justify-center gap-2 rounded-full bg-emerald-50 px-5 py-3 text-[14px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                      <Heart className="fill-emerald-700" /> Interest sent
+                    </div>
+                  ) : (
+                    <LuxeButton
+                      onClick={sendInterest}
+                      loading={interestPending}
+                      size="lg"
+                      className="w-full"
+                    >
+                      <Heart className="fill-white" />
+                      Send interest
+                    </LuxeButton>
+                  )}
+                  <LuxeButton asChild variant="outline" size="lg" className="w-full">
+                    <Link href="/messages">
+                      <MessageCircle />
+                      Send message
+                    </Link>
+                  </LuxeButton>
+                </div>
+
+                <p className="mt-3 flex items-center gap-1.5 text-[11px] text-[#6a5560]">
+                  <Lock className="h-3 w-3" />
+                  Contact details are revealed only after mutual consent.
+                </p>
+              </div>
             </div>
-          </Section>
+          </aside>
 
-          {/* Partner Prefs */}
-          <Section title="Partner Preferences" icon={<Heart style={{ width: 16, height: 16, color: "#dc1e3c" }} />}>
-            <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.875rem", color: "rgba(26,10,20,0.65)", lineHeight: 1.7 }}>
-              {profile.partnerPrefs}
-            </p>
-          </Section>
+          {/* ── Right ────────────────────────────────────────────── */}
+          <div className="flex flex-col gap-4">
+
+            {profile.bio ? (
+              <Section title="About" icon={<Sparkles className="h-4 w-4 text-rose-700" />} delay={60}>
+                <p className="text-[14px] leading-[1.75] text-[#1a0a14]/75">{profile.bio}</p>
+              </Section>
+            ) : null}
+
+            <Section title="Basic information" icon={<Star className="h-4 w-4 text-amber-700" />} delay={120}>
+              <div className="grid grid-cols-1 gap-y-3.5 sm:grid-cols-2">
+                {educationLine && <InfoRow icon={<GraduationCap className="h-3.5 w-3.5" />} label="Education" value={educationLine} />}
+                {careerLine    && <InfoRow icon={<Briefcase     className="h-3.5 w-3.5" />} label="Career"    value={careerLine}    />}
+                {height        && <InfoRow icon={<Ruler         className="h-3.5 w-3.5" />} label="Height"    value={height}        />}
+                {(profile.languages?.length || profile.mother_tongue) && (
+                  <InfoRow
+                    icon={<Globe className="h-3.5 w-3.5" />}
+                    label="Languages"
+                    value={(profile.languages?.length ? profile.languages.join(", ") : profile.mother_tongue) || ""}
+                  />
+                )}
+                {religionLine && <InfoRow icon={<Star      className="h-3.5 w-3.5" />} label="Community"      value={religionLine} />}
+                {profile.marital_status && (
+                  <InfoRow icon={<Heart  className="h-3.5 w-3.5" />} label="Marital status" value={titleCase(profile.marital_status) || ""} />
+                )}
+                {profile.willing_to_relocate !== undefined && (
+                  <InfoRow icon={<Globe className="h-3.5 w-3.5" />} label="Open to relocation" value={profile.willing_to_relocate ? "Yes" : "No"} />
+                )}
+                {profile.visa_status && <InfoRow icon={<Globe    className="h-3.5 w-3.5" />} label="Visa status" value={profile.visa_status}             />}
+                {income           && <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="Annual income" value={income}                       />}
+                {profile.is_manglik !== null && profile.is_manglik !== undefined && (
+                  <InfoRow icon={<Star className="h-3.5 w-3.5" />} label="Manglik" value={profile.is_manglik ? "Yes" : "No"} />
+                )}
+              </div>
+            </Section>
+
+            {familyLine && (
+              <Section title="Family" icon={<Users className="h-4 w-4 text-rose-700" />} delay={180}>
+                <p className="text-[14px] leading-[1.75] text-[#1a0a14]/75">{familyLine}</p>
+              </Section>
+            )}
+
+            {(profile.birth_time || profile.birth_place) && (
+              <Section title="Astrological" icon={<Sparkles className="h-4 w-4 text-amber-700" />} delay={220}>
+                <div className="grid grid-cols-1 gap-y-3.5 sm:grid-cols-2">
+                  {profile.birth_time  && <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="Birth time"  value={profile.birth_time}  />}
+                  {profile.birth_place && <InfoRow icon={<MapPin   className="h-3.5 w-3.5" />} label="Birth place" value={profile.birth_place} />}
+                </div>
+              </Section>
+            )}
+
+            {partnerLines.length > 0 && (
+              <Section title="Partner preferences" icon={<Heart className="h-4 w-4 text-rose-700" />} delay={260}>
+                <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {partnerLines.map((line, i) => (
+                    <li key={i} className="flex items-start gap-2 text-[13.5px] text-[#1a0a14]/75">
+                      <CheckCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-600" />
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-/* ─── Section card ─── */
-function Section({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+/* ── Parallax portrait wrapper — gentle scroll-driven shift on the photo ── */
+
+function ParallaxPortrait({
+  src, name, seed, gender, children,
+}: {
+  src?: string | null;
+  name?: string;
+  seed?: string;
+  gender?: string;
+  children?: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const reduced = useReducedMotion();
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "end start"],
+  });
+  // Subtle parallax: photo translates 24px slower than scroll, with a tiny scale.
+  const y     = useTransform(scrollYProgress, [0, 1], [-24, 24]);
+  const scale = useTransform(scrollYProgress, [0, 0.5, 1], [1.03, 1.0, 1.04]);
+
   return (
-    <div style={{ padding: "1.25rem", background: "#fff", border: "1px solid rgba(220,30,60,0.08)", borderRadius: 16, boxShadow: "0 2px 16px rgba(220,30,60,0.06)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "1rem" }}>
-        {icon}
-        <h3 style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "1.125rem", fontWeight: 600, color: "#1a0a14" }}>{title}</h3>
-      </div>
+    <div ref={ref} className="relative overflow-hidden">
+      <motion.div
+        style={reduced ? undefined : { y, scale, willChange: "transform" }}
+        className="absolute inset-0"
+      >
+        <Portrait
+          src={src}
+          name={name}
+          seed={seed}
+          gender={gender}
+          rounded="none"
+          className="aspect-[4/5] w-full"
+        />
+      </motion.div>
+      {/* Spacer to keep aspect ratio while photo is positioned absolutely */}
+      <div className="pointer-events-none aspect-[4/5] w-full" />
       {children}
     </div>
   );
 }
 
-/* ─── Info row ─── */
+/* ── Section card ──────────────────────────────────────────────────── */
+
+function Section({
+  title, icon, children, delay = 0, caption,
+}: {
+  title: string; icon: React.ReactNode; children: React.ReactNode;
+  delay?: number; caption?: string;
+}) {
+  return (
+    <section
+      className="fade-in-up rounded-3xl border border-rose-100/70 bg-white p-5 shadow-[0_2px_14px_rgba(220,30,60,0.05)]"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <header className="mb-3.5 flex items-center gap-2">
+        {icon}
+        <h2 className="font-display text-[17px] font-semibold text-[#1a0a14]">{title}</h2>
+      </header>
+      {children}
+      {caption && (
+        <p className="mt-3 text-[11px] italic text-[#6a5560]">{caption}</p>
+      )}
+    </section>
+  );
+}
+
+/* ── Info row ──────────────────────────────────────────────────────── */
+
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-      <span style={{ marginTop: 2, flexShrink: 0, color: "rgba(26,10,20,0.35)" }}>{icon}</span>
-      <div>
-        <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.625rem", color: "rgba(26,10,20,0.4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+    <div className="flex items-start gap-2.5">
+      <span className="mt-1 flex-shrink-0 text-rose-700/40">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-rose-700/60">
           {label}
         </p>
-        <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.875rem", color: "rgba(26,10,20,0.8)", fontWeight: 500 }}>
+        <p className="mt-0.5 text-[13.5px] font-medium text-[#1a0a14]/85">
           {value}
         </p>
       </div>

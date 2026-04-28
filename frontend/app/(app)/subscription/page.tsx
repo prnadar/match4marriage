@@ -1,837 +1,287 @@
 "use client";
 
-import { useState } from "react";
-import { Crown, Check, Shield, ArrowRight, CreditCard, RefreshCw, AlertCircle, CheckCircle } from "lucide-react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import {
+  Crown, Check, Shield, ArrowRight, AlertCircle, Loader2, Sparkles,
+  Lock, Mail,
+} from "lucide-react";
+import { pricingApi, ApiError } from "@/lib/api";
 
-const CURRENT_PLAN = "elite";
+/**
+ * Subscription page.
+ *
+ * - Plans are fetched from the backend's public `/api/v1/pricing-plans`
+ *   endpoint (admin-managed in /admin/pricing).
+ * - We do NOT display fabricated billing history or credit usage. Until the
+ *   subscriptions router (Razorpay/Stripe) is re-enabled and wired, those
+ *   sections render an honest empty/setup state.
+ *
+ * When billing is enabled, the existing backend endpoints to wire are:
+ *   POST /api/v1/subscriptions/create-checkout
+ *   POST /api/v1/subscriptions/create
+ *   GET  /api/v1/subscriptions/limits
+ *   POST /api/v1/subscriptions/webhook/{stripe|razorpay}
+ */
 
-const plans = [
-  {
-    id: "basic",
-    name: "Basic",
-    price: 100,
-    priceLabel: "/ 6 months",
-    highlights: [
-      "Curated Matches",
-      
-      "View profiles",
-      "AI compatibility score",
-      "Basic search filters",
-    ],
-  },
-  {
-    id: "premium",
-    name: "Premium",
-    price: 300,
-    priceLabel: "/ 6 months",
-    popular: true,
-    highlights: [
-      
-      "Unlimited interests",
-      "Direct messaging",
-      "Photo access",
-      "Advanced search filters",
-      "AI compatibility score",
-      "Priority listing",
-    ],
-  },
-  {
-    id: "elite",
-    name: "Elite",
-    price: 1000,
-    priceLabel: "/ 6 months",
-    highlights: [
-      "Everything in Premium",
-      "Dedicated relationship advisor",
-      "Background verification",
-      "Privacy shield: hide profile from non-members",
-      "Featured profile placement",
-      "WhatsApp support",
-      "Profile boosting (4× / month)",
-      "Horoscope matching",
-      "Family background check",
-    ],
-  },
-  {
-    id: "vip",
-    name: "VIP Concierge",
-    price: null,
-    priceLabel: "Bespoke pricing",
-    vip: true,
-    highlights: [
-      "Everything in Elite",
-      "Personal matchmaker assigned to you",
-      "Curated shortlist of hand-picked profiles",
-      "1-on-1 strategy call with our expert team",
-      "Profile photography consultation",
-      "Family liaison service",
-      "Unlimited profile boosts",
-      "24/7 WhatsApp concierge support",
-      "Financial due diligence",
-    ],
-  },
-];
+interface RemotePlan {
+  id: string;
+  key: string;
+  name: string;
+  tier: "silver" | "gold" | "platinum" | string;
+  price_paise: number;
+  currency: string;
+  period: "monthly" | "quarterly" | "yearly" | string;
+  features?: string[];
+  is_active: boolean;
+  sort_order?: number;
+}
 
-const currentBillingHistory = [
-  { date: "Feb 1, 2026",  plan: "Gold",   amount: "£300", status: "Paid", id: "INV-2026-002" },
-  { date: "Jan 1, 2026",  plan: "Gold",   amount: "£300", status: "Paid", id: "INV-2026-001" },
-  { date: "Dec 1, 2025",  plan: "Silver", amount: "£100",   status: "Paid", id: "INV-2025-012" },
-  { date: "Nov 1, 2025",  plan: "Silver", amount: "£100",   status: "Paid", id: "INV-2025-011" },
-];
+function formatPrice(p: RemotePlan): string {
+  const major = p.price_paise / 100;
+  // Use the plan's currency (GBP for the UK roll-out, INR for India, etc.)
+  try {
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: p.currency || "GBP",
+      maximumFractionDigits: major >= 100 ? 0 : 2,
+    }).format(major);
+  } catch {
+    return `${p.currency || ""} ${major}`.trim();
+  }
+}
 
-const CREDITS = [
-  { label: "Profile Boosts",  used: 4,  total: 8,   unit: "this month" },
-  { label: "Contact Views",   used: 12, total: 999, unit: "unlimited"  },
-  { label: "Interests Sent",  used: 23, total: 999, unit: "unlimited"  },
-  { label: "Message Threads", used: 8,  total: 999, unit: "unlimited"  },
-];
+function periodLabel(p: RemotePlan): string {
+  switch (p.period) {
+    case "monthly":   return "/ month";
+    case "quarterly": return "/ quarter";
+    case "yearly":    return "/ year";
+    default:          return "";
+  }
+}
+
+const TIER_META: Record<string, { kicker: string; icon: React.ReactNode; popular?: boolean }> = {
+  silver:   { kicker: "Starter",      icon: <Shield  className="h-4 w-4" /> },
+  gold:     { kicker: "Most popular", icon: <Sparkles className="h-4 w-4" />, popular: true },
+  platinum: { kicker: "Concierge",    icon: <Crown   className="h-4 w-4" /> },
+};
 
 export default function SubscriptionPage() {
-  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
-  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [plans, setPlans] = useState<RemotePlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const currentPlan = plans.find((p) => p.id === CURRENT_PLAN)!;
-  const annualDiscount = 0.8;
-
-  /* ── shared style helpers ── */
-  const cardBase = {
-    background: "#fff",
-    border: "1px solid rgba(220,30,60,0.08)",
-    borderRadius: 16,
-  };
-
-  const btnPrimary: React.CSSProperties = {
-    background: "linear-gradient(135deg,#dc1e3c,#a0153c)",
-    color: "#fff",
-    borderRadius: 10,
-    padding: "12px 24px",
-    fontWeight: 600,
-    boxShadow: "0 4px 16px rgba(220,30,60,0.25)",
-    border: "none",
-    cursor: "pointer",
-    fontFamily: "var(--font-poppins, sans-serif)",
-    fontSize: 14,
-  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true); setError(null);
+      try {
+        const res = await pricingApi.listPlans();
+        const list = ((res.data as any)?.data ?? res.data ?? []) as RemotePlan[];
+        const sorted = [...list].sort((a, b) =>
+          (a.sort_order ?? 0) - (b.sort_order ?? 0),
+        );
+        if (!cancelled) setPlans(sorted);
+      } catch (err: unknown) {
+        if (cancelled) return;
+        if (err instanceof ApiError) setError(err.message);
+        else setError(err instanceof Error ? err.message : "Could not load pricing");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   return (
-    <div style={{ background: "#fdfbf9", minHeight: "100vh", padding: "32px" }}>
-      <div style={{ maxWidth: 896 }}>
+    <div className="min-h-screen" style={{ background: "#fdfbf9" }}>
+      <div className="mx-auto max-w-[1100px] px-6 py-8 lg:px-8 lg:py-10">
 
-        {/* Page title */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24 }}>
-          <Crown style={{ width: 20, height: 20, color: "#C89020" }} />
-          <h1
-            style={{
-              fontFamily: "var(--font-playfair, serif)",
-              fontSize: 30,
-              fontWeight: 300,
-              color: "#1a0a14",
-              margin: 0,
-            }}
-          >
-            Subscription
+        {/* Header */}
+        <header className="fade-in-up mb-7">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.22em] text-rose-700/80">
+            Membership
+          </p>
+          <h1 className="font-display mt-1 text-[34px] font-semibold leading-tight text-[#1a0a14] sm:text-[40px]">
+            Choose your level of <span className="gold-text gold-text-shimmer">care</span>
           </h1>
-        </div>
+          <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-[#6a5560]">
+            Every plan includes a personally vetted profile and our advisors as your guide.
+            Higher tiers unlock additional curation and discreet support.
+          </p>
+        </header>
 
-        {/* ── Current plan banner — crimson gradient ── */}
-        <div
-          style={{
-            borderRadius: 24,
-            padding: 24,
-            marginBottom: 32,
-            background: "linear-gradient(135deg,#dc1e3c,#a0153c)",
-            position: "relative",
-            overflow: "hidden",
-          }}
+        {/* Current plan strip — backend hasn't exposed subscription state yet */}
+        <section
+          className="fade-in-up mb-8 flex flex-wrap items-center gap-4 rounded-2xl border border-rose-100/70 bg-white p-5 shadow-[0_2px_14px_rgba(220,30,60,0.05)]"
+          style={{ animationDelay: "60ms" }}
         >
-          <div style={{ position: "relative", zIndex: 1 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <span
-                    style={{
-                      fontFamily: "var(--font-poppins, sans-serif)",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: "0.12em",
-                      textTransform: "uppercase",
-                      color: "rgba(255,255,255,0.7)",
-                    }}
-                  >
-                    Current Plan
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      padding: "2px 8px",
-                      borderRadius: 999,
-                      background: "rgba(255,255,255,0.2)",
-                      color: "#fff",
-                      fontFamily: "var(--font-poppins, sans-serif)",
-                    }}
-                  >
-                    Active
-                  </span>
-                </div>
-                <h2
-                  style={{
-                    fontFamily: "var(--font-playfair, serif)",
-                    fontSize: 28,
-                    fontWeight: 600,
-                    color: "#fff",
-                    margin: 0,
-                  }}
-                >
-                  Gold Plan
-                </h2>
-                <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, color: "rgba(255,255,255,0.65)", margin: "4px 0 0" }}>
-                  Renews on July 1, 2026 · £300 / 3 months
-                </p>
-              </div>
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button
-                  onClick={() => setConfirmCancel(true)}
-                  style={{
-                    padding: "8px 16px",
-                    borderRadius: 999,
-                    background: "transparent",
-                    border: "1px solid rgba(255,255,255,0.3)",
-                    color: "rgba(255,255,255,0.8)",
-                    fontFamily: "var(--font-poppins, sans-serif)",
-                    fontSize: 14,
-                    fontWeight: 500,
-                    cursor: "pointer",
-                  }}
-                >
-                  Cancel Plan
-                </button>
-                <Link
-                  href="/pricing"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "8px 16px",
-                    borderRadius: 999,
-                    background: "rgba(255,255,255,0.15)",
-                    border: "1px solid rgba(255,255,255,0.3)",
-                    color: "#fff",
-                    fontFamily: "var(--font-poppins, sans-serif)",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    textDecoration: "none",
-                  }}
-                >
-                  Upgrade to Platinum <ArrowRight style={{ width: 14, height: 14 }} />
-                </Link>
-              </div>
-            </div>
-
-            {/* Usage stats */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginTop: 20 }}>
-              {CREDITS.map((c) => {
-                const pct = c.total === 999 ? 0 : (c.used / c.total) * 100;
-                return (
-                  <div
-                    key={c.label}
-                    style={{
-                      borderRadius: 12,
-                      padding: 12,
-                      background: "rgba(255,255,255,0.12)",
-                      border: "1px solid rgba(255,255,255,0.18)",
-                    }}
-                  >
-                    <p
-                      style={{
-                        fontFamily: "var(--font-poppins, sans-serif)",
-                        fontSize: 10,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.08em",
-                        color: "rgba(255,255,255,0.6)",
-                        margin: "0 0 4px",
-                      }}
-                    >
-                      {c.label}
-                    </p>
-                    <p
-                      style={{
-                        fontFamily: "var(--font-playfair, serif)",
-                        fontSize: 20,
-                        fontWeight: 700,
-                        color: "#fff",
-                        margin: 0,
-                      }}
-                    >
-                      {c.total === 999 ? "∞" : `${c.used}/${c.total}`}
-                    </p>
-                    {c.total !== 999 && (
-                      <div
-                        style={{
-                          marginTop: 6,
-                          height: 4,
-                          borderRadius: 999,
-                          background: "rgba(255,255,255,0.2)",
-                          overflow: "hidden",
-                        }}
-                      >
-                        <div
-                          style={{
-                            height: "100%",
-                            borderRadius: 999,
-                            width: `${pct}%`,
-                            background: "rgba(255,255,255,0.8)",
-                          }}
-                        />
-                      </div>
-                    )}
-                    <p
-                      style={{
-                        fontFamily: "var(--font-poppins, sans-serif)",
-                        fontSize: 9,
-                        color: "rgba(255,255,255,0.5)",
-                        margin: "4px 0 0",
-                      }}
-                    >
-                      {c.unit}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 ring-1 ring-rose-100">
+            <Shield className="h-5 w-5 text-rose-700" />
           </div>
-        </div>
-
-        {/* ── Cancel confirmation ── */}
-        {confirmCancel && (
-          <div
-            style={{
-              borderRadius: 16,
-              padding: 20,
-              marginBottom: 24,
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 12,
-              background: "rgba(239,68,68,0.06)",
-              border: "1px solid rgba(239,68,68,0.2)",
-            }}
+          <div className="flex-1 min-w-[240px]">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-rose-700/70">
+              Your current plan
+            </p>
+            <p className="font-display mt-0.5 text-[18px] font-semibold text-[#1a0a14]">
+              Free preview
+            </p>
+            <p className="mt-0.5 text-[12.5px] text-[#6a5560]">
+              You have access to your daily curated matches. Upgrade for unlimited browsing,
+              messaging, and dedicated advisor support.
+            </p>
+          </div>
+          <Link
+            href="/contact"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white px-4 py-2 text-[12.5px] font-semibold text-rose-700 ring-1 ring-rose-100 hover:bg-rose-50"
           >
-            <AlertCircle style={{ width: 20, height: 20, color: "#f87171", flexShrink: 0, marginTop: 2 }} />
-            <div style={{ flex: 1 }}>
-              <p
-                style={{
-                  fontFamily: "var(--font-poppins, sans-serif)",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: "#ef4444",
-                  margin: "0 0 4px",
-                }}
+            <Mail className="h-3.5 w-3.5" /> Speak to an advisor
+          </Link>
+        </section>
+
+        {/* Plans */}
+        {loading && (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="rounded-3xl border border-rose-100/70 bg-white p-6 shadow-[0_2px_14px_rgba(220,30,60,0.05)]"
               >
-                Cancel your Gold Plan?
-              </p>
-              <p
-                style={{
-                  fontFamily: "var(--font-poppins, sans-serif)",
-                  fontSize: 12,
-                  color: "rgba(248,113,113,0.7)",
-                  margin: "0 0 12px",
-                }}
-              >
-              </p>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  onClick={() => setConfirmCancel(false)}
-                  style={{
-                    padding: "8px 16px",
-                    borderRadius: 999,
-                    background: "transparent",
-                    border: "1px solid rgba(26,10,20,0.14)",
-                    color: "rgba(26,10,20,0.6)",
-                    fontFamily: "var(--font-poppins, sans-serif)",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Keep Plan
-                </button>
-                <button
-                  style={{
-                    padding: "8px 16px",
-                    borderRadius: 999,
-                    background: "#ef4444",
-                    border: "none",
-                    color: "#fff",
-                    fontFamily: "var(--font-poppins, sans-serif)",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Yes, Cancel
-                </button>
+                <div className="m4m-skeleton mb-3 h-4 w-24" />
+                <div className="m4m-skeleton mb-4 h-8 w-1/2" />
+                <div className="space-y-2">
+                  <div className="m4m-skeleton h-3 w-full" />
+                  <div className="m4m-skeleton h-3 w-5/6" />
+                  <div className="m4m-skeleton h-3 w-3/4" />
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         )}
 
-        {/* ── All Plans ── */}
-        <div style={{ marginBottom: 32 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 16,
-            }}
-          >
-            <h2
-              style={{
-                fontFamily: "var(--font-playfair, serif)",
-                fontSize: 22,
-                fontWeight: 600,
-                color: "#1a0a14",
-                margin: 0,
-              }}
-            >
-              All Plans
-            </h2>
-
-            {/* Billing toggle */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 2,
-                padding: 4,
-                borderRadius: 999,
-                background: "#fff",
-                border: "1px solid rgba(220,30,60,0.12)",
-              }}
-            >
-              {(["monthly", "annual"] as const).map((b) => (
-                <button
-                  key={b}
-                  onClick={() => setBilling(b)}
-                  style={{
-                    padding: "6px 16px",
-                    borderRadius: 999,
-                    border: "none",
-                    background: billing === b ? "linear-gradient(135deg,#dc1e3c,#a0153c)" : "transparent",
-                    color: billing === b ? "#fff" : "rgba(26,10,20,0.5)",
-                    fontFamily: "var(--font-poppins, sans-serif)",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    transition: "background 0.15s",
-                  }}
-                >
-                  {b === "monthly" ? "Monthly" : "Annual"}
-                  {b === "annual" && (
-                    <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.8 }}>–20%</span>
-                  )}
-                </button>
-              ))}
-            </div>
+        {!loading && error && (
+          <div className="rounded-3xl border border-rose-100/70 bg-white px-6 py-12 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
+            <AlertCircle className="mx-auto h-9 w-9 text-rose-700/60" />
+            <h3 className="font-display mt-3 text-[18px] font-semibold text-[#1a0a14]">
+              Couldn't load pricing
+            </h3>
+            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-[#6a5560]">{error}</p>
           </div>
+        )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-            {plans.map((plan) => {
-              const isCurrent = plan.id === CURRENT_PLAN;
-              const isVip     = (plan as any).vip === true;
-              const isPopular = (plan as any).popular === true;
-              const price     = billing === "annual" && plan.price && plan.price > 0
-                ? Math.round(plan.price * annualDiscount)
-                : plan.price;
+        {!loading && !error && plans.length === 0 && (
+          <div className="rounded-3xl border border-rose-100/70 bg-white px-6 py-16 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
+            <Crown className="mx-auto h-9 w-9 text-rose-700/40" />
+            <h3 className="font-display mt-3 text-[18px] font-semibold text-[#1a0a14]">
+              Pricing is being finalised
+            </h3>
+            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-[#6a5560]">
+              Our advisors will share bespoke pricing on a confidential call.
+            </p>
+            <Link
+              href="/contact"
+              className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_20px_rgba(220,30,60,0.28)] hover:shadow-[0_10px_26px_rgba(220,30,60,0.38)]"
+            >
+              Speak to an advisor <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        )}
 
-              /* ── VIP card styles ── */
-              const vipCardStyle: React.CSSProperties = {
-                background: "linear-gradient(160deg, #1a0a14 0%, #2d0f20 100%)",
-                border: "2px solid rgba(200,144,32,0.6)",
-                borderRadius: 16,
-                padding: 16,
-                display: "flex",
-                flexDirection: "column",
-                position: "relative",
-                boxShadow: "0 8px 32px rgba(200,144,32,0.25)",
-              };
-
-              /* ── Popular card styles ── */
-              const popularCardStyle: React.CSSProperties = {
-                background: "rgba(200,144,32,0.08)",
-                border: isCurrent ? "2px solid #C89020" : "1px solid #C89020",
-                borderRadius: 16,
-                padding: 16,
-                display: "flex",
-                flexDirection: "column",
-                position: "relative",
-                boxShadow: "0 4px 24px rgba(200,144,32,0.18)",
-              };
-
-              /* ── Regular card styles ── */
-              const regularCardStyle: React.CSSProperties = {
-                background: "#fff",
-                border: isCurrent ? "2px solid #dc1e3c" : "1px solid rgba(220,30,60,0.08)",
-                borderRadius: 16,
-                padding: 16,
-                display: "flex",
-                flexDirection: "column",
-                position: "relative",
-                boxShadow: isCurrent ? "0 4px 20px rgba(220,30,60,0.18)" : "none",
-              };
-
-              const cardStyle = isVip ? vipCardStyle : isPopular ? popularCardStyle : regularCardStyle;
-
-              const nameColor     = isVip ? "#C89020" : isPopular ? "#C89020" : "#1a0a14";
-              const priceColor    = isVip ? "#C89020" : isPopular ? "#C89020" : "#1a0a14";
-              const priceMuted    = isVip ? "rgba(200,144,32,0.7)" : isPopular ? "rgba(200,144,32,0.55)" : "rgba(26,10,20,0.4)";
-              const featureColor  = isVip ? "rgba(255,255,255,0.75)" : isPopular ? "rgba(26,10,20,0.7)" : "rgba(26,10,20,0.6)";
-              const checkColor    = isVip ? "#C89020" : isPopular ? "#C89020" : "#dc1e3c";
-
+        {!loading && !error && plans.length > 0 && (
+          <div
+            className={
+              "grid grid-cols-1 gap-5 " +
+              (plans.length >= 3 ? "lg:grid-cols-3" : plans.length === 2 ? "sm:grid-cols-2" : "")
+            }
+          >
+            {plans.map((p, i) => {
+              const meta = TIER_META[p.tier?.toLowerCase()] ?? { kicker: "", icon: null };
+              const popular = meta.popular;
               return (
-                <div key={plan.id} style={cardStyle}>
-                  {/* Current badge */}
-                  {isCurrent && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: -12,
-                        left: "50%",
-                        transform: "translateX(-50%)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                        padding: "2px 10px",
-                        borderRadius: 999,
-                        background: isPopular
-                          ? "linear-gradient(135deg,#C89020,#9A6B00)"
-                          : "linear-gradient(135deg,#dc1e3c,#a0153c)",
-                        fontFamily: "var(--font-poppins, sans-serif)",
-                        fontSize: 10,
-                        fontWeight: 700,
-                        color: "#fff",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      <CheckCircle style={{ width: 10, height: 10 }} /> Current
-                    </div>
+                <div
+                  key={p.id}
+                  className={
+                    "fade-in-up relative overflow-hidden rounded-3xl border bg-white p-6 transition-all " +
+                    (popular
+                      ? "border-rose-200 shadow-[0_18px_40px_rgba(160,21,60,0.16)]"
+                      : "border-rose-100/70 shadow-[0_2px_14px_rgba(220,30,60,0.05)] hover:shadow-[0_8px_24px_rgba(220,30,60,0.10)]")
+                  }
+                  style={{ animationDelay: `${100 + i * 60}ms` }}
+                >
+                  {popular && (
+                    <span className="absolute right-5 top-5 inline-flex items-center gap-1 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-[0_4px_14px_rgba(220,30,60,0.28)]">
+                      <Sparkles className="h-3 w-3" /> Popular
+                    </span>
                   )}
-
-                  {/* VIP badge */}
-                  {isVip && (
-                    <div style={{
-                      position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)",
-                      padding: "2px 12px", borderRadius: 999,
-                      background: "linear-gradient(135deg,#C89020,#9A6B00)",
-                      fontSize: 10, fontWeight: 700, color: "#fff", whiteSpace: "nowrap",
-                    }}>✦ VIP Concierge</div>
-                  )}
-
-                  {/* Popular badge */}
-                  {isPopular && !isCurrent && !isVip && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: -12,
-                        left: "50%",
-                        transform: "translateX(-50%)",
-                        padding: "2px 10px",
-                        borderRadius: 999,
-                        background: "linear-gradient(135deg,#C89020,#9A6B00)",
-                        fontFamily: "var(--font-poppins, sans-serif)",
-                        fontSize: 10,
-                        fontWeight: 700,
-                        color: "#fff",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      ✦ Popular
-                    </div>
-                  )}
-
-                  <h3
-                    style={{
-                      fontFamily: "var(--font-playfair, serif)",
-                      fontSize: 16,
-                      fontWeight: 600,
-                      color: nameColor,
-                      margin: "0 0 4px",
-                    }}
-                  >
-                    {plan.name}
-                  </h3>
-
-                  <div style={{ marginBottom: 12 }}>
-                    {plan.price === null ? (
-                      <p style={{ fontFamily: "var(--font-playfair, serif)", fontSize: 18, fontWeight: 700, color: "#C89020", margin: 0 }}>
-                        Bespoke
-                        <span style={{ fontSize: 11, fontWeight: 400, color: priceMuted }}> / tailored to you</span>
-                      </p>
-                    ) : plan.price === 0 ? (
-                      <p style={{ fontFamily: "var(--font-playfair, serif)", fontSize: 20, fontWeight: 700, color: priceColor, margin: 0 }}>Free</p>
-                    ) : (
-                      <p style={{ fontFamily: "var(--font-playfair, serif)", fontSize: 20, fontWeight: 700, color: priceColor, margin: 0 }}>
-                        £{(price as number).toLocaleString("en-GB")}
-                        <span style={{ fontSize: 11, fontWeight: 400, color: priceMuted }}> / 6 months</span>
-                      </p>
+                  <div className="flex items-center gap-2">
+                    {meta.icon && (
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-rose-50 text-rose-700 ring-1 ring-rose-100">
+                        {meta.icon}
+                      </span>
+                    )}
+                    {meta.kicker && (
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-rose-700/70">
+                        {meta.kicker}
+                      </span>
                     )}
                   </div>
+                  <h2 className="font-display mt-3 text-[22px] font-semibold text-[#1a0a14]">
+                    {p.name}
+                  </h2>
+                  <div className="mt-1 flex items-baseline gap-1.5">
+                    <span className="font-display text-[32px] font-semibold text-[#1a0a14]">
+                      {formatPrice(p)}
+                    </span>
+                    <span className="text-[12.5px] text-[#6a5560]">{periodLabel(p)}</span>
+                  </div>
 
-                  <ul
-                    style={{
-                      listStyle: "none",
-                      padding: 0,
-                      margin: "0 0 12px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 6,
-                      flex: 1,
-                    }}
-                  >
-                    {plan.highlights.map((h) => (
-                      <li
-                        key={h}
-                        style={{
-                          display: "flex",
-                          alignItems: "flex-start",
-                          gap: 6,
-                        }}
-                      >
-                        <Check
-                          style={{
-                            width: 12,
-                            height: 12,
-                            flexShrink: 0,
-                            marginTop: 2,
-                            color: checkColor,
-                          }}
-                        />
-                        <span
-                          style={{
-                            fontFamily: "var(--font-poppins, sans-serif)",
-                            fontSize: 11,
-                            color: featureColor,
-                          }}
-                        >
-                          {h}
-                        </span>
+                  <ul className="mt-5 space-y-2">
+                    {(p.features ?? []).map((f, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-[13px] text-[#1a0a14]/80">
+                        <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-600" />
+                        {f}
                       </li>
                     ))}
                   </ul>
 
-                  {isVip ? (
-                    <a
-                      href="https://calendly.com/match4marriage"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        display: "block", textAlign: "center",
-                        width: "100%", padding: "9px 0",
-                        borderRadius: 10, border: "none", cursor: "pointer",
-                        fontFamily: "var(--font-poppins, sans-serif)",
-                        fontSize: 12, fontWeight: 700, color: "#1a0a14",
-                        background: "linear-gradient(135deg,#C89020,#9A6B00)",
-                        boxShadow: "0 4px 16px rgba(200,144,32,0.4)",
-                        textDecoration: "none",
-                      }}
-                    >
-                      📅 Schedule a Call
-                    </a>
-                  ) : !isCurrent && (
-                    <button
-                      style={{
-                        width: "100%",
-                        padding: "8px 0",
-                        borderRadius: 10,
-                        border: "none",
-                        cursor: "pointer",
-                        fontFamily: "var(--font-poppins, sans-serif)",
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: isPopular ? "#fff" : "#1a0a14",
-                        background: isPopular
-                          ? "linear-gradient(135deg,#C89020,#9A6B00)"
-                          : "rgba(26,10,20,0.08)",
-                        boxShadow: isPopular ? "0 4px 16px rgba(200,144,32,0.3)" : "none",
-                      }}
-                    >
-                      {!plan.price || (currentPlan.price && plan.price <= currentPlan.price) ? "Downgrade" : "Upgrade"}
-                    </button>
-                  )}
+                  <Link
+                    href="/contact"
+                    className={
+                      "mt-6 flex w-full items-center justify-center gap-1.5 rounded-2xl px-5 py-3 text-[13.5px] font-semibold transition-all " +
+                      (popular
+                        ? "bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white shadow-[0_8px_22px_rgba(220,30,60,0.32)] hover:shadow-[0_12px_28px_rgba(220,30,60,0.40)]"
+                        : "border border-rose-100 bg-white text-[#1a0a14] hover:border-rose-200 hover:text-rose-700")
+                    }
+                  >
+                    Choose {p.name} <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
                 </div>
               );
             })}
           </div>
-        </div>
+        )}
 
-        {/* ── Payment method + Billing history ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 32 }}>
-          {/* Payment method */}
-          <div style={{ ...cardBase, padding: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-              <CreditCard style={{ width: 16, height: 16, color: "#C89020" }} />
-              <h3
-                style={{
-                  fontFamily: "var(--font-playfair, serif)",
-                  fontSize: 16,
-                  fontWeight: 600,
-                  color: "#1a0a14",
-                  margin: 0,
-                }}
-              >
-                Payment Method
-              </h3>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: 12,
-                borderRadius: 12,
-                marginBottom: 12,
-                background: "rgba(253,251,249,0.9)",
-                border: "1px solid rgba(220,30,60,0.1)",
-              }}
-            >
-              <div
-                style={{
-                  width: 40,
-                  height: 28,
-                  borderRadius: 4,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "#1A1F71",
-                  fontWeight: 700,
-                  fontSize: 11,
-                  color: "#fff",
-                  fontFamily: "var(--font-poppins, sans-serif)",
-                  flexShrink: 0,
-                }}
-              >
-                VISA
-              </div>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, fontWeight: 500, color: "#1a0a14", margin: 0 }}>
-                  •••• •••• •••• 4242
-                </p>
-                <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 12, color: "rgba(26,10,20,0.4)", margin: "2px 0 0" }}>
-                  Expires 12/2027
-                </p>
-              </div>
-              <CheckCircle style={{ width: 16, height: 16, color: "#5C7A52" }} />
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {["Add UPI", "Change Card"].map((label) => (
-                <button
-                  key={label}
-                  style={{
-                    flex: 1,
-                    padding: "8px 0",
-                    borderRadius: 10,
-                    border: "1px solid rgba(220,30,60,0.15)",
-                    background: "transparent",
-                    color: "rgba(26,10,20,0.55)",
-                    fontFamily: "var(--font-poppins, sans-serif)",
-                    fontSize: 12,
-                    fontWeight: 500,
-                    cursor: "pointer",
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
+        {/* Honest billing notice */}
+        <section className="mt-10 rounded-3xl border border-amber-100 bg-amber-50/60 p-5">
+          <div className="flex items-start gap-3">
+            <Lock className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700" />
+            <div>
+              <p className="font-display text-[15px] font-semibold text-[#1a0a14]">
+                Online billing is being finalised
+              </p>
+              <p className="mt-1 text-[13px] leading-relaxed text-[#6a5560]">
+                Payments are processed via secure invoice while we complete our integration
+                with Razorpay and Stripe. Your advisor will share a payment link after your
+                consultation. Billing history and receipts will appear here once online billing is live.
+              </p>
             </div>
           </div>
+        </section>
 
-          {/* Billing history */}
-          <div style={{ ...cardBase, padding: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-              <RefreshCw style={{ width: 16, height: 16, color: "#C89020" }} />
-              <h3
-                style={{
-                  fontFamily: "var(--font-playfair, serif)",
-                  fontSize: 16,
-                  fontWeight: 600,
-                  color: "#1a0a14",
-                  margin: 0,
-                }}
-              >
-                Billing History
-              </h3>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {currentBillingHistory.map((inv) => (
-                <div key={inv.id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 12, fontWeight: 500, color: "rgba(26,10,20,0.7)", margin: 0 }}>
-                      {inv.date}
-                    </p>
-                    <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 10, color: "rgba(26,10,20,0.35)", margin: "2px 0 0" }}>
-                      {inv.plan} · {inv.id}
-                    </p>
-                  </div>
-                  <span style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, fontWeight: 600, color: "#1a0a14" }}>
-                    {inv.amount}
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: "var(--font-poppins, sans-serif)",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      padding: "2px 8px",
-                      borderRadius: 999,
-                      background: "rgba(92,122,82,0.1)",
-                      color: "#5C7A52",
-                    }}
-                  >
-                    {inv.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Money-back guarantee ── */}
-        <div
-          style={{
-            ...cardBase,
-            padding: 16,
-            display: "flex",
-            alignItems: "center",
-            gap: 16,
-          }}
-        >
-          <Shield style={{ width: 32, height: 32, color: "#dc1e3c", flexShrink: 0 }} />
-          <div>
-            <p
-              style={{
-                fontFamily: "var(--font-poppins, sans-serif)",
-                fontSize: 14,
-                fontWeight: 600,
-                color: "#1a0a14",
-                margin: "0 0 2px",
-              }}
-            >
-              30-day money-back guarantee
-            </p>
-            <p
-              style={{
-                fontFamily: "var(--font-poppins, sans-serif)",
-                fontSize: 12,
-                color: "rgba(26,10,20,0.5)",
-                margin: 0,
-              }}
-            >
-              Not happy? Contact us within 30 days for a full refund, no questions asked.
-            </p>
-          </div>
-        </div>
-
+        <p className="mt-6 flex items-center justify-center gap-2 text-[11.5px] text-[#6a5560]">
+          <Loader2 className="h-3 w-3 animate-spin opacity-60" />
+          Plan changes apply at the next billing cycle. Cancel anytime, no questions asked.
+        </p>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Minus } from "lucide-react";
+import { Plus, Minus, MessageCircle } from "lucide-react";
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
 
@@ -146,7 +146,9 @@ export default function FAQPage() {
 
         {/* Still have questions */}
         <div style={{ background: "#fff", borderRadius: "20px", padding: "40px", textAlign: "center", border: "1px solid rgba(220,30,60,0.08)", boxShadow: "0 4px 24px rgba(0,0,0,0.05)" }}>
-          <p style={{ fontSize: "28px", marginBottom: "12px" }}>💬</p>
+          <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 56, height: 56, borderRadius: "50%", background: "linear-gradient(135deg,#dc1e3c,#a0153c)", color: "#fff", marginBottom: 14, boxShadow: "0 10px 26px rgba(220,30,60,0.28)" }}>
+            <MessageCircle className="h-6 w-6" strokeWidth={1.6} />
+          </span>
           <h3 style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "22px", fontWeight: 700, color: "#1a0a14", marginBottom: "8px" }}>
             Still have questions?
           </h3>

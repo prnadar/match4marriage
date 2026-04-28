@@ -49,13 +49,13 @@ const STEPS = [
 ] as const;
 
 const COUNTRY_CODES = [
-  { code: "+44", flag: "🇬🇧", label: "UK" },
-  { code: "+91", flag: "🇮🇳", label: "India" },
-  { code: "+1",  flag: "🇺🇸", label: "US" },
-  { code: "+1",  flag: "🇨🇦", label: "Canada" },
-  { code: "+61", flag: "🇦🇺", label: "Australia" },
-  { code: "+971", flag: "🇦🇪", label: "UAE" },
-  { code: "+65", flag: "🇸🇬", label: "Singapore" },
+  { code: "+44",  iso: "GB", label: "UK"        },
+  { code: "+91",  iso: "IN", label: "India"     },
+  { code: "+1",   iso: "US", label: "US"        },
+  { code: "+1",   iso: "CA", label: "Canada"    },
+  { code: "+61",  iso: "AU", label: "Australia" },
+  { code: "+971", iso: "AE", label: "UAE"       },
+  { code: "+65",  iso: "SG", label: "Singapore" },
 ] as const;
 
 const COUNTRIES = [
@@ -618,6 +618,11 @@ function Step2Profile({
     return v;
   }, []);
 
+  const resetRecaptcha = useCallback(() => {
+    try { recaptchaRef.current?.clear(); } catch {}
+    recaptchaRef.current = null;
+  }, []);
+
   const canSendOtp = dob && gender && religion && caste.trim() && motherTongue && education.trim() && profession.trim()
     && phone.replace(/\D/g, "").length >= 6;
 
@@ -630,11 +635,27 @@ function Step2Profile({
       verificationIdRef.current = confirm.verificationId;
       setOtpState("sent");
     } catch (e: any) {
-      const code = e?.code || "";
-      if (code.includes("invalid-phone-number")) setError("That phone number doesn't look right.");
-      else if (code.includes("too-many-requests")) setError("Too many attempts. Try again in a few minutes.");
-      else if (code.includes("quota-exceeded")) setError("SMS quota exhausted. Please try again later.");
-      else setError(e?.message || "Could not send code. Please try again.");
+      resetRecaptcha();
+      const code: string = e?.code || "";
+      const raw: string  = e?.message || "";
+      // See login page for full context — the most common cause of this error
+      // is the current hostname not being on the Firebase Auth authorised-
+      // domains list (Firebase Console → Authentication → Settings).
+      if (code.includes("captcha-check-failed") || raw.includes("Hostname match not found")) {
+        setError(
+          `${typeof window !== "undefined" ? window.location.host : "This host"} is not authorised by your Firebase project. ` +
+          `Add it under Firebase Console → Authentication → Settings → Authorised domains, ` +
+          `and (if reCAPTCHA Enterprise is enabled) under Google Cloud → reCAPTCHA Enterprise → key → Allowed domains.`
+        );
+      } else if (code.includes("invalid-phone-number")) {
+        setError("That phone number doesn't look right.");
+      } else if (code.includes("too-many-requests")) {
+        setError("Too many attempts. Try again in a few minutes.");
+      } else if (code.includes("quota-exceeded")) {
+        setError("SMS quota exhausted. Please try again later.");
+      } else {
+        setError(raw || "Could not send code. Please try again.");
+      }
       setOtpState("idle");
     }
   };
@@ -731,7 +752,7 @@ function Step2Profile({
           <div style={phoneShell}>
             <select value={countryCode} onChange={(e) => setCountryCode(e.target.value)} style={countrySelectStyle}>
               {COUNTRY_CODES.map((c, i) => (
-                <option key={`${c.code}-${i}`} value={c.code}>{c.flag} {c.code}</option>
+                <option key={`${c.code}-${i}`} value={c.code}>{c.iso} · {c.code}</option>
               ))}
             </select>
             <input

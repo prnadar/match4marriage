@@ -146,6 +146,12 @@ export default function LoginPage() {
     return verifier;
   };
 
+  /** Reset the invisible reCAPTCHA so the next attempt isn't poisoned by a stale token. */
+  const resetRecaptcha = () => {
+    try { recaptchaRef.current?.clear(); } catch {}
+    recaptchaRef.current = null;
+  };
+
   const handleSendOtp = async () => {
     clearMsgs();
     const digits = phone.replace(/\D/g, "");
@@ -157,7 +163,31 @@ export default function LoginPage() {
       confirmationRef.current = result;
       setOtpSent(true);
       setInfo("Code sent. Check your SMS.");
-    } catch (e: any) { setError(e?.message || "Could not send OTP."); }
+    } catch (e: any) {
+      resetRecaptcha();
+      const code: string = e?.code || "";
+      const raw: string  = e?.message || "";
+      // Firebase Phone Auth fails with `auth/captcha-check-failed` /
+      // `Hostname match not found` when the current hostname isn't on the
+      // project's reCAPTCHA Enterprise allow-list. This is a Firebase Console
+      // config issue, not a user issue — surface a useful message instead of
+      // the cryptic SDK error.
+      if (code.includes("captcha-check-failed") || raw.includes("Hostname match not found")) {
+        setError(
+          `${typeof window !== "undefined" ? window.location.host : "This host"} is not authorised by your Firebase project. ` +
+          `Add it under Firebase Console → Authentication → Settings → Authorised domains, ` +
+          `and (if reCAPTCHA Enterprise is enabled) under Google Cloud → reCAPTCHA Enterprise → key → Allowed domains.`
+        );
+      } else if (code.includes("invalid-phone-number")) {
+        setError("That phone number doesn't look right — please check the country code and digits.");
+      } else if (code.includes("too-many-requests")) {
+        setError("Too many attempts. Please wait a few minutes and try again.");
+      } else if (code.includes("quota-exceeded")) {
+        setError("SMS quota for today has been reached. Try again tomorrow or contact support.");
+      } else {
+        setError(raw || "Could not send the verification code. Please try again.");
+      }
+    }
     finally { setLoading(false); }
   };
 
@@ -525,12 +555,12 @@ export default function LoginPage() {
                       onChange={(e) => setCountryCode(e.target.value)}
                       style={countrySelect}
                     >
-                      <option value="+44">🇬🇧 +44</option>
-                      <option value="+91">🇮🇳 +91</option>
-                      <option value="+1">🇺🇸 +1</option>
-                      <option value="+971">🇦🇪 +971</option>
-                      <option value="+61">🇦🇺 +61</option>
-                      <option value="+65">🇸🇬 +65</option>
+                      <option value="+44">UK · +44</option>
+                      <option value="+91">IN · +91</option>
+                      <option value="+1">US · +1</option>
+                      <option value="+971">UAE · +971</option>
+                      <option value="+61">AU · +61</option>
+                      <option value="+65">SG · +65</option>
                     </select>
                     <input
                       type="tel"

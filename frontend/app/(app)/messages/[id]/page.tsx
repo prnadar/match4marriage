@@ -1,441 +1,324 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, Shield, Send, Lock, Phone, Video, MoreHorizontal, CheckCheck } from "lucide-react";
+import {
+  ArrowLeft, Shield, Send, Lock, AlertCircle, Loader2, MessageCircle,
+} from "lucide-react";
+import { chatApi, openChatSocket, ApiError } from "@/lib/api";
+import { firebaseAuth } from "@/lib/firebase";
+import { Portrait } from "@/components/ui/portrait";
 
-const threadProfiles: Record<string, { name: string; photo: string; grad: string; compatibility: number; city: string }> = {
-  "1": { name: "Priya Sharma",   photo: "PS", grad: "linear-gradient(135deg,#E8426A,#E8A060)", compatibility: 92, city: "Mumbai" },
-  "2": { name: "Anjali Patel",   photo: "AP", grad: "linear-gradient(135deg,#9A6B00,#C89020)",  compatibility: 87, city: "Ahmedabad" },
-  "3": { name: "Kavya Nair",     photo: "KN", grad: "linear-gradient(135deg,#5C7A52,#8DB870)",  compatibility: 84, city: "Bangalore" },
-  "4": { name: "Shruti Agarwal", photo: "SA", grad: "linear-gradient(135deg,#E8426A99,#9A6B0099)", compatibility: 79, city: "Delhi" },
-};
+interface Message {
+  id: string;
+  thread_id: string;
+  sender_id: string;
+  message_type: string;
+  encrypted_content?: string | null;
+  encryption_key_id?: string | null;
+  created_at: string;
+  read_at?: string | null;
+  delivered_at?: string | null;
+}
 
-const initialMessages: Record<string, { id: string; from: "me" | "them"; text: string; time: string }[]> = {
-  "1": [
-    { id: "1", from: "them", text: "Namaste! Thank you for sending an interest. I went through your profile and it's really impressive 😊", time: "10:30 AM" },
-    { id: "2", from: "me",   text: "Namaste Priya! Thank you so much. I was genuinely impressed by your work at Google and your passion for Carnatic music.", time: "10:35 AM" },
-    { id: "3", from: "them", text: "That's so kind! I saw you're into trekking too. Have you done any Himalayan treks?", time: "10:38 AM" },
-    { id: "4", from: "me",   text: "Yes! Done Kedarkantha and Hampta Pass. Planning Roopkund next year. Do you trek?", time: "10:40 AM" },
-    { id: "5", from: "them", text: "Oh wow, Kedarkantha is on my list! I've only done Triund so far. Would love to hear more about your work. What are you building at the startup?", time: "10:42 AM" },
-  ],
-  "2": [
-    { id: "1", from: "them", text: "Hello! I saw your profile and thought we have a lot in common. My family is from Ahmedabad, what about yours?", time: "Yesterday 6:00 PM" },
-    { id: "2", from: "me",   text: "Hi Anjali! Nice to connect. My family is from Rajasthan originally, settled in Mumbai.", time: "Yesterday 6:45 PM" },
-  ],
-  "3": [
-    { id: "1", from: "them", text: "I saw you're also into trekking. Have you done Kedarkantha?", time: "Mon 3:20 PM" },
-  ],
-  "4": [
-    { id: "1", from: "me",   text: "Hi Shruti! Lovely to connect. Delhi winters are harsh I imagine!", time: "Sun 11:10 AM" },
-    { id: "2", from: "them", text: "Haha yes, Delhi winters are something else 😄", time: "Sun 11:30 AM" },
-  ],
-};
+interface OtherProfile {
+  user_id: string;
+  first_name: string;
+  age?: number | null;
+  city?: string | null;
+  primary_photo_url?: string | null;
+  trust_score?: number;
+}
+
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const today = new Date();
+  if (
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate()
+  ) {
+    return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  }
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+    + " " + d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
 
 export default function ChatPage({ params }: { params: { id: string } }) {
-  const profile = threadProfiles[params.id] || threadProfiles["1"];
-  const [messages, setMessages] = useState(initialMessages[params.id] || []);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [other, setOther] = useState<OtherProfile | null>(null);
+  const [meId, setMeId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [inputFocused, setInputFocused] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const [sending, setSending] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
 
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+
+  /* ── Identify self ─────────────────────────────────────────────── */
+  useEffect(() => {
+    const unsub = firebaseAuth.onAuthStateChanged((user) => {
+      setMeId(user?.uid ?? null);
+    });
+    return unsub;
+  }, []);
+
+  /* ── Load thread + history ─────────────────────────────────────── */
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      // Pull all threads to find the matching one (cheap, list page just did this).
+      // If you have a getThread(id) endpoint later, swap this for that.
+      const threadsRes = await chatApi.listThreads(1, 50);
+      const allThreads = (threadsRes.data as any)?.items
+        ?? (threadsRes.data as any)?.results
+        ?? (threadsRes.data as any)?.data?.items
+        ?? [];
+      const matched = allThreads.find((t: any) => String(t.id) === params.id);
+      if (matched?.other_profile) setOther(matched.other_profile);
+
+      const msgRes = await chatApi.getMessages(params.id, 1, 100);
+      const items = (msgRes.data as any)?.items
+        ?? (msgRes.data as any)?.results
+        ?? (msgRes.data as any)?.data?.items
+        ?? [];
+      // Backend returns newest first; reverse for chronological display.
+      setMessages([...items].reverse());
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setError(err.status === 404 ? "Conversation not found" : err.message);
+      } else {
+        setError(err instanceof Error ? err.message : "Could not load conversation");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [params.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  /* ── Connect WebSocket for live updates + sending ──────────────── */
+  useEffect(() => {
+    if (!params.id || !meId) return;
+    let cancelled = false;
+    let socket: WebSocket | null = null;
+
+    (async () => {
+      try {
+        socket = await openChatSocket(params.id);
+        if (cancelled) { socket.close(); return; }
+        socketRef.current = socket;
+        socket.onopen = () => setWsConnected(true);
+        socket.onclose = () => setWsConnected(false);
+        socket.onerror = () => setWsConnected(false);
+        socket.onmessage = (ev) => {
+          try {
+            const data = JSON.parse(ev.data);
+            if (data.type === "message") {
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === data.id)) return prev;
+                return [...prev, {
+                  id: data.id,
+                  thread_id: params.id,
+                  sender_id: data.sender_id,
+                  message_type: data.message_type ?? "text",
+                  encrypted_content: data.encrypted_content,
+                  encryption_key_id: data.encryption_key_id,
+                  created_at: data.created_at,
+                }];
+              });
+            }
+          } catch { /* ignore malformed */ }
+        };
+      } catch {
+        setWsConnected(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (socket && socket.readyState <= WebSocket.OPEN) socket.close();
+      socketRef.current = null;
+    };
+  }, [params.id, meId]);
+
+  /* ── Auto-scroll on new message ────────────────────────────────── */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  /* ── Send message via WS ──────────────────────────────────────── */
   const send = () => {
-    if (!input.trim()) return;
-    setMessages((prev) => [
-      ...prev,
-      { id: Date.now().toString(), from: "me", text: input.trim(), time: "Just now" },
-    ]);
-    setInput("");
+    const text = input.trim();
+    if (!text || sending) return;
+    const ws = socketRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      // No live connection — surface an error rather than silently fail.
+      setError("Live chat connection lost. Please refresh to reconnect.");
+      return;
+    }
+    setSending(true);
+    try {
+      ws.send(JSON.stringify({
+        type: "message",
+        content: text,
+        message_type: "text",
+      }));
+      setInput("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send message");
+    } finally {
+      setSending(false);
+    }
   };
 
+  /* ── Render ────────────────────────────────────────────────────── */
   return (
-    <div
-      style={{
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        maxWidth: "672px",
-        background: "#fdfbf9",
-        fontFamily: "var(--font-poppins, sans-serif)",
-      }}
-    >
-      {/* ── Header ── */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "16px",
-          padding: "16px 24px",
-          flexShrink: 0,
-          background: "#ffffff",
-          borderBottom: "1px solid rgba(220,30,60,0.12)",
-          backdropFilter: "blur(20px)",
-        }}
-      >
-        {/* Back */}
+    <div className="flex h-[calc(100vh-60px)] flex-col" style={{ background: "#fdfbf9" }}>
+
+      {/* Header */}
+      <header className="flex items-center gap-3 border-b border-rose-100 bg-white/90 px-5 py-3 backdrop-blur">
         <Link
           href="/messages"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "36px",
-            height: "36px",
-            borderRadius: "50%",
-            color: "rgba(26,10,20,0.5)",
-            background: "rgba(220,30,60,0.05)",
-            border: "1px solid rgba(220,30,60,0.12)",
-            textDecoration: "none",
-            flexShrink: 0,
-            transition: "background 0.15s ease",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLAnchorElement).style.background =
-              "rgba(220,30,60,0.1)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLAnchorElement).style.background =
-              "rgba(220,30,60,0.05)";
-          }}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-rose-700/70 transition-colors hover:bg-rose-50 hover:text-rose-700"
+          aria-label="Back to conversations"
         >
-          <ArrowLeft style={{ width: "18px", height: "18px" }} />
+          <ArrowLeft className="h-4 w-4" />
         </Link>
-
-        {/* Avatar */}
-        <div
-          style={{
-            width: "42px",
-            height: "42px",
-            borderRadius: "50%",
-            background: profile.grad,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontFamily: "var(--font-playfair, serif)",
-            fontSize: "0.9rem",
-            fontWeight: 700,
-            color: "#ffffff",
-            flexShrink: 0,
-            border: "2px solid rgba(220,30,60,0.25)",
-            boxShadow: "0 2px 10px rgba(220,30,60,0.2)",
-          }}
-        >
-          {profile.photo}
-        </div>
-
-        {/* Name & status */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-          >
-            <h2
-              style={{
-                fontFamily: "var(--font-playfair, serif)",
-                fontSize: "1rem",
-                fontWeight: 600,
-                color: "#1a0a14",
-                margin: 0,
-              }}
-            >
-              {profile.name}
-            </h2>
-            <Shield
-              style={{ width: "14px", height: "14px", color: "#dc1e3c", flexShrink: 0 }}
+        {other && (
+          <Link href={`/profile/${other.user_id}`} className="flex flex-1 items-center gap-3 rounded-xl px-1 py-1 transition-colors hover:bg-rose-50/40">
+            <Portrait
+              src={other.primary_photo_url}
+              name={other.first_name}
+              seed={other.user_id}
+              rounded="full"
+              showInitials
+              className="h-10 w-10"
             />
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              marginTop: "1px",
-            }}
-          >
-            <span
-              style={{
-                width: "7px",
-                height: "7px",
-                borderRadius: "50%",
-                background: "#dc1e3c",
-                boxShadow: "0 0 0 2px rgba(220,30,60,0.2)",
-                display: "inline-block",
-                flexShrink: 0,
-              }}
-            />
-            <span
-              style={{
-                fontFamily: "var(--font-poppins, sans-serif)",
-                fontSize: "0.75rem",
-                color: "rgba(26,10,20,0.45)",
-              }}
-            >
-              {profile.city} ·{" "}
-              <span style={{ color: "#C89020", fontWeight: 600 }}>
-                {profile.compatibility}% match
-              </span>
-            </span>
-          </div>
-        </div>
-
-        {/* Action buttons */}
-        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          {[
-            { icon: <Phone style={{ width: "16px", height: "16px" }} />, label: "Call" },
-            { icon: <Video style={{ width: "16px", height: "16px" }} />, label: "Video" },
-          ].map((btn) => (
-            <button
-              key={btn.label}
-              aria-label={btn.label}
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "50%",
-                background: "transparent",
-                border: "1px solid rgba(220,30,60,0.12)",
-                color: "rgba(26,10,20,0.45)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                transition: "background 0.15s ease, color 0.15s ease",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background =
-                  "rgba(220,30,60,0.07)";
-                (e.currentTarget as HTMLButtonElement).style.color = "#dc1e3c";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background =
-                  "transparent";
-                (e.currentTarget as HTMLButtonElement).style.color =
-                  "rgba(26,10,20,0.45)";
-              }}
-            >
-              {btn.icon}
-            </button>
-          ))}
-          <Link
-            href={`/profile/${params.id}`}
-            aria-label="View profile"
-            style={{
-              width: "36px",
-              height: "36px",
-              borderRadius: "50%",
-              background: "transparent",
-              border: "1px solid rgba(220,30,60,0.12)",
-              color: "rgba(26,10,20,0.45)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              textDecoration: "none",
-              transition: "background 0.15s ease, color 0.15s ease",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLAnchorElement).style.background =
-                "rgba(220,30,60,0.07)";
-              (e.currentTarget as HTMLAnchorElement).style.color = "#dc1e3c";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLAnchorElement).style.background =
-                "transparent";
-              (e.currentTarget as HTMLAnchorElement).style.color =
-                "rgba(26,10,20,0.45)";
-            }}
-          >
-            <MoreHorizontal style={{ width: "16px", height: "16px" }} />
-          </Link>
-        </div>
-      </div>
-
-      {/* ── E2E encryption notice ── */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "6px",
-          padding: "8px 16px",
-          background: "rgba(220,30,60,0.03)",
-          borderBottom: "1px solid rgba(220,30,60,0.08)",
-          flexShrink: 0,
-        }}
-      >
-        <Lock style={{ width: "11px", height: "11px", color: "#dc1e3c" }} />
-        <span
-          style={{
-            fontFamily: "var(--font-poppins, sans-serif)",
-            fontSize: "0.6875rem",
-            color: "rgba(220,30,60,0.65)",
-          }}
-        >
-          Messages are end-to-end encrypted · Signal Protocol
-        </span>
-      </div>
-
-      {/* ── Message list ── */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "20px 24px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "12px",
-          background: "#fdfbf9",
-        }}
-      >
-        {messages.map((msg, idx) => {
-          const isMe = msg.from === "me";
-          // Group consecutive same-sender messages
-          const prevMsg = messages[idx - 1];
-          const isSameSenderAsPrev = prevMsg?.from === msg.from;
-
-          return (
-            <div
-              key={msg.id}
-              style={{
-                display: "flex",
-                justifyContent: isMe ? "flex-end" : "flex-start",
-                marginTop: isSameSenderAsPrev ? "4px" : "12px",
-              }}
-            >
-              <div style={{ maxWidth: "75%" }}>
-                {/* Bubble */}
-                <div
-                  style={
-                    isMe
-                      ? {
-                          background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
-                          color: "#ffffff",
-                          borderRadius: "18px",
-                          borderBottomRightRadius: "5px",
-                          padding: "10px 16px",
-                          fontFamily: "var(--font-poppins, sans-serif)",
-                          fontSize: "0.875rem",
-                          lineHeight: 1.55,
-                          boxShadow: "0 2px 12px rgba(220,30,60,0.25)",
-                        }
-                      : {
-                          background: "#ffffff",
-                          color: "#1a0a14",
-                          borderRadius: "18px",
-                          borderBottomLeftRadius: "5px",
-                          padding: "10px 16px",
-                          fontFamily: "var(--font-poppins, sans-serif)",
-                          fontSize: "0.875rem",
-                          lineHeight: 1.55,
-                          border: "1px solid rgba(220,30,60,0.1)",
-                          boxShadow: "0 1px 6px rgba(26,10,20,0.07)",
-                        }
-                  }
-                >
-                  {msg.text}
-                </div>
-
-                {/* Timestamp + read receipt */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    marginTop: "4px",
-                    justifyContent: isMe ? "flex-end" : "flex-start",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontFamily: "var(--font-poppins, sans-serif)",
-                      fontSize: "0.625rem",
-                      color: "rgba(26,10,20,0.35)",
-                    }}
-                  >
-                    {msg.time}
-                  </span>
-                  {isMe && (
-                    <CheckCheck
-                      style={{ width: "12px", height: "12px", color: "#dc1e3c" }}
-                    />
-                  )}
-                </div>
-              </div>
+            <div className="min-w-0">
+              <p className="truncate font-display text-[15px] font-semibold text-[#1a0a14]">
+                {other.first_name}{other.age ? `, ${other.age}` : ""}
+              </p>
+              <p className="flex items-center gap-1 text-[11px] text-[#6a5560]">
+                <Shield className="h-3 w-3 text-rose-700" />
+                {wsConnected ? "Connected · End-to-end encrypted" : "Connecting…"}
+              </p>
             </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
+          </Link>
+        )}
+        {!other && !loading && (
+          <div className="flex-1">
+            <p className="font-display text-[15px] font-semibold text-[#1a0a14]">Conversation</p>
+            <p className="text-[11px] text-[#6a5560]">{wsConnected ? "Connected" : "Connecting…"}</p>
+          </div>
+        )}
+      </header>
 
-      {/* ── Input bar ── */}
-      <div
-        style={{
-          padding: "12px 16px",
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          flexShrink: 0,
-          background: "#ffffff",
-          borderTop: "1px solid rgba(220,30,60,0.12)",
-        }}
-      >
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder="Type a message…"
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setInputFocused(false)}
-          style={{
-            flex: 1,
-            height: "44px",
-            padding: "0 16px",
-            fontFamily: "var(--font-poppins, sans-serif)",
-            fontSize: "0.875rem",
-            color: "#1a0a14",
-            background: "#fdfbf9",
-            border: inputFocused
-              ? "1px solid rgba(220,30,60,0.55)"
-              : "1px solid rgba(220,30,60,0.18)",
-            borderRadius: "9999px",
-            outline: "none",
-            boxShadow: inputFocused
-              ? "0 0 0 3px rgba(220,30,60,0.08)"
-              : "none",
-            transition: "border-color 0.18s ease, box-shadow 0.18s ease",
-          }}
-        />
+      {/* Body */}
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-rose-700" />
+        </div>
+      ) : error ? (
+        <div className="flex flex-1 items-center justify-center px-6">
+          <div className="rounded-3xl border border-rose-100/70 bg-white px-6 py-12 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
+            <AlertCircle className="mx-auto h-9 w-9 text-rose-700/60" />
+            <h3 className="font-display mt-3 text-[18px] font-semibold text-[#1a0a14]">Couldn't load conversation</h3>
+            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-[#6a5560]">{error}</p>
+            <button
+              onClick={load}
+              className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_20px_rgba(220,30,60,0.28)] hover:shadow-[0_10px_26px_rgba(220,30,60,0.38)]"
+            >
+              <Loader2 className="h-3.5 w-3.5" /> Retry
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+            <div className="mx-auto max-w-[680px] space-y-2.5">
+              {/* Encryption preamble */}
+              <div className="mx-auto mb-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-100">
+                <Lock className="h-3 w-3" />
+                Messages in this conversation are end-to-end encrypted.
+              </div>
 
-        <button
-          onClick={send}
-          aria-label="Send message"
-          style={{
-            width: "44px",
-            height: "44px",
-            borderRadius: "50%",
-            border: "none",
-            background: input.trim()
-              ? "linear-gradient(135deg, #dc1e3c, #a0153c)"
-              : "rgba(220,30,60,0.15)",
-            color: input.trim() ? "#ffffff" : "rgba(220,30,60,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: input.trim() ? "pointer" : "default",
-            flexShrink: 0,
-            boxShadow: input.trim() ? "0 3px 12px rgba(220,30,60,0.35)" : "none",
-            transition: "background 0.18s ease, box-shadow 0.18s ease",
-          }}
-        >
-          <Send style={{ width: "18px", height: "18px" }} />
-        </button>
-      </div>
+              {messages.length === 0 ? (
+                <div className="rounded-3xl border border-rose-100/70 bg-white px-6 py-12 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
+                  <MessageCircle className="mx-auto h-9 w-9 text-rose-700/40" />
+                  <p className="font-display mt-3 text-[16px] font-semibold text-[#1a0a14]">Start the conversation</p>
+                  <p className="mx-auto mt-1.5 max-w-md text-[12.5px] text-[#6a5560]">
+                    Say hello — a thoughtful first message goes a long way.
+                  </p>
+                </div>
+              ) : (
+                messages.map((m) => {
+                  const mine = meId !== null && m.sender_id === meId;
+                  return (
+                    <div
+                      key={m.id}
+                      className={"flex " + (mine ? "justify-end" : "justify-start")}
+                    >
+                      <div
+                        className={
+                          "max-w-[78%] rounded-[20px] px-4 py-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] " +
+                          (mine
+                            ? "rounded-br-md bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white"
+                            : "rounded-bl-md border border-rose-100/70 bg-white text-[#1a0a14]")
+                        }
+                      >
+                        <p className="whitespace-pre-wrap break-words text-[14px] leading-[1.55]">
+                          {m.encrypted_content ?? "[encrypted message]"}
+                        </p>
+                        <p
+                          className={
+                            "mt-1 text-right text-[10px] " +
+                            (mine ? "text-white/70" : "text-[#6a5560]")
+                          }
+                        >
+                          {fmtTime(m.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={bottomRef} />
+            </div>
+          </div>
+
+          {/* Composer */}
+          <div className="border-t border-rose-100 bg-white/90 px-4 py-3 backdrop-blur sm:px-6">
+            <div className="mx-auto flex max-w-[680px] items-center gap-2">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    send();
+                  }
+                }}
+                placeholder={wsConnected ? "Write a message…" : "Connecting…"}
+                disabled={!wsConnected}
+                className="h-11 flex-1 rounded-2xl border border-rose-100 bg-white px-4 text-[14px] text-[#1a0a14] outline-none transition-colors placeholder:text-rose-700/40 focus:border-rose-300 disabled:opacity-60"
+              />
+              <button
+                onClick={send}
+                disabled={!input.trim() || !wsConnected || sending}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white shadow-[0_4px_14px_rgba(220,30,60,0.28)] transition-all hover:shadow-[0_8px_20px_rgba(220,30,60,0.38)] disabled:opacity-40 disabled:shadow-none"
+                aria-label="Send"
+              >
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

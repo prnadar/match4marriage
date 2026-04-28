@@ -5,7 +5,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { profileApi, api } from "@/lib/api";
 import {
-  Shield, CheckCircle, AlertCircle, Camera, Upload,
+  Shield, CheckCircle, AlertCircle, AlertTriangle, Clock, Info, Camera, Upload,
   Plus, X, Edit3, Heart, Star, Users, Briefcase, GraduationCap,
   MapPin, Globe,
 } from "lucide-react";
@@ -586,14 +586,14 @@ export default function MyProfilePage() {
         fontSize: 14,
       }}>
         <div>
-          {verifStatus === "approved" && <span>✅ <strong>Approved.</strong> Your profile is live and visible to matches.</span>}
-          {verifStatus === "submitted" && <span>⏳ <strong>Under review.</strong> We'll notify you once verified.</span>}
-          {verifStatus === "rejected" && <span>⚠️ <strong>Changes needed:</strong> {rejectionReason || "please update and resubmit."}</span>}
-          {verifStatus === "draft" && rejectionReason && <span>ℹ️ <strong>Admin request:</strong> {rejectionReason.replace(/^More info needed: /, "")} — update and resubmit.</span>}
-          {verifStatus === "draft" && !rejectionReason && <span>📝 <strong>Draft.</strong> Complete all sections, then submit for verification.</span>}
-          <span style={{ marginLeft: 12, color: "#666", fontSize: 12 }}>
+          {verifStatus === "approved"  && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><CheckCircle style={{ width: 16, height: 16, color: "#16a34a" }} /> <strong>Approved.</strong> Your profile is live and visible to matches.</span>}
+          {verifStatus === "submitted" && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Clock        style={{ width: 16, height: 16, color: "#b45309" }} /> <strong>Under review.</strong> We'll notify you once verified.</span>}
+          {verifStatus === "rejected"  && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><AlertTriangle style={{ width: 16, height: 16, color: "#dc2626" }} /> <strong>Changes needed:</strong> {rejectionReason || "please update and resubmit."}</span>}
+          {verifStatus === "draft" && rejectionReason && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Info style={{ width: 16, height: 16, color: "#0284c7" }} /> <strong>Admin request:</strong> {rejectionReason.replace(/^More info needed: /, "")} — update and resubmit.</span>}
+          {verifStatus === "draft" && !rejectionReason && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Edit3 style={{ width: 16, height: 16, color: "#dc1e3c" }} /> <strong>Draft.</strong> Complete all sections, then submit for verification.</span>}
+          <span style={{ marginLeft: 12, color: "#666", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
             {autoSaveState === "saving" && "Saving…"}
-            {autoSaveState === "saved" && "Saved ✓"}
+            {autoSaveState === "saved" && (<><CheckCircle style={{ width: 12, height: 12, color: "#16a34a" }} /> Saved</>)}
             {autoSaveState === "error" && (
               <span style={{ color: "#c00" }} title={saveError}>
                 Save failed{saveError ? `: ${saveError.slice(0, 160)}` : ""}
@@ -642,7 +642,9 @@ export default function MyProfilePage() {
           color: "#7B2D3A",
           display: "flex", gap: 10, alignItems: "flex-start",
         }}>
-          <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+          <span style={{ flexShrink: 0, color: "#b45309" }}>
+            <AlertTriangle style={{ width: 16, height: 16 }} />
+          </span>
           <div>
             <strong style={{ color: "#7B2D3A" }}>Can&apos;t submit yet.</strong>{" "}
             {submitError}

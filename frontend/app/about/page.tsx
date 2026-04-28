@@ -1,6 +1,12 @@
 "use client";
 import Link from "next/link";
 import { useAuthState, getCTA } from "@/lib/useVerification";
+import {
+  Crown, ShieldCheck, Lock, Handshake, Gem, Sparkles, Globe, MessageCircle, Heart,
+  Users, Award, Star,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { CountryFlag } from "@/components/ui/country-flag";
 
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
@@ -11,70 +17,24 @@ const metadata = {
     "Match4Marriage is a UK-based boutique Indian matrimonial service. Hand-picked, personally verified profiles for the British Indian community and diaspora.",
 };
 
-const pillars = [
-  {
-    icon: "👑",
-    title: "Hand-Picked Profiles Only",
-    desc: "We do not accept everyone. Every profile on Match4Marriage is individually reviewed and approved, ensuring you meet only genuine, quality individuals.",
-  },
-  {
-    icon: "🛡️",
-    title: "Personally Verified",
-    desc: "Every member is manually verified. Not just ID-checked, personally assessed. You can trust that every connection is real.",
-  },
-  {
-    icon: "🔒",
-    title: "Complete Discretion",
-    desc: "Your details, your journey, your privacy. We handle everything with the utmost confidentiality and care.",
-  },
-  {
-    icon: "🤝",
-    title: "Dedicated Guidance",
-    desc: "We are with you every step of the way: personal support, honest advice, and genuine care for your outcome.",
-  },
-  {
-    icon: "🇬🇧",
-    title: "Built in the UK, For Global Indians",
-    desc: "Built in the United Kingdom for the global Indian community, connecting Indians across the UK, India, USA, Canada, UAE, Australia, and beyond.",
-  },
-  {
-    icon: "💍",
-    title: "Marriages That Last",
-    desc: "We have already helped families celebrate successful marriages. Small in number, profound in meaning.",
-  },
+interface Pillar { Icon: LucideIcon; title: string; desc: string; }
+
+const pillars: Pillar[] = [
+  { Icon: Crown,       title: "Hand-Picked Profiles Only",     desc: "We do not accept everyone. Every profile on Match4Marriage is individually reviewed and approved, ensuring you meet only genuine, quality individuals." },
+  { Icon: ShieldCheck, title: "Personally Verified",           desc: "Every member is manually verified. Not just ID-checked, personally assessed. You can trust that every connection is real." },
+  { Icon: Lock,        title: "Complete Discretion",           desc: "Your details, your journey, your privacy. We handle everything with the utmost confidentiality and care." },
+  { Icon: Handshake,   title: "Dedicated Guidance",            desc: "We are with you every step of the way: personal support, honest advice, and genuine care for your outcome." },
+  { Icon: Globe,       title: "Built in the UK, For Global Indians", desc: "Built in the United Kingdom for the global Indian community, connecting Indians across the UK, India, USA, Canada, UAE, Australia, and beyond." },
+  { Icon: Gem,         title: "Marriages That Last",           desc: "We have already helped families celebrate successful marriages. Small in number, profound in meaning." },
 ];
 
-const values = [
-  {
-    icon: "💍",
-    title: "Family First",
-    desc: "We understand that marriage in Tamil culture is a union of families, not just individuals. Our platform is built around this truth.",
-  },
-  {
-    icon: "🛡️",
-    title: "Trust & Safety",
-    desc: "Every profile is manually verified with government ID. Your privacy is protected at every step.",
-  },
-  {
-    icon: "🤝",
-    title: "Respect & Dignity",
-    desc: "We treat every family with respect regardless of caste, community, or background within the Tamil diaspora.",
-  },
-  {
-    icon: "🌏",
-    title: "Global Tamil Community",
-    desc: "Connecting Tamil families across India, Singapore, UK, USA, Canada, Malaysia, and beyond.",
-  },
-  {
-    icon: "✨",
-    title: "Tradition Meets Technology",
-    desc: "Our AI matching engine understands cultural compatibility, not just age and location.",
-  },
-  {
-    icon: "💬",
-    title: "Always Here",
-    desc: "Our relationship advisors are available 7 days a week to support families through every step.",
-  },
+const values: Pillar[] = [
+  { Icon: Users,         title: "Family First",                desc: "We understand that marriage in Tamil culture is a union of families, not just individuals. Our platform is built around this truth." },
+  { Icon: ShieldCheck,   title: "Trust & Safety",              desc: "Every profile is manually verified with government ID. Your privacy is protected at every step." },
+  { Icon: Handshake,     title: "Respect & Dignity",           desc: "We treat every family with respect regardless of caste, community, or background within the Tamil diaspora." },
+  { Icon: Globe,         title: "Global Tamil Community",      desc: "Connecting Tamil families across India, Singapore, UK, USA, Canada, Malaysia, and beyond." },
+  { Icon: Sparkles,      title: "Tradition Meets Technology",  desc: "Our AI matching engine understands cultural compatibility, not just age and location." },
+  { Icon: MessageCircle, title: "Always Here",                 desc: "Our relationship advisors are available 7 days a week to support families through every step." },
 ];
 
 const milestones = [
@@ -110,8 +70,9 @@ export default function AboutPage() {
         <div style={{ position: "absolute", bottom: -60, left: -60, width: 320, height: 320, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.08)" }} />
 
         <div style={{ position: "relative", zIndex: 1, maxWidth: "720px", margin: "0 auto" }}>
-          <span style={{ display: "inline-block", background: "rgba(255,255,255,0.15)", backdropFilter: "blur(8px)", borderRadius: "9999px", padding: "6px 20px", fontSize: "12px", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#fff", marginBottom: "20px" }}>
-            🇬🇧 UK's Premier Indian Matrimonial Service
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.15)", backdropFilter: "blur(8px)", borderRadius: "9999px", padding: "6px 20px", fontSize: 12, fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: "#fff", marginBottom: 20 }}>
+            <CountryFlag code="GB" rounded="sm" />
+            UK's Premier Indian Matrimonial Service
           </span>
           <h1
             className="font-playfair"
@@ -129,12 +90,12 @@ export default function AboutPage() {
       {/* ── Stats ── */}
       <section style={{ background: "#fff", padding: "0 24px", borderBottom: "1px solid rgba(220,30,60,0.08)" }}>
         <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4">
-          {[
-            { icon: "👑", num: "100+", label: "Elite Verified Profiles" },
-            { icon: "✅", num: "Every Profile", label: "Hand-Picked & Verified" },
-            { icon: "🇬🇧", num: "UK-Based", label: "Headquarters" },
-            { icon: "⭐", num: "4.9 / 5", label: "Client Satisfaction" },
-          ].map((s, i) => (
+          {([
+            { Icon: Crown,       num: "100+",          label: "Elite Verified Profiles" },
+            { Icon: Award,       num: "Every Profile", label: "Hand-Picked & Verified"  },
+            { Icon: null,        num: "UK-Based",      label: "Headquarters", flag: "GB" as const },
+            { Icon: Star,        num: "4.9 / 5",       label: "Client Satisfaction"     },
+          ] as const).map((s, i) => (
             <div
               key={s.label}
               style={{
@@ -143,9 +104,11 @@ export default function AboutPage() {
                 borderRight: i < 3 ? "1px solid rgba(220,30,60,0.08)" : "none",
               }}
             >
-              <span style={{ fontSize: "28px", display: "block", marginBottom: "10px" }}>{s.icon}</span>
-              <p className="font-playfair" style={{ fontSize: "clamp(18px, 2.5vw, 26px)", fontWeight: 700, color: "#1a0a14", lineHeight: 1.2 }}>{s.num}</p>
-              <p style={{ fontSize: "13px", color: "#888", marginTop: "6px", fontWeight: 500 }}>{s.label}</p>
+              <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, rgba(220,30,60,0.10), rgba(201,149,74,0.08))", color: "#dc1e3c", marginBottom: 12 }}>
+                {s.Icon ? <s.Icon className="h-6 w-6" strokeWidth={1.5} /> : "flag" in s && s.flag ? <CountryFlag code={s.flag} rounded="sm" className="!text-xl" /> : null}
+              </div>
+              <p className="font-display" style={{ fontSize: "clamp(18px, 2.5vw, 26px)", fontWeight: 700, color: "#1a0a14", lineHeight: 1.2, letterSpacing: "-0.01em" }}>{s.num}</p>
+              <p style={{ fontSize: 13, color: "#888", marginTop: 6, fontWeight: 500 }}>{s.label}</p>
             </div>
           ))}
         </div>
@@ -193,11 +156,13 @@ export default function AboutPage() {
               alt="Indian wedding couple"
               style={{ width: "100%", borderRadius: "20px", objectFit: "cover", objectPosition: "center 20%", aspectRatio: "4/3", boxShadow: "0 20px 60px rgba(102,69,28,0.12)" }}
             />
-            <div style={{ position: "absolute", bottom: -20, left: -20, background: "#fff", borderRadius: "16px", padding: "16px 24px", boxShadow: "0 8px 32px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", gap: "12px" }}>
-              <span style={{ fontSize: "28px" }}>💍</span>
+            <div style={{ position: "absolute", bottom: -20, left: -20, background: "#fff", borderRadius: 16, padding: "16px 24px", boxShadow: "0 8px 32px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", gap: 14 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 42, height: 42, borderRadius: 12, background: "linear-gradient(135deg,#dc1e3c,#a0153c)", color: "#fff" }}>
+                <Gem className="h-5 w-5" strokeWidth={1.6} />
+              </span>
               <div>
-                <p style={{ fontWeight: 700, color: "#1a0a14", fontSize: "15px" }}>Successful Matches</p>
-                <p style={{ color: "#888", fontSize: "12px" }}>and growing</p>
+                <p style={{ fontWeight: 700, color: "#1a0a14", fontSize: 15 }}>Successful Matches</p>
+                <p style={{ color: "#888", fontSize: 12 }}>and growing</p>
               </div>
             </div>
           </div>
@@ -238,12 +203,12 @@ export default function AboutPage() {
                 </span>
                 {/* Icon circle */}
                 <div style={{
-                  width: "48px", height: "48px", borderRadius: "12px",
-                  background: "linear-gradient(135deg, rgba(220,30,60,0.1), rgba(160,21,60,0.06))",
+                  width: 48, height: 48, borderRadius: 12,
+                  background: "linear-gradient(135deg, rgba(220,30,60,0.10), rgba(201,149,74,0.08))",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  marginBottom: "20px", fontSize: "22px",
+                  marginBottom: 20, color: "#dc1e3c",
                 }}>
-                  {v.icon}
+                  <v.Icon className="h-5 w-5" strokeWidth={1.6} />
                 </div>
                 <h3 className="font-playfair" style={{ fontSize: "17px", fontWeight: 700, color: "#1a0a14", marginBottom: "12px", lineHeight: 1.3 }}>{v.title}</h3>
                 <p style={{ color: "#777", fontSize: "14px", lineHeight: 1.8, margin: 0 }}>{v.desc}</p>
@@ -284,14 +249,18 @@ export default function AboutPage() {
       {/* ── Closing Statement ── */}
       <section style={{ padding: "80px 24px", background: "#fff" }}>
         <div className="max-w-3xl mx-auto text-center">
-          <span style={{ fontSize: "40px", display: "block", marginBottom: "24px" }}>💍</span>
-          <blockquote className="font-playfair" style={{ fontSize: "clamp(20px, 3vw, 28px)", fontWeight: 600, color: "#1a0a14", lineHeight: 1.6, marginBottom: "24px", fontStyle: "italic" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(135deg,#dc1e3c,#a0153c)", color: "#fff", marginBottom: 24, boxShadow: "0 12px 32px rgba(220,30,60,0.30)" }}>
+            <Gem className="h-7 w-7" strokeWidth={1.4} />
+          </span>
+          <blockquote className="font-display-alt" style={{ fontSize: "clamp(20px, 3vw, 28px)", fontWeight: 500, color: "#1a0a14", lineHeight: 1.55, marginBottom: 24, fontStyle: "italic", letterSpacing: "-0.01em" }}>
             &ldquo;Our purpose is simple yet meaningful: to help you find not just a match, but a lasting and fulfilling companionship.&rdquo;
           </blockquote>
-          <p style={{ color: "#888", fontSize: "14px", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>
-            The Match4Marriage Team 🇬🇧 United Kingdom
+          <p style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#888", fontSize: 14, letterSpacing: "0.16em", textTransform: "uppercase", fontWeight: 600 }}>
+            The Match4Marriage Team
+            <CountryFlag code="GB" rounded="sm" />
+            United Kingdom
           </p>
-          <div style={{ width: "48px", height: "3px", background: "#dc1e3c", borderRadius: "9999px", margin: "24px auto 0" }} />
+          <div style={{ width: 48, height: 3, background: "#dc1e3c", borderRadius: 9999, margin: "24px auto 0" }} />
         </div>
       </section>
 

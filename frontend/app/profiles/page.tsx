@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Lock, MapPin } from "lucide-react";
 import { useAuthState, getCTA } from "@/lib/useVerification";
 
 import PublicHeader from "@/components/PublicHeader";
@@ -44,8 +45,9 @@ export default function ProfilesPage() {
 
       {/* Profile grid — blurred/locked preview */}
       <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "56px 24px" }}>
-        <p style={{ textAlign: "center", fontSize: "13px", color: "#aaa", marginBottom: "40px" }}>
-          🔒 Register free to see full names, photos, contact details and connect with matches
+        <p style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", textAlign: "center", fontSize: 13, color: "#888", marginBottom: 40, width: "100%" }}>
+          <Lock className="h-3.5 w-3.5" strokeWidth={1.6} />
+          Register free to see full names, photos, contact details and connect with matches
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: "24px" }}>
           {demoProfiles.map((p) => (
@@ -59,9 +61,9 @@ export default function ProfilesPage() {
               </div>
 
               {/* Lock overlay */}
-              <div style={{ position: "absolute", top: "60px", left: "50%", transform: "translateX(-50%)", background: "rgba(26,10,20,0.75)", borderRadius: "9999px", padding: "6px 16px", display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ fontSize: "14px" }}>🔒</span>
-                <span style={{ fontSize: "11px", fontWeight: 700, color: "#fff" }}>{cta.locked}</span>
+              <div style={{ position: "absolute", top: 60, left: "50%", transform: "translateX(-50%)", background: "rgba(26,10,20,0.78)", borderRadius: 9999, padding: "6px 16px", display: "flex", alignItems: "center", gap: 6 }}>
+                <Lock className="h-3.5 w-3.5 text-white" strokeWidth={1.8} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", letterSpacing: "0.08em" }}>{cta.locked}</span>
               </div>
 
               {/* Info */}
@@ -69,7 +71,9 @@ export default function ProfilesPage() {
                 <h3 style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "18px", fontWeight: 700, color: "#1a0a14", margin: "0 0 6px" }}>
                   {p.name} · {p.age}
                 </h3>
-                <p style={{ fontSize: "12px", color: "#aaa", margin: "0 0 10px" }}>📍 {p.location}</p>
+                <p style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "#888", margin: "0 0 10px" }}>
+                  <MapPin className="h-3 w-3" strokeWidth={1.6} /> {p.location}
+                </p>
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                   {[p.profession, p.religion, p.community].map((tag) => (
                     <span key={tag} style={{ fontSize: "11px", fontWeight: 600, color: "#dc1e3c", background: "rgba(220,30,60,0.07)", padding: "3px 10px", borderRadius: "9999px" }}>

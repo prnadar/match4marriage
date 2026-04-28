@@ -16,6 +16,7 @@ from app.models.payment_gateway_config import PaymentGatewayConfig, PaymentGatew
 from app.models.verification import Verification, VerificationType, VerificationStatus
 from app.models.notification import Notification
 from app.models.report import Report, ReportCategory, ReportStatus
+from app.models.success_story import SuccessStory
 
 __all__ = [
     "TenantModel",
@@ -55,4 +56,5 @@ __all__ = [
     "Report",
     "ReportCategory",
     "ReportStatus",
+    "SuccessStory",
 ]

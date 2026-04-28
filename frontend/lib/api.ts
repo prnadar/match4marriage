@@ -117,7 +117,11 @@ export async function downloadCsv(path: string, filename: string): Promise<void>
 
 export const profileApi = {
   me: () => api.get("/api/v1/profile/me"),
-  getProfile: (_userId?: string) => api.get("/api/v1/profile/me"),
+  /** Fetch any profile by user UUID. Backend: GET /profile/{user_id}. */
+  getById: (userId: string) => api.get(`/api/v1/profile/${userId}`),
+  /** @deprecated alias retained for older call sites — prefer me() or getById(). */
+  getProfile: (userId?: string) =>
+    userId ? api.get(`/api/v1/profile/${userId}`) : api.get("/api/v1/profile/me"),
   update: (data: unknown, ifMatchVersion?: number) =>
     api.patch(
       "/api/v1/profile/me",
@@ -133,6 +137,80 @@ export const profileApi = {
   upsertOnboarding: (data: unknown) => api.post("/api/v1/profile/onboarding", data),
   submitForReview: () => api.post("/api/v1/profile/me/submit", {}),
   getTrustScore: () => api.get("/api/v1/profile/trust-score"),
+  /** Backend: GET /profile/me/completion → { score, sections: {...}, missing: [...] } */
+  getCompletion: () => api.get("/api/v1/profile/me/completion"),
+  /** Photo upload pre-signed URL (S3/Cloudinary direct upload). */
+  getPhotoUploadUrl: (filename: string, contentType: string) =>
+    api.post("/api/v1/profile/photos/upload-url", { filename, content_type: contentType }),
+  attachPhoto: (key: string) => api.post("/api/v1/profile/me/photos", { key }),
+  removePhoto: (key: string) =>
+    api.delete(`/api/v1/profile/me/photos?key=${encodeURIComponent(key)}`),
+  reorderPhotos: (keys: string[]) =>
+    api.put("/api/v1/profile/me/photos/reorder", { keys }),
+  setPrimaryPhoto: (key: string) =>
+    api.post("/api/v1/profile/me/photos/primary", { key }),
+};
+
+/* ── Chat / Messaging ─────────────────────────────────────────────────
+ * Backend exposes:
+ *   GET   /chats                          — list threads for the current user
+ *   GET   /chats/{thread_id}/messages     — paginated history
+ *   WS    /ws/chat/{thread_id}?token=...  — real-time send/receive
+ *
+ * NOTE: There is no REST POST endpoint for sending messages. Sending happens
+ * over the WebSocket (see openChatSocket below). If WS is unavailable, the
+ * UI should fall back gracefully.
+ */
+export const chatApi = {
+  listThreads: (page = 1, limit = 20) =>
+    api.get(`/api/v1/chats?page=${page}&limit=${limit}`),
+  getMessages: (threadId: string, page = 1, limit = 50) =>
+    api.get(`/api/v1/chats/${threadId}/messages?page=${page}&limit=${limit}`),
+};
+
+/* ── Public pricing ───────────────────────────────────────────────── */
+export const pricingApi = {
+  /** Backend: GET /pricing-plans (public, active plans only). */
+  listPlans: () => api.get("/api/v1/pricing-plans"),
+};
+
+/* ── Success stories (public + admin) ─────────────────────────────── */
+export const successStoriesApi = {
+  /** Backend: GET /public/success-stories (no auth). */
+  listPublic: (limit = 24) =>
+    api.get(`/api/v1/public/success-stories?limit=${limit}`),
+
+  /* Admin operations — listed here so the admin UI can use them too. */
+  listAdmin:      () => api.get("/api/v1/admin/success-stories"),
+  create:         (body: Record<string, unknown>) => api.post("/api/v1/admin/success-stories", body),
+  update:         (id: string, body: Record<string, unknown>) => api.put(`/api/v1/admin/success-stories/${id}`, body),
+  togglePublish:  (id: string) => api.post(`/api/v1/admin/success-stories/${id}/publish`),
+  delete:         (id: string) => api.delete(`/api/v1/admin/success-stories/${id}`),
+};
+
+/** Open a WebSocket connection to a chat thread. Returns the WebSocket. */
+export async function openChatSocket(threadId: string): Promise<WebSocket> {
+  const token = await getIdToken();
+  if (!token) throw new ApiError(401, "Not signed in");
+  // Convert http(s) → ws(s) for the same host as BASE.
+  const wsBase = BASE.replace(/^http/, "ws");
+  const url = `${wsBase}/ws/chat/${threadId}?token=${encodeURIComponent(token)}`;
+  return new WebSocket(url);
+}
+
+/* ── Notifications ────────────────────────────────────────────────────
+ * Backend mounts this router at /api/v1/notifications.
+ *   GET    /notifications              — paginated list
+ *   POST   /notifications/read-all     — mark all read
+ *   POST   /notifications/read/{id}    — mark single notification read
+ *   DELETE /notifications/{id}         — delete a notification
+ */
+export const notificationsApi = {
+  list: (page = 1, limit = 20) =>
+    api.get(`/api/v1/notifications?page=${page}&limit=${limit}`),
+  markRead: (id: string) => api.post(`/api/v1/notifications/read/${id}`),
+  markAllRead: () => api.post(`/api/v1/notifications/read-all`),
+  delete: (id: string) => api.delete(`/api/v1/notifications/${id}`),
 };
 
 export const adminApi = {

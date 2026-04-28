@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Mail, Phone, MessageCircle, MapPin, Clock } from "lucide-react";
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
 
@@ -40,15 +41,15 @@ export default function ContactPage() {
               Contact Details
             </h2>
 
-            {[
-              { icon: "✉️", label: "Email Us", value: "enquiry@match4marriage.com", href: "mailto:enquiry@match4marriage.com", color: "rgba(220,30,60,0.07)" },
-              { icon: "📞", label: "Call Us", value: "+44 7476 212655", href: "tel:+447476212655", color: "rgba(220,30,60,0.07)" },
-              { icon: "💬", label: "WhatsApp", value: "Message us on WhatsApp", href: "https://wa.me/447476212655", color: "rgba(37,211,102,0.08)" },
-              { icon: "📍", label: "Address", value: "282 Warwick Road, Solihull, England, B92 7AF", href: null, color: "rgba(220,30,60,0.07)" },
-            ].map((c) => (
-              <div key={c.label} style={{ display: "flex", gap: "16px", alignItems: "flex-start", marginBottom: "24px" }}>
-                <div style={{ width: "48px", height: "48px", borderRadius: "14px", background: c.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px", flexShrink: 0 }}>
-                  {c.icon}
+            {([
+              { Icon: Mail,           label: "Email Us",  value: "enquiry@match4marriage.com",         href: "mailto:enquiry@match4marriage.com", color: "rgba(220,30,60,0.07)",  iconColor: "#dc1e3c" },
+              { Icon: Phone,          label: "Call Us",   value: "+44 7476 212655",                     href: "tel:+447476212655",                  color: "rgba(220,30,60,0.07)",  iconColor: "#dc1e3c" },
+              { Icon: MessageCircle,  label: "WhatsApp",  value: "Message us on WhatsApp",              href: "https://wa.me/447476212655",         color: "rgba(37,211,102,0.08)", iconColor: "#25d366" },
+              { Icon: MapPin,         label: "Address",   value: "282 Warwick Road, Solihull, England, B92 7AF", href: null,                          color: "rgba(220,30,60,0.07)",  iconColor: "#dc1e3c" },
+            ] as const).map((c) => (
+              <div key={c.label} style={{ display: "flex", gap: 16, alignItems: "flex-start", marginBottom: 24 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: c.color, color: c.iconColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <c.Icon className="h-5 w-5" strokeWidth={1.6} />
                 </div>
                 <div>
                   <p style={{ fontSize: "11px", fontWeight: 700, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 4px" }}>{c.label}</p>
@@ -66,7 +67,9 @@ export default function ContactPage() {
 
             {/* Office hours */}
             <div style={{ marginTop: "32px", padding: "24px", background: "#fff", borderRadius: "16px", border: "1px solid rgba(220,30,60,0.08)" }}>
-              <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#1a0a14", marginBottom: "12px" }}>🕐 Office Hours</h3>
+              <h3 style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 700, color: "#1a0a14", marginBottom: 12 }}>
+                <Clock className="h-4 w-4 text-rose-700" strokeWidth={1.6} /> Office Hours
+              </h3>
               {[
                 { day: "Monday to Friday", hours: "9:00 AM to 6:00 PM BST" },
                 { day: "Saturday", hours: "10:00 AM to 4:00 PM BST" },
@@ -89,7 +92,9 @@ export default function ContactPage() {
           <div style={{ background: "#fff", borderRadius: "20px", padding: "40px", boxShadow: "0 4px 32px rgba(26,10,20,0.08)", border: "1px solid rgba(220,30,60,0.08)" }}>
             {sent ? (
               <div style={{ textAlign: "center", padding: "40px 0" }}>
-                <p style={{ fontSize: "48px", marginBottom: "16px" }}>💌</p>
+                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 60, height: 60, borderRadius: "50%", background: "linear-gradient(135deg,#dc1e3c,#a0153c)", color: "#fff", marginBottom: 18, boxShadow: "0 12px 30px rgba(220,30,60,0.25)" }}>
+                  <Mail className="h-6 w-6" strokeWidth={1.6} />
+                </span>
                 <h3 style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "24px", fontWeight: 700, color: "#1a0a14", marginBottom: "12px" }}>
                   Message Sent!
                 </h3>

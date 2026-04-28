@@ -22,7 +22,7 @@ from app.models import *  # noqa: F401,F403 — register all models with Alembic
 from app.routers import (
     admin, admin_cms, admin_payment_gateway, admin_payments, admin_pricing,
     admin_settings, auth, chat, enquiries, health, matches, notifications,
-    profile, reports,
+    profile, reports, success_stories,
 )
 # subscriptions router disabled for launch (razorpay/stripe deps removed)
 
@@ -264,6 +264,7 @@ app.include_router(matches.router, prefix=PREFIX)
 app.include_router(chat.router, prefix=PREFIX)
 app.include_router(reports.router, prefix=PREFIX)
 app.include_router(notifications.router, prefix=PREFIX)
+app.include_router(success_stories.router, prefix=PREFIX)
 app.include_router(health.router, prefix=PREFIX)
 
 

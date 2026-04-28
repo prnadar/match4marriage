@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Heart } from "lucide-react";
+import { Heart, Mail } from "lucide-react";
 
 export default function PublicFooter() {
   return (
@@ -15,9 +15,13 @@ export default function PublicFooter() {
             <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", lineHeight: 1.7, maxWidth: "260px" }}>
               Elite Indian matrimony service — hand-picked, personally verified profiles for the global Indian community.
             </p>
-            <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)", marginTop: "12px" }}>
-              ✉️ enquiry@match4marriage.com
-            </p>
+            <a
+              href="mailto:enquiry@match4marriage.com"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(255,255,255,0.45)", marginTop: 12, textDecoration: "none" }}
+            >
+              <Mail style={{ width: 13, height: 13 }} strokeWidth={1.6} />
+              enquiry@match4marriage.com
+            </a>
           </div>
 
           {/* Company */}
@@ -56,8 +60,8 @@ export default function PublicFooter() {
           <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)" }}>
             © {new Date().getFullYear()} Match4Marriage. All rights reserved. · United Kingdom
           </p>
-          <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)" }}>
-            Made with ❤️ for love
+          <p style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(255,255,255,0.25)" }}>
+            Made with <Heart style={{ width: 12, height: 12, color: "#dc1e3c", fill: "#dc1e3c" }} /> for love
           </p>
         </div>
       </div>

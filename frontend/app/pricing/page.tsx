@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Lock, Sparkles } from "lucide-react";
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
 
@@ -39,11 +40,11 @@ const plans = [
     name: "VIP Concierge",
     price: "Bespoke",
     period: "tailored to you",
-    badge: "✦ VIP",
+    badge: "VIP",
     highlighted: false,
     vip: true,
     features: ["Everything in Elite", "Personal matchmaker assigned", "Curated hand-picked profiles", "1-on-1 strategy call", "Profile photography consultation", "Family liaison service", "Unlimited profile boosts", "Financial due diligence", "24/7 WhatsApp concierge support"],
-    cta: "📅 Schedule a Call",
+    cta: "Schedule a Call",
     ctaHref: "https://calendly.com/match4marriage",
   },
 ];
@@ -161,8 +162,8 @@ export default function PricingPage() {
         </div>
 
         {/* Footer note */}
-        <p style={{ textAlign: "center", marginTop: "36px", fontSize: "13px", color: "#bbb" }}>
-          🔒 Secure payment · Cancel anytime · GDPR compliant
+        <p style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", marginTop: 36, fontSize: 13, color: "#888", width: "100%" }}>
+          <Lock className="h-3.5 w-3.5" strokeWidth={1.6} /> Secure payment · Cancel anytime · GDPR compliant
         </p>
       </div>
 

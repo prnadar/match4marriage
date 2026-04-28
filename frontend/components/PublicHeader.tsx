@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
+import { Mail, Gem, ChevronDown } from "lucide-react";
+import { CountryFlag } from "@/components/ui/country-flag";
 
 export default function PublicHeader() {
   const pathname = usePathname();
@@ -40,10 +42,17 @@ export default function PublicHeader() {
   return (
     <>
       {/* ── Top Bar ── */}
-      <div className="w-full text-white text-sm py-2 px-4" style={{ backgroundColor: "#dc1e3c" }}>
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1">
-          <span>💍 Elite Indian Matrimony — Established in the UK 🇬🇧</span>
-          <span className="text-xs sm:text-sm">✉️ enquiry@match4marriage.com</span>
+      <div className="w-full text-white py-2 px-4" style={{ backgroundColor: "#dc1e3c" }}>
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1.5 text-[12.5px] tracking-[0.02em]">
+          <span className="inline-flex items-center gap-2">
+            <Gem className="h-3.5 w-3.5" strokeWidth={1.6} />
+            Elite Indian Matrimony — Established in the United Kingdom
+            <CountryFlag code="GB" rounded="sm" className="ml-0.5" />
+          </span>
+          <a href="mailto:enquiry@match4marriage.com" className="inline-flex items-center gap-1.5 text-white/95 hover:text-white">
+            <Mail className="h-3.5 w-3.5" strokeWidth={1.6} />
+            enquiry@match4marriage.com
+          </a>
         </div>
       </div>
 
@@ -80,9 +89,10 @@ export default function PublicHeader() {
                 style={{ color: helpOpen ? "#dc1e3c" : "#333", background: "none", border: "none", cursor: "pointer", padding: 0, minHeight: "auto" }}
               >
                 Help
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transition: "transform 0.2s", transform: helpOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
-                  <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+                <ChevronDown
+                  className="h-3 w-3 transition-transform"
+                  style={{ transform: helpOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+                />
               </button>
               {helpOpen && (
                 <div style={{

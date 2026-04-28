@@ -15,12 +15,23 @@
     --border-gold: rgba(220, 30, 60, 0.12);
     --shadow-warm: 0 4px 20px rgba(220, 30, 60, 0.06);
 
-    /* Font variables — used by all inner app pages */
-    --font-playfair: 'Playfair Display', Georgia, serif;
-    --font-poppins: 'Poppins', system-ui, sans-serif;
-    --font-lato: 'Lato', system-ui, sans-serif;
-    --font-great-vibes: 'Great Vibes', cursive;
-    --font-cinzel: 'Playfair Display', Georgia, serif;
+    /* ── Type scale — Fraunces (display) + Inter (body) is the new system.
+       The legacy Playfair / Poppins variables stay aliased so existing pages
+       keep working until they're migrated. New code should reference
+       --font-display / --font-body / --font-script. */
+    --font-display:    'Fraunces', 'Playfair Display', Georgia, serif;
+    --font-display-alt:'Cormorant', 'Playfair Display', Georgia, serif;
+    --font-body:       'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-script:     'Great Vibes', cursive;
+
+    --font-playfair: var(--font-display);
+    --font-poppins:  var(--font-body);
+    --font-lato:     var(--font-body);
+    --font-great-vibes: var(--font-script);
+    --font-cinzel:   var(--font-display);
+
+    /* Optical-sized display headings — set by --font-fraunces-opsz */
+    --fraunces-display: "opsz" 144, "SOFT" 30, "WONK" 0;
 
     /* ── shadcn semantic tokens · Modern Luxe palette ─────────────────────
        HSL channels (no `hsl()` wrapper) so Tailwind's `hsl(var(--x) / <a>)`
@@ -71,7 +82,7 @@
   }
 
   body {
-    font-family: var(--font-poppins);
+    font-family: var(--font-body);
     background: linear-gradient(135deg, #fdfbf9 0%, #fff5f7 100%) fixed;
     color: var(--text-primary);
     -webkit-font-smoothing: antialiased;
@@ -79,6 +90,15 @@
     font-weight: 400;
     font-size: 1rem;
     line-height: 1.6;
+    /* Inter activates contextual + tabular numerals + cv ligatures for editorial feel */
+    font-feature-settings: "ss01", "cv11", "cv02", "tnum";
+  }
+
+  /* Display headings get Fraunces with optical sizing for editorial weight. */
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-variation-settings: var(--fraunces-display);
+    letter-spacing: -0.012em;
   }
 
   /* Great Vibes — for hero taglines, script accents */
@@ -98,13 +118,6 @@
       transition-duration: 0.01ms !important;
     }
   }
-}
-
-/* ── Typography ────────────────────────────────────────────────────── */
-
-h1, h2, h3, h4 {
-  font-family: var(--font-playfair);
-  color: var(--text-primary);
 }
 
 /* Ensure font variables work in all inline styles */
@@ -128,17 +141,192 @@ h1, h2, h3, h4 {
 /* ── Utilities ─────────────────────────────────────────────────────── */
 
 @layer utilities {
-  .font-playfair {
-    font-family: 'Playfair Display', serif;
+  /* ── Premium motion primitives — used by app shell + cards ─────────── */
+  @keyframes m4mFadeInUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .fade-in-up {
+    opacity: 0;
+    animation: m4mFadeInUp 0.55s cubic-bezier(.2,.7,.2,1) forwards;
   }
 
-  .font-cinzel {
-    font-family: 'Cinzel Decorative', cursive;
+  @keyframes m4mShimmerSweep {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
+  }
+  .gold-text {
+    background: linear-gradient(110deg,#C9954A 12%,#F2D89E 42%,#9A6B00 58%,#C9954A 88%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .gold-text-shimmer {
+    animation: m4mShimmerSweep 6s ease-in-out infinite;
   }
 
-  .font-poppins {
-    font-family: 'Poppins', sans-serif;
+  /* Premium ring/glow for hero numbers + accent CTAs */
+  .ring-rose-glow {
+    box-shadow:
+      0 0 0 1px rgba(220,30,60,0.12),
+      0 8px 30px rgba(220,30,60,0.18);
   }
+
+  /* Soft cream surface — card alt background, used by panels */
+  .surface-cream  { background: #FFFAF8; }
+  .surface-blush  { background: #FDF0F3; }
+
+  /* Subtle dotted backdrop motif (rose) */
+  .dot-grid-rose {
+    background-image: radial-gradient(rgba(220,30,60,0.10) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  /* Hairline divider tinted to brand */
+  .hr-rose {
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(220,30,60,0.18), transparent);
+  }
+
+  /* ── Love-themed micro-animations ─────────────────────────────────── */
+
+  /* Heart that fills + scales when liked. Apply to a Heart icon wrapper. */
+  @keyframes heartBloom {
+    0%   { transform: scale(0.92); }
+    35%  { transform: scale(1.18); }
+    65%  { transform: scale(0.96); }
+    100% { transform: scale(1.00); }
+  }
+  .heart-bloom { animation: heartBloom 0.55s cubic-bezier(.2,.7,.2,1); }
+
+  /* Soft outward ring used behind the heart on like — like a love pulse. */
+  @keyframes lovePulse {
+    0%   { transform: scale(0.4); opacity: 0.55; }
+    100% { transform: scale(2.4); opacity: 0;    }
+  }
+  .love-pulse {
+    pointer-events: none;
+    position: absolute; inset: 0;
+    border-radius: 9999px;
+    background: radial-gradient(circle, rgba(220,30,60,0.5) 0%, transparent 70%);
+    animation: lovePulse 0.8s ease-out forwards;
+  }
+
+  /* Slow float used by hero accents and decorative motifs. */
+  @keyframes drift {
+    0%, 100% { transform: translate3d(0, 0, 0)        rotate(0deg); }
+    50%      { transform: translate3d(2%, -3%, 0)     rotate(2deg); }
+  }
+  .drift { animation: drift 9s ease-in-out infinite; will-change: transform; }
+
+  /* Gold band sweep — used behind premium CTAs once on entry. */
+  @keyframes goldSweep {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+  }
+  .gold-sweep {
+    background: linear-gradient(110deg, #C9954A 0%, #F2D89E 40%, #9A6B00 60%, #C9954A 100%);
+    background-size: 200% 100%;
+    animation: goldSweep 5.5s ease-in-out infinite;
+  }
+
+  /* ── 3D / depth utilities ─────────────────────────────────────────── */
+
+  /* Container hint — children that animate transform get GPU + perspective. */
+  .scene-3d { perspective: 1200px; transform-style: preserve-3d; }
+
+  /* Subtle tilt on hover — JS data-tilt handler in profile-card-3d.tsx. */
+  .tilt-3d {
+    transform-style: preserve-3d;
+    transition: transform 0.35s cubic-bezier(.2,.7,.2,1);
+    will-change: transform;
+  }
+
+  /* Cinematic sheen sweep on premium buttons — activated on parent :hover. */
+  button:hover > .luxe-sheen,
+  a:hover      > .luxe-sheen {
+    transform: translateX(120%) !important;
+  }
+
+  /* Premium layered shadow — used by ProfileCard, hero panes. */
+  .shadow-luxe {
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.85) inset,
+      0 0 0 1px rgba(220,30,60,0.05),
+      0 18px 30px -12px rgba(160,21,60,0.18),
+      0 8px 14px -6px rgba(160,21,60,0.10);
+  }
+  .shadow-luxe-hover {
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.95) inset,
+      0 0 0 1px rgba(220,30,60,0.08),
+      0 28px 50px -16px rgba(160,21,60,0.28),
+      0 12px 20px -8px rgba(160,21,60,0.14);
+  }
+
+  /* Glass surface — used by sticky filter rails, hero search pill, etc. */
+  .glass-rose {
+    background: rgba(255,255,255,0.72);
+    backdrop-filter: saturate(1.4) blur(14px);
+    -webkit-backdrop-filter: saturate(1.4) blur(14px);
+    border: 1px solid rgba(220,30,60,0.10);
+  }
+
+  /* Animated radial highlight — drifts slowly on hero panels. */
+  @keyframes auraDrift {
+    0%, 100% { transform: translate3d(-6%, -4%, 0); }
+    50%      { transform: translate3d( 6%,  4%, 0); }
+  }
+  .aura-rose::before {
+    content: ""; position: absolute; inset: -20%;
+    background: radial-gradient(50% 40% at 50% 50%, rgba(220,30,60,0.18) 0%, transparent 70%);
+    animation: auraDrift 14s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .aura-gold::before {
+    content: ""; position: absolute; inset: -20%;
+    background: radial-gradient(45% 35% at 50% 50%, rgba(201,149,74,0.20) 0%, transparent 70%);
+    animation: auraDrift 18s ease-in-out infinite reverse;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Drifting heart particles for hero / dashboard celebration moments. */
+  @keyframes heartFloat {
+    0%   { opacity: 0;   transform: translate3d(0, 0,  0)   rotate(0deg)  scale(0.7); }
+    15%  { opacity: 0.9; }
+    100% { opacity: 0;   transform: translate3d(20px, -120vh, 0) rotate(28deg) scale(1.1); }
+  }
+  .heart-particle {
+    position: absolute;
+    width: 14px; height: 14px;
+    background: radial-gradient(circle at 30% 30%, #ffb5c5, #d4607a 65%, transparent 70%);
+    border-radius: 80% 0 80% 0;
+    transform: rotate(-45deg);
+    filter: blur(0.3px) drop-shadow(0 4px 10px rgba(220,30,60,0.25));
+    animation: heartFloat 14s linear infinite;
+    pointer-events: none;
+  }
+
+  /* Skeleton block (pre-content) */
+  .m4m-skeleton {
+    position: relative; overflow: hidden;
+    background: rgba(220,30,60,0.06);
+    border-radius: 12px;
+  }
+  .m4m-skeleton::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.55) 50%, transparent 100%);
+    animation: m4m-shimmer 1.4s linear infinite;
+  }
+
+  /* Legacy aliases — both now resolve to the new Fraunces / Inter system. */
+  .font-playfair { font-family: var(--font-display); font-variation-settings: var(--fraunces-display); letter-spacing: -0.012em; }
+  .font-cinzel   { font-family: var(--font-display); font-variation-settings: var(--fraunces-display); letter-spacing: -0.01em; }
+  .font-poppins  { font-family: var(--font-body); }
+  .font-display-alt { font-family: var(--font-display-alt); }
 
   .warm-card {
     background: #ffffff;

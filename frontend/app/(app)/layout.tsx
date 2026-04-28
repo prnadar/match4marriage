@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Heart, MessageCircle, User, Star, Globe,
   Shield, Bell, Settings, LogOut, ChevronRight, Users, Star as StarIcon,
-  CreditCard, Home, Menu, X,
+  CreditCard, Home, Menu, X, AlertTriangle, Mail, MapPin,
 } from "lucide-react";
 import { profileApi } from "@/lib/api";
 import { clearClientState, firebaseAuth, rememberSessionUid } from "@/lib/firebase";
@@ -52,7 +52,14 @@ function VerificationBanner() {
       flexShrink: 0,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <span style={{ fontSize: "18px" }}>⚠️</span>
+        <span style={{
+          flexShrink: 0,
+          width: 30, height: 30, borderRadius: "50%",
+          background: "rgba(255,212,220,0.18)",
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <AlertTriangle style={{ width: 16, height: 16, color: "#ffd4dc" }} strokeWidth={2} />
+        </span>
         <p style={{ margin: 0, color: "#fff", fontSize: "14px", lineHeight: 1.5 }}>
           <strong>Complete your profile &amp; verify your ID.</strong> You must complete your profile and verify your identity to view other profiles and send interests.{" "}
           <a href="/profile/me" style={{ color: "#ffd4dc", fontWeight: 700, textDecoration: "underline" }}>
@@ -130,11 +137,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         className="fixed top-0 left-0 h-full z-40 flex flex-col transition-all duration-300"
         style={{
           width: sidebarWidth,
-          background: "linear-gradient(160deg, #1a0a14 0%, #2d0f20 60%, #3b1428 100%)",
+          background:
+            "linear-gradient(160deg, #150812 0%, #220e1c 50%, #2e1224 100%)",
           borderRight: "1px solid rgba(255,255,255,0.06)",
           overflow: "hidden",
         }}
       >
+        {/* Soft rose aura — drifts very slowly */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-70"
+          style={{
+            background:
+              "radial-gradient(60% 40% at 30% 18%, rgba(220,30,60,0.20) 0%, transparent 70%)," +
+              "radial-gradient(50% 35% at 80% 90%, rgba(201,149,74,0.12) 0%, transparent 70%)",
+          }}
+        />
+        {/* Subtle vertical hairline — suggests an editorial column */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute right-0 top-0 h-full w-px"
+          style={{
+            background:
+              "linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.10) 30%, rgba(220,30,60,0.20) 50%, rgba(255,255,255,0.10) 70%, transparent 100%)",
+          }}
+        />
         {/* Burger / Close toggle — replaces logo */}
         <div className="flex items-center px-4 border-b" style={{ borderColor: "rgba(255,255,255,0.08)", height: "60px", flexShrink: 0 }}>
           <button
@@ -218,6 +245,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 key={href}
                 href={href}
                 title={collapsed ? label : undefined}
+                className="relative group"
                 style={{
                   minHeight: "auto",
                   display: "flex",
@@ -226,22 +254,47 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   gap: "12px",
                   padding: collapsed ? "10px" : "10px 12px",
                   borderRadius: "12px",
-                  fontSize: "14px",
-                  fontWeight: "500",
-                  transition: "all 0.15s ease",
-                  background: active ? "rgba(220,30,60,0.20)" : "transparent",
-                  color: active ? "#ffffff" : "rgba(255,255,255,0.55)",
+                  fontSize: "13.5px",
+                  fontWeight: 500,
+                  letterSpacing: "0.005em",
+                  transition: "background 0.18s ease, color 0.18s ease",
+                  background: active
+                    ? "linear-gradient(95deg, rgba(220,30,60,0.32) 0%, rgba(220,30,60,0.18) 50%, rgba(220,30,60,0.06) 100%)"
+                    : "transparent",
+                  color: active ? "#ffffff" : "rgba(255,255,255,0.62)",
                   textDecoration: "none",
+                  boxShadow: active
+                    ? "inset 0 1px 0 rgba(255,255,255,0.10), 0 6px 18px rgba(220,30,60,0.18)"
+                    : "none",
                 }}
-                onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.06)"; }}
+                onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.05)"; }}
                 onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; }}
               >
-                <Icon className="w-4 h-4 flex-shrink-0" />
-                {!collapsed && <span className="flex-1">{label}</span>}
+                {/* Active-state vertical accent on the left edge */}
+                {active && !collapsed && (
+                  <span
+                    aria-hidden
+                    style={{
+                      position: "absolute",
+                      left: -2, top: 8, bottom: 8,
+                      width: 3, borderRadius: 4,
+                      background: "linear-gradient(to bottom, #dc1e3c, #ffd87a)",
+                      boxShadow: "0 0 12px rgba(220,30,60,0.55)",
+                    }}
+                  />
+                )}
+                <Icon
+                  className="w-4 h-4 flex-shrink-0 transition-colors"
+                  style={{ color: active ? "#ffd6dd" : "rgba(255,255,255,0.55)" }}
+                />
+                {!collapsed && <span className="flex-1 truncate">{label}</span>}
                 {!collapsed && badge !== undefined && (
                   <span
-                    className="text-[10px] font-bold text-white rounded-full w-5 h-5 flex items-center justify-center"
-                    style={{ background: "linear-gradient(135deg,#dc1e3c,#a0153c)" }}
+                    className="text-[10px] font-bold text-white rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0"
+                    style={{
+                      background: "linear-gradient(135deg,#dc1e3c,#7d0a35)",
+                      boxShadow: "0 4px 10px rgba(220,30,60,0.45)",
+                    }}
                   >
                     {badge}
                   </span>
@@ -423,8 +476,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     onMouseLeave={(e) => (e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.45)"}
                   >{label}</Link>
                 ))}
-                <a href="mailto:enquiry@match4marriage.com" style={{ display: "block", fontSize: "13px", color: "rgba(255,255,255,0.45)", textDecoration: "none", marginBottom: "6px" }}>
-                  ✉️ enquiry@match4marriage.com
+                <a href="mailto:enquiry@match4marriage.com" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "rgba(255,255,255,0.45)", textDecoration: "none", marginBottom: 6 }}>
+                  <Mail style={{ width: 13, height: 13 }} strokeWidth={1.6} /> enquiry@match4marriage.com
                 </a>
               </div>
             </div>
@@ -432,8 +485,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)" }}>
                 © {new Date().getFullYear()} Match4Marriage. All rights reserved.
               </p>
-              <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)" }}>
-                Made with ❤️ for love
+              <p style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(255,255,255,0.25)" }}>
+                Made with <Heart style={{ width: 12, height: 12, color: "#dc1e3c", fill: "#dc1e3c" }} /> for love
               </p>
             </div>
           </div>
