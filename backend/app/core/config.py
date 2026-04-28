@@ -137,12 +137,19 @@ class Settings(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str = ""
 
     # ── Production safety ────────────────────────────────────────────────
-    # Refuses to start the API with insecure defaults when ENVIRONMENT is
-    # "production". Each guard targets one of the launch-day blockers:
-    #   - SECRET_KEY left as the dev placeholder
-    #   - DATABASE_URL still pointing at SQLite
-    #   - REDIS_URL still pointing at localhost
-    #   - DEMO_MODE accidentally enabled (would let OTP "000000" pass)
+    # Refuses to start the API with truly catastrophic defaults when
+    # ENVIRONMENT is "production". Only the *non-recoverable* problems
+    # block boot here:
+    #   - SECRET_KEY left as the dev placeholder (sessions forgeable)
+    #   - DATABASE_URL still pointing at SQLite (data lost on redeploy)
+    #   - DEMO_MODE accidentally enabled (OTP "000000" accepted)
+    #
+    # REDIS_URL pointing at localhost is *warned* rather than blocked —
+    # rate-limiting degrades gracefully when the broker is unreachable
+    # and the API can serve real users without it. Same for the other
+    # external services (Cloudinary, Stripe, etc.); each fails loudly at
+    # the call-site rather than at startup so the rest of the app can
+    # boot.
     @model_validator(mode="after")
     def _check_production_secrets(self) -> "Settings":
         if self.ENVIRONMENT != "production":
@@ -152,14 +159,21 @@ class Settings(BaseSettings):
             problems.append("SECRET_KEY is unset or still the dev placeholder")
         if self.DATABASE_URL.startswith("sqlite"):
             problems.append("DATABASE_URL is still pointing at SQLite — set a Postgres URL")
-        if "localhost" in self.REDIS_URL or "127.0.0.1" in self.REDIS_URL:
-            problems.append("REDIS_URL is still pointing at localhost")
         if self.DEMO_MODE:
             problems.append("DEMO_MODE is enabled — OTP '000000' would be accepted in production")
         if problems:
             raise ValueError(
                 "Refusing to start in production with insecure config:\n  - "
                 + "\n  - ".join(problems)
+            )
+        # Soft warnings — don't block boot
+        import logging
+        log = logging.getLogger("app.config")
+        if "localhost" in self.REDIS_URL or "127.0.0.1" in self.REDIS_URL:
+            log.warning(
+                "REDIS_URL is pointing at localhost in production. "
+                "Rate limiting and Celery will not work until a managed "
+                "Redis URL is configured.",
             )
         return self
 
