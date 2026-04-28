@@ -31,10 +31,12 @@ class DailyMatchFeed(BaseSchema):
 
 
 class SendInterestRequest(BaseSchema):
-    match_id: uuid.UUID | None = None
-    receiver_id: uuid.UUID
+    # `receiver_id` is taken from the URL path (`/interests/{receiver_id}`).
+    # All body fields are optional — clients can POST {} for a plain interest.
+    match_id:          uuid.UUID | None = None
+    receiver_id:       uuid.UUID | None = None  # ignored if present in path
     is_super_interest: bool = False
-    message: str | None = None
+    message:           str | None = None
 
 
 class InterestRead(TimestampedSchema):

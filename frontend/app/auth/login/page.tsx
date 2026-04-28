@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -26,9 +26,15 @@ type Mode = "email" | "phone";
 
 // Curated stories — each tied to a photo. Cycled on a 10s rotation so the
 // hero feels alive without any decoration or noise.
+//
+// `focal` is the CSS object-position the editorial crop should use. Editorial
+// wedding photos typically place the couple's faces in the upper third, so the
+// default is `center 28%`. Override per-story if a particular shot needs a
+// different anchor (e.g. a wide ceremony shot).
 const STORIES = [
   {
     src: "/couples/couple-hero.jpg",
+    focal: "center 22%",
     quote: "From the first conversation I knew. Match4Marriage made the family part feel easy — everything else just followed.",
     couple: "Meera & Rahul",
     location: "London",
@@ -36,6 +42,7 @@ const STORIES = [
   },
   {
     src: "/couples/wedding-swing.jpg",
+    focal: "center 30%",
     quote: "Our parents met on a video call after just two weeks. Two months later, we were engaged.",
     couple: "Divya & Karthik",
     location: "Bangalore",
@@ -43,6 +50,7 @@ const STORIES = [
   },
   {
     src: "/couples/heritage-villa.jpg",
+    focal: "center 35%",
     quote: "Verified profiles, thoughtful matches. For the biggest decision of our lives, that mattered.",
     couple: "Sneha & Arjun",
     location: "Chennai",
@@ -50,6 +58,7 @@ const STORIES = [
   },
   {
     src: "/couples/mandapam.jpg",
+    focal: "center 30%",
     quote: "We both wanted tradition and respect. The platform quietly aligned everything else.",
     couple: "Lakshmi & Vivek",
     location: "Hyderabad",
@@ -83,13 +92,18 @@ export default function LoginPage() {
     return () => clearInterval(id);
   }, []);
 
-  const greeting = useMemo(() => {
+  // Stable initial value so SSR and the first client render agree (no hydration
+  // mismatch). The time-aware greeting is filled in after mount.
+  const [greeting, setGreeting] = useState("Welcome home");
+  useEffect(() => {
     const h = new Date().getHours();
-    if (h < 5)  return "Welcome home";
-    if (h < 12) return "Good morning";
-    if (h < 17) return "Good afternoon";
-    if (h < 21) return "Good evening";
-    return "Welcome home";
+    setGreeting(
+      h < 5  ? "Welcome home"   :
+      h < 12 ? "Good morning"   :
+      h < 17 ? "Good afternoon" :
+      h < 21 ? "Good evening"   :
+              "Welcome home"
+    );
   }, []);
 
   useEffect(() => {
@@ -239,7 +253,7 @@ export default function LoginPage() {
               fill
               priority={storyIdx === 0}
               sizes="(max-width: 1024px) 100vw, 60vw"
-              style={{ objectFit: "cover", objectPosition: "center" }}
+              style={{ objectFit: "cover", objectPosition: currentStory.focal ?? "center 28%" }}
             />
           </motion.div>
         </AnimatePresence>

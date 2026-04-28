@@ -123,10 +123,13 @@ def _build_stripe_line_item_params(plan: str) -> dict:
         "gold": settings.GOLD_PRICE_GBP,
         "platinum": settings.PLATINUM_PRICE_GBP,
     }
+    # Customer-facing names. The internal DB tier remains silver / gold /
+    # platinum; this map controls only what shows up on the Stripe checkout
+    # page and on receipts.
     plan_names = {
-        "silver": "Silver Plan",
-        "gold": "Gold Plan",
-        "platinum": "Platinum Plan",
+        "silver": "Match4Marriage — Basic (6 months)",
+        "gold": "Match4Marriage — Premium (6 months)",
+        "platinum": "Match4Marriage — Elite (6 months)",
     }
     return {
         "line_items[0][price_data][currency]": "gbp",

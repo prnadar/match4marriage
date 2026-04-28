@@ -1,6 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
+import { TrendingUp, TrendingDown } from "lucide-react";
 
 interface StatsCardProps {
   title: string;
@@ -43,8 +44,13 @@ export default function StatsCard({ title, value, icon: Icon, trend, sparkline, 
           <p className="font-body text-xs font-medium text-muted uppercase tracking-wider">{title}</p>
           <p className="font-display text-2xl font-bold text-deep mt-1">{value}</p>
           {trend !== undefined && (
-            <p className={`font-body text-xs mt-1 ${trend >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-              {trend >= 0 ? "↑" : "↓"} {Math.abs(trend)}% vs last month
+            <p className={`font-body text-xs mt-1 inline-flex items-center gap-1 ${trend >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+              {trend >= 0 ? (
+                <TrendingUp size={12} strokeWidth={2.2} />
+              ) : (
+                <TrendingDown size={12} strokeWidth={2.2} />
+              )}
+              {Math.abs(trend)}% vs last month
             </p>
           )}
         </div>

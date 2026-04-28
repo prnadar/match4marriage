@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Bell, Shield, Eye, Globe, Smartphone, CreditCard, LogOut, ChevronRight, Trash2, Download, Lock, CheckCircle } from "lucide-react";
+import { firebaseAuth } from "@/lib/firebase";
 
 type Section = "notifications" | "privacy" | "account" | "preferences" | "data";
 
@@ -133,6 +134,29 @@ export default function SettingsPage() {
     ageTo: "32",
     religionFilter: "Hindu",
   });
+
+  // Pull live account identity from Firebase so the Account section shows the
+  // signed-in user instead of a placeholder. Falls back to "—" while we wait.
+  const [account, setAccount] = useState<{ email: string; phone: string; google: string | null }>({
+    email: "—",
+    phone: "—",
+    google: null,
+  });
+  useEffect(() => {
+    const unsub = firebaseAuth.onAuthStateChanged((u) => {
+      if (!u) {
+        setAccount({ email: "—", phone: "—", google: null });
+        return;
+      }
+      const googleProvider = u.providerData.find((p) => p?.providerId === "google.com");
+      setAccount({
+        email: u.email || "—",
+        phone: u.phoneNumber || "—",
+        google: googleProvider?.email || null,
+      });
+    });
+    return () => unsub();
+  }, []);
 
   const toggleNotif   = (key: keyof typeof notifs)  => setNotifs((p)  => ({ ...p, [key]: !p[key] }));
   const togglePrivacy = (key: keyof typeof privacy)  => setPrivacy((p) => ({ ...p, [key]: !p[key] }));
@@ -386,10 +410,10 @@ export default function SettingsPage() {
               <>
                 <Card>
                   {[
-                    { label: "Change Phone Number",      desc: "+44 7476 212655"           },
-                    { label: "Change Email",             desc: "prabhakar@example.com"     },
-                    { label: "Change Password",          desc: "Last changed 3 months ago" },
-                    { label: "Two-Factor Authentication",desc: "Add extra security"        },
+                    { label: "Change Phone Number",      desc: account.phone                        },
+                    { label: "Change Email",             desc: account.email                        },
+                    { label: "Change Password",          desc: "Reset via email"                    },
+                    { label: "Two-Factor Authentication",desc: "Add extra security"                 },
                   ].map(({ label, desc }) => (
                     <Row key={label} label={label} desc={desc}>
                       <ChevronRight style={{ width: 16, height: 16, color: "rgba(26,10,20,0.25)" }} />
@@ -398,9 +422,15 @@ export default function SettingsPage() {
                 </Card>
 
                 <Card>
-                  <Row label="Linked Google Account" desc="prabhakar@gmail.com">
-                    <CheckCircle style={{ width: 16, height: 16, color: "#5C7A52" }} />
-                  </Row>
+                  {account.google ? (
+                    <Row label="Linked Google Account" desc={account.google}>
+                      <CheckCircle style={{ width: 16, height: 16, color: "#5C7A52" }} />
+                    </Row>
+                  ) : (
+                    <Row label="Link Google Account" desc="Sign in faster with one click">
+                      <ChevronRight style={{ width: 16, height: 16, color: "rgba(26,10,20,0.25)" }} />
+                    </Row>
+                  )}
                   <Row label="Link LinkedIn" desc="Verify your professional credentials">
                     <button
                       style={{

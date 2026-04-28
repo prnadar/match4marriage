@@ -1,11 +1,23 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
+
+interface HeartItem {
+  left: string;
+  delay: string;
+  dur: string;
+  size: number;
+  tone: string;
+}
 
 /**
  * Decorative drifting-hearts overlay. Place inside a `position: relative`
  * parent. Pure CSS animations — respects prefers-reduced-motion via the
  * keyframes' inheritance and a media-query reset in globals.css.
+ *
+ * Random positions are generated post-mount (client-only) to avoid the
+ * server/client hydration mismatch that any `Math.random()` in render
+ * would cause.
  *
  * Use sparingly: hero, big celebratory moments, success states.
  */
@@ -17,13 +29,13 @@ export function FloatingHearts({
   /** Visual size mix. */
   density?: "subtle" | "balanced" | "celebration";
 }) {
-  const items = useMemo(() => {
-    const arr: Array<{
-      left: string; delay: string; dur: string; size: number; tone: string;
-    }> = [];
+  const [items, setItems] = useState<HeartItem[]>([]);
+
+  useEffect(() => {
     const tones = ["#ffb5c5", "#f0c0d0", "#e8a0b8", "#f7c9b1", "#e8c98a"];
+    const sizeBase = density === "celebration" ? 18 : density === "subtle" ? 10 : 14;
+    const arr: HeartItem[] = [];
     for (let i = 0; i < count; i++) {
-      const sizeBase = density === "celebration" ? 18 : density === "subtle" ? 10 : 14;
       arr.push({
         left:  `${Math.random() * 100}%`,
         delay: `${(Math.random() * 14).toFixed(1)}s`,
@@ -32,7 +44,7 @@ export function FloatingHearts({
         tone:  tones[i % tones.length],
       });
     }
-    return arr;
+    setItems(arr);
   }, [count, density]);
 
   return (

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Flag, AlertTriangle, Calendar, Inbox, CheckCircle2, XCircle, X } from "lucide-react";
+import { Flag, AlertTriangle, Calendar, Inbox, CheckCircle2, XCircle, X, ArrowRight } from "lucide-react";
 import { PageShell, Button, GlassCard, fadeUp } from "@/components/admin/PageShell";
 import { adminApi, ApiError } from "@/lib/api";
 import { useToast } from "@/components/admin/Toast";
@@ -278,7 +278,7 @@ function ReportRowEl({ report, active, onClick }: { report: ReportRow; active: b
       </div>
       <div style={{ fontSize: 12, color: "#666" }}>
         <span style={{ color: "#1a0a14", fontWeight: 500 }}>{report.reporter_name}</span>
-        <span style={{ margin: "0 6px", color: "#ccc" }}>→</span>
+        <ArrowRight size={11} strokeWidth={2} style={{ margin: "0 6px", color: "#ccc", display: "inline-block", verticalAlign: "-1px" }} />
         <span style={{ color: "#1a0a14", fontWeight: 500 }}>{report.reported_user_name}</span>
       </div>
       {report.description && (

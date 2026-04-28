@@ -1,36 +1,38 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Gem, Mail, Phone, MessageCircle, MapPin, Lock, Handshake, Sparkles,
-  Star, Check, ChevronDown, ShieldCheck, BadgeCheck,
+  Lock, Handshake, Sparkles, ShieldCheck,
+  ArrowRight, BadgeCheck, Plus, Minus, Quote,
 } from "lucide-react";
 import { firebaseAuth } from "@/lib/firebase";
 import { profileApi } from "@/lib/api";
-import { CountryFlag, type CountryCode } from "@/components/ui/country-flag";
+import { CountryFlag } from "@/components/ui/country-flag";
 import { FloatingHearts } from "@/components/ui/floating-hearts";
+import PublicHeader from "@/components/PublicHeader";
+import PublicFooter from "@/components/PublicFooter";
 
 /* ── Marketing content (curated testimonials, not user data) ──────────── */
 
 const stories = [
   {
-    img: "/images/story1.png",
+    img: "/couples/couple-hero.jpg",
     names: "Priya & Karthik",
     location: "London & Chennai",
     year: "Married 2024",
     quote: "We had both given up on online matchmaking until Match4Marriage. Within weeks, we were introduced to each other, and within months, our families had met. We married in Chennai in December 2024.",
   },
   {
-    img: "/images/story2.png",
+    img: "/couples/mandapam.jpg",
     names: "Anitha & Vijay",
     location: "Birmingham & Coimbatore",
     year: "Married 2024",
     quote: "What set Match4Marriage apart was the personal touch. They didn't just send us a profile. They took time to understand what we were both looking for. We are so grateful for the care they showed.",
   },
   {
-    img: "/images/story4.png",
+    img: "/couples/wedding-swing.jpg",
     names: "Deepa & Suresh",
     location: "Manchester & Madurai",
     year: "Married 2023",
@@ -52,9 +54,7 @@ const features = [
 
 export default function HomePage() {
   const router = useRouter();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const helpRef = useRef<HTMLDivElement>(null);
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   useEffect(() => {
     if (typeof window !== "undefined" && localStorage.getItem("onboarding_completed") === "true") {
@@ -76,19 +76,9 @@ export default function HomePage() {
     return unsub;
   }, [router]);
 
+  // Scroll reveal: editorial-reveal sections fade up on first viewport entry
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (helpRef.current && !helpRef.current.contains(e.target as Node)) {
-        setHelpOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  // Scroll reveal: any element with class "reveal" fades up when visible
-  useEffect(() => {
-    const els = document.querySelectorAll<HTMLElement>(".reveal");
+    const els = document.querySelectorAll<HTMLElement>(".editorial-reveal");
     if (!els.length || typeof IntersectionObserver === "undefined") return;
     const io = new IntersectionObserver(
       (entries) => {
@@ -109,225 +99,70 @@ export default function HomePage() {
   return (
     <div className="min-h-screen overflow-x-hidden font-poppins">
 
-      {/* ── 1. Top Bar ───────────────────────────────────────────────── */}
-      <div className="w-full text-white py-2 px-4" style={{ backgroundColor: "#dc1e3c" }}>
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1.5 text-[12.5px] tracking-[0.02em]">
-          <span className="inline-flex items-center gap-2">
-            <Gem className="h-3.5 w-3.5" strokeWidth={1.6} />
-            Elite Indian Matrimony — Established in the United Kingdom
-            <CountryFlag code="GB" rounded="sm" className="ml-0.5" />
-          </span>
-          <a href="mailto:enquiry@match4marriage.com" className="inline-flex items-center gap-1.5 text-white/95 hover:text-white">
-            <Mail className="h-3.5 w-3.5" strokeWidth={1.6} />
-            enquiry@match4marriage.com
-          </a>
-        </div>
-      </div>
+      {/* ── 1+2. Top bar + sticky main nav (shared across public pages).
+              On the homepage the header floats transparently over the hero
+              video and only flips to its solid editorial style once the user
+              has scrolled past it. ─── */}
+      <PublicHeader transparent />
 
-      {/* ── 2. Navigation ────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 bg-white" style={{ borderBottom: "1px solid rgba(220,30,60,0.12)" }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center">
-            <img
-              src="/images/logo.jpeg"
-              alt="Match4Marriage"
-              style={{ height: "52px", width: "auto", objectFit: "contain" }}
-            />
-          </Link>
 
-          {/* Desktop nav */}
-          <div className="hidden lg:flex items-center gap-8">
-            {[
-              { label: "Home", href: "/" },
-              { label: "Browse Profiles", href: "/profiles" },
-              { label: "Success Stories", href: "/success-stories" },
-              { label: "About Us", href: "/about" },
-              { label: "Pricing", href: "/pricing" },
-            ].map((item) => (
-              <a
-                key={item.label}
-                href={item.href}
-                className="text-sm font-medium transition-colors duration-200 hover:text-[#dc1e3c]"
-                style={{ color: "#333" }}
-              >
-                {item.label}
-              </a>
-            ))}
-
-            {/* Help dropdown */}
-            <div ref={helpRef} style={{ position: "relative" }}>
-              <button
-                onClick={() => setHelpOpen(!helpOpen)}
-                className="text-sm font-medium transition-colors duration-200 hover:text-[#dc1e3c] flex items-center gap-1"
-                style={{ color: helpOpen ? "#dc1e3c" : "#333", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-              >
-                Help
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transition: "transform 0.2s", transform: helpOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
-                  <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-
-              {helpOpen && (
-                <div style={{
-                  position: "absolute", top: "calc(100% + 12px)", left: "50%", transform: "translateX(-50%)",
-                  background: "#fff", borderRadius: "12px", minWidth: "180px",
-                  boxShadow: "0 8px 32px rgba(0,0,0,0.12)", border: "1px solid rgba(220,30,60,0.1)",
-                  overflow: "hidden", zIndex: 100,
-                }}>
-                  {/* Arrow */}
-                  <div style={{
-                    position: "absolute", top: "-6px", left: "50%", transform: "translateX(-50%)",
-                    width: "12px", height: "12px", background: "#fff",
-                    borderTop: "1px solid rgba(220,30,60,0.1)", borderLeft: "1px solid rgba(220,30,60,0.1)",
-                    rotate: "45deg",
-                  }} />
-                  {[
-                    { label: "FAQ", href: "/faq" },
-                    { label: "Contact Us", href: "/contact" },
-                  ].map((item) => (
-                    <a
-                      key={item.label}
-                      href={item.href}
-                      onClick={() => setHelpOpen(false)}
-                      style={{
-                        display: "block", padding: "12px 20px",
-                        fontSize: "13px", fontWeight: 500, color: "#333",
-                        textDecoration: "none",
-                        borderBottom: "1px solid rgba(220,30,60,0.06)",
-                        transition: "background 0.15s",
-                      }}
-                      onMouseOver={(e) => { e.currentTarget.style.background = "rgba(220,30,60,0.05)"; e.currentTarget.style.color = "#dc1e3c"; }}
-                      onMouseOut={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#333"; }}
-                    >
-                      {item.label}
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link href="/auth/login" className="hidden sm:inline-block text-sm font-medium px-4 py-2 rounded-lg border transition-colors duration-200 hover:border-[#dc1e3c] hover:text-[#dc1e3c]" style={{ color: "#555", borderColor: "#e5e5e5" }}>
-              Log In
-            </Link>
-            <Link href="/auth/register" className="btn-gold px-5 py-2 text-sm hidden sm:inline-block">
-              Register Free
-            </Link>
-            {/* Mobile hamburger */}
-            <button
-              className="lg:hidden p-2"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label="Toggle menu"
-            >
-              <svg width="24" height="24" fill="none" stroke="#1a0a14" strokeWidth="2" strokeLinecap="round">
-                {mobileMenuOpen ? (
-                  <>
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                    <line x1="6" y1="18" x2="18" y2="6" />
-                  </>
-                ) : (
-                  <>
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <line x1="3" y1="12" x2="21" y2="12" />
-                    <line x1="3" y1="18" x2="21" y2="18" />
-                  </>
-                )}
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile menu */}
-        {mobileMenuOpen && (
-          <div className="lg:hidden bg-white border-t px-6 py-4 space-y-3" style={{ borderColor: "rgba(161,99,4,0.12)" }}>
-            {[
-              { label: "Home", href: "/" },
-              { label: "Browse Profiles", href: "/profiles" },
-              { label: "Success Stories", href: "/success-stories" },
-              { label: "About Us", href: "/about" },
-              { label: "Pricing", href: "/pricing" },
-            ].map((item) => (
-              <a
-                key={item.label}
-                href={item.href}
-                className="block text-sm font-medium py-2"
-                style={{ color: "#1a0a14" }}
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                {item.label}
-              </a>
-            ))}
-            {/* Mobile Help submenu */}
-            <div style={{ borderTop: "1px solid rgba(220,30,60,0.08)", paddingTop: "8px" }}>
-              <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#bbb" }}>Help</p>
-              <a href="#faq" className="block text-sm font-medium py-1.5 pl-3" style={{ color: "#1a0a14" }} onClick={() => setMobileMenuOpen(false)}>FAQ</a>
-              <a href="#contact" className="block text-sm font-medium py-1.5 pl-3" style={{ color: "#1a0a14" }} onClick={() => setMobileMenuOpen(false)}>Contact Us</a>
-            </div>
-            <Link href="/auth/login" className="block text-center px-5 py-2 text-sm mt-2 rounded-lg border font-medium" style={{ color: "#dc1e3c", borderColor: "#dc1e3c" }}>
-              Log In
-            </Link>
-            <Link href="/auth/register" className="btn-gold block text-center px-5 py-2 text-sm mt-2">
-              Register Free
-            </Link>
-          </div>
-        )}
-      </nav>
-
-      {/* ── 3. Hero Banner — Full-Width Image Carousel ──────────────── */}
+      {/* ── 3. Hero Banner — Full-Width Cinematic Video ─────────────── */}
       <section id="home" style={{ position: "relative", width: "100%", height: "100vh", overflow: "hidden" }}>
 
-        {/* Background cycling images */}
-        {[
-          { src: "/images/Gemini_Generated_Image_xaa8o9xaa8o9xaa8.png", couple: "Priya & Rahul", time: "Matched in 2 weeks" },
-          { src: "/images/Gemini_Generated_Image_n1v0xcn1v0xcn1v0.png", couple: "Anjali & Suresh", time: "Matched in 3 weeks" },
-          { src: "/images/Gemini_Generated_Image_nnsmd2nnsmd2nnsm.png", couple: "Kavya & Vikram", time: "Matched in 1 month" },
-          { src: "/images/Gemini_Generated_Image_rovssrovssrovssr.png", couple: "Meera & Arjun", time: "Matched in 10 days" },
-        ].map((slide, idx) => (
-          <div
-            key={slide.src}
-            style={{
-              position: "absolute",
-              inset: 0,
-              opacity: 0,
-              animationName: `heroSlide${idx}`,
-              animationDuration: "20s",
-              animationIterationCount: "infinite",
-              animationTimingFunction: "ease-in-out",
-            }}
-          >
-            <img
-              src={slide.src}
-              alt={slide.couple}
-              loading={idx === 0 ? "eager" : "lazy"}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                objectPosition: "center 20%",
-                animation: "kenBurns 20s ease-in-out infinite",
-                transformOrigin: idx % 2 === 0 ? "center 30%" : "30% center",
-              }}
-            />
-          </div>
-        ))}
-
-        {/* Dark gradient overlay for text readability */}
-        <div
+        {/* Static poster — paints instantly, also serves users with reduced-motion */}
+        <img
+          src="/images/Gemini_Generated_Image_xaa8o9xaa8o9xaa8.png"
+          alt=""
+          aria-hidden="true"
+          className="hero-poster"
           style={{
             position: "absolute",
             inset: 0,
-            background: "linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.65) 100%)",
-            zIndex: 2,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "75% 30%",
           }}
         />
 
-        {/* Side vignette */}
+        {/* Background hero video (decorative, muted, autoplays inline on mobile) */}
+        <video
+          className="hero-video"
+          src="/hero.mp4"
+          poster="/images/Gemini_Generated_Image_xaa8o9xaa8o9xaa8.png"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          aria-hidden="true"
+          tabIndex={-1}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "75% 30%",
+          }}
+        />
+
+        {/* Editorial overlay — stronger darkening behind the text column on the
+            left, lifting toward transparent on the right so the video still
+            reads clearly. Vertical fades sit above for top/bottom legibility. */}
         <div
           style={{
             position: "absolute",
             inset: 0,
-            background: "radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.3) 100%)",
+            background: "linear-gradient(90deg, rgba(10,4,8,0.78) 0%, rgba(10,4,8,0.55) 35%, rgba(10,4,8,0.18) 70%, rgba(10,4,8,0.05) 100%)",
+            zIndex: 2,
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0) 25%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.55) 100%)",
             zIndex: 2,
           }}
         />
@@ -385,7 +220,10 @@ export default function HomePage() {
           </circle>
         </svg>
 
-        {/* Content overlay */}
+        {/* Editorial content overlay — left-aligned column. Asymmetric
+            vertical padding (large at top, smaller at bottom) ensures the
+            kicker has breathing room below the floating header instead of
+            crowding against the nav. */}
         <div
           className="hero-reveal"
           style={{
@@ -393,227 +231,183 @@ export default function HomePage() {
             inset: 0,
             zIndex: 5,
             display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
             alignItems: "center",
-            textAlign: "center",
-            padding: "0 24px",
+            padding: "clamp(160px, 16vh, 220px) clamp(24px, 6vw, 80px) clamp(96px, 10vh, 140px)",
           }}
         >
-          {/* Badge */}
-          <div
-            style={{
+          <div style={{ maxWidth: 720, width: "100%" }}>
+            {/* Editorial kicker — thin gold rule + label */}
+            <span style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: "8px",
-              background: "rgba(220,30,60,0.9)",
-              backdropFilter: "blur(8px)",
-              borderRadius: "9999px",
-              padding: "8px 22px",
-              marginBottom: "28px",
-              border: "1px solid rgba(255,255,255,0.2)",
-            }}
-          >
-            <CountryFlag code="GB" rounded="sm" />
-            <span style={{ color: "#fff", fontSize: "12px", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase" }}>
-              Elite Indian Matrimony · UK
-            </span>
-          </div>
-
-          {/* Headline */}
-          <h1
-            className="font-playfair"
-            style={{
-              color: "#fff",
-              fontSize: "clamp(38px, 5.5vw, 72px)",
+              gap: 14,
+              fontSize: 11,
               fontWeight: 700,
-              lineHeight: 1.12,
-              marginBottom: "20px",
-              textShadow: "0 2px 30px rgba(0,0,0,0.4)",
-            }}
-          >
-            Where Two Families<br />
-            <span className="gold-shimmer" style={{ fontFamily: "var(--font-great-vibes)", fontSize: "clamp(48px, 7vw, 88px)", fontWeight: 400, display: "inline-block" }}>Become One</span>
-          </h1>
+              letterSpacing: "0.32em",
+              color: "rgba(255,220,180,0.85)",
+              textTransform: "uppercase",
+              marginBottom: 28,
+            }}>
+              <span style={{ width: 32, height: 1, background: "rgba(255,220,180,0.55)" }} />
+              <CountryFlag code="GB" rounded="sm" width={18} />
+              Elite Indian Matrimony
+            </span>
 
-          <p
-            style={{
-              color: "rgba(255,255,255,0.9)",
-              fontSize: "clamp(16px, 2vw, 20px)",
-              marginBottom: "40px",
-              maxWidth: "560px",
-              lineHeight: 1.6,
-              textShadow: "0 1px 10px rgba(0,0,0,0.3)",
-            }}
-          >
-            A boutique matrimonial service for the global elite Indian community: hand-picked, personally verified profiles across the UK and worldwide.
-          </p>
-
-          {/* Search Widget */}
-          <div
-            style={{
-              background: "rgba(255,255,255,0.97)",
-              backdropFilter: "blur(16px)",
-              borderRadius: "16px",
-              padding: "20px 24px",
-              marginBottom: "32px",
-              boxShadow: "0 12px 48px rgba(0,0,0,0.25)",
-              maxWidth: "640px",
-              width: "100%",
-            }}
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
-              <div>
-                <label className="text-xs font-medium mb-1 block" style={{ color: "#888" }}>Looking for</label>
-                <select className="w-full border rounded-lg px-3 py-2.5 text-sm" style={{ borderColor: "#e5e5e5", color: "#333" }}>
-                  <option>Bride</option>
-                  <option>Groom</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium mb-1 block" style={{ color: "#888" }}>Age Range</label>
-                <select className="w-full border rounded-lg px-3 py-2.5 text-sm" style={{ borderColor: "#e5e5e5", color: "#333" }}>
-                  <option>21 to 25</option>
-                  <option>26 to 30</option>
-                  <option>31 to 35</option>
-                  <option>36+</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium mb-1 block" style={{ color: "#888" }}>Religion</label>
-                <select className="w-full border rounded-lg px-3 py-2.5 text-sm" style={{ borderColor: "#e5e5e5", color: "#333" }}>
-                  <option value="">Any Religion</option>
-                  <option>Hindu</option>
-                  <option>Christian</option>
-                  <option>Sikh</option>
-                  <option>Muslim</option>
-                  <option>Jain</option>
-                  <option>Buddhist</option>
-                  <option>Other</option>
-                </select>
-              </div>
-
-              <a
-                href="/auth/register"
-                className="sheen-btn w-full py-2.5 text-sm font-semibold rounded-lg text-white text-center block"
-                style={{ background: "linear-gradient(135deg, #dc1e3c, #a0153c)", letterSpacing: "0.04em" }}
+            {/* Headline — Fraunces with Cormorant italic accent (matches every other page) */}
+            <h1
+              className="font-display"
+              style={{
+                color: "#fdf9f4",
+                fontSize: "clamp(48px, 7vw, 110px)",
+                fontWeight: 500,
+                lineHeight: 1.0,
+                letterSpacing: "-0.025em",
+                margin: "0 0 24px",
+                textShadow: "0 2px 40px rgba(0,0,0,0.35)",
+              }}
+            >
+              Where two families
+              <br />
+              <span
+                style={{
+                  fontFamily: "var(--font-display-alt, 'Cormorant', serif)",
+                  fontStyle: "italic",
+                  fontWeight: 500,
+                  background: "linear-gradient(135deg, #FFE4A8 0%, #FFB347 50%, #FFD87A 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                  filter: "drop-shadow(0 6px 30px rgba(255,180,90,0.35))",
+                }}
               >
-                Find Your Match
-              </a>
-            </div>
-          </div>
-
-          {/* Stats strip */}
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "24px",
-              background: "rgba(255,255,255,0.12)",
-              backdropFilter: "blur(8px)",
-              borderRadius: "9999px",
-              padding: "12px 32px",
-              border: "1px solid rgba(255,255,255,0.15)",
-            }}
-          >
-            {([
-              { val: "100+", label: "Elite Profiles", icon: <Sparkles className="h-3.5 w-3.5 text-[#ffd87a]" /> },
-              { val: "UK",    label: "Headquarters",   icon: <CountryFlag code="GB" rounded="sm" /> },
-              { val: "2020",  label: "Established",    icon: <Gem        className="h-3.5 w-3.5 text-[#ffd87a]" /> },
-              { val: "4.9",   label: "Rated",          icon: <Star       className="h-3.5 w-3.5 text-[#ffd87a]" fill="#ffd87a" /> },
-            ] as const).map((s, i, arr) => (
-              <span key={s.label} style={{ display: "flex", alignItems: "center", gap: "24px" }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  {s.icon}
-                  <span style={{ color: "#ffd87a", fontWeight: 700, fontSize: "15px", letterSpacing: "0.02em" }}>{s.val}</span>
-                  <span style={{ color: "rgba(255,255,255,0.75)", fontSize: "12px", marginLeft: 2 }}>{s.label}</span>
-                </span>
-                {i < arr.length - 1 && <span style={{ color: "rgba(255,255,255,0.2)" }}>·</span>}
+                become one.
               </span>
-            ))}
+            </h1>
+
+            {/* Subhead — single calm line */}
+            <p style={{
+              color: "rgba(253,249,244,0.88)",
+              fontSize: "clamp(15px, 1.4vw, 19px)",
+              lineHeight: 1.65,
+              margin: "0 0 40px",
+              maxWidth: 560,
+              textShadow: "0 1px 20px rgba(0,0,0,0.4)",
+              fontFamily: "var(--font-body, 'Inter', sans-serif)",
+            }}>
+              An advisor-led matrimony service for the British Indian community
+              and the global diaspora. Personally curated, privately introduced.
+            </p>
+
+            {/* CTAs */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
+              <Link href="/auth/register" style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                background: "#fdf9f4",
+                color: "#1a0a14",
+                padding: "16px 32px",
+                borderRadius: 9999,
+                fontSize: 14,
+                fontWeight: 600,
+                textDecoration: "none",
+                letterSpacing: "0.02em",
+                boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+              }}>
+                Find your forever
+                <ArrowRight size={15} strokeWidth={2} />
+              </Link>
+              <Link href="/contact" style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                color: "#fdf9f4",
+                padding: "15px 30px",
+                border: "1px solid rgba(253,249,244,0.35)",
+                borderRadius: 9999,
+                fontSize: 14,
+                fontWeight: 600,
+                textDecoration: "none",
+                letterSpacing: "0.02em",
+                backdropFilter: "blur(6px)",
+                background: "rgba(253,249,244,0.04)",
+              }}>
+                Speak to an advisor
+              </Link>
+            </div>
+
+            {/* Quiet credentials line — matches editorial restraint */}
+            <p style={{
+              marginTop: 48,
+              fontSize: 11.5,
+              fontWeight: 600,
+              letterSpacing: "0.28em",
+              color: "rgba(253,249,244,0.55)",
+              textTransform: "uppercase",
+              fontFamily: "var(--font-body, 'Inter', sans-serif)",
+            }}>
+              Founded 2020 · Hand-picked · Family-rated 4.9
+            </p>
           </div>
         </div>
 
-        {/* Slide dots — bottom center */}
+        {/* Scroll indicator — tiny editorial cue at the bottom */}
         <div
+          aria-hidden
           style={{
             position: "absolute",
-            bottom: "24px",
+            bottom: 32,
             left: "50%",
             transform: "translateX(-50%)",
+            zIndex: 5,
             display: "flex",
-            gap: "10px",
-            zIndex: 10,
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 8,
+            color: "rgba(253,249,244,0.55)",
           }}
+          className="hero-scroll-indicator"
         >
-          {[0, 1, 2, 3].map((dot) => (
-            <div
-              key={dot}
-              style={{
-                width: "10px",
-                height: "10px",
-                borderRadius: "50%",
-                background: "rgba(255,255,255,0.4)",
-                animationName: `heroDot${dot}`,
-                animationDuration: "20s",
-                animationIterationCount: "infinite",
-                animationTimingFunction: "ease-in-out",
-                border: "1px solid rgba(255,255,255,0.3)",
-              }}
-            />
-          ))}
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.32em", textTransform: "uppercase" }}>
+            Scroll
+          </span>
+          <span style={{
+            display: "block",
+            width: 1,
+            height: 36,
+            background: "linear-gradient(to bottom, rgba(253,249,244,0.6) 0%, rgba(253,249,244,0) 100%)",
+          }} />
         </div>
 
-        {/* Carousel keyframes — 4 slides, 5s each, 20s total */}
+        {/* Hero video / poster styling */}
         <style>{`
-          @keyframes heroSlide0 {
-            0%, 22% { opacity: 1; }
-            25%, 97% { opacity: 0; }
-            100% { opacity: 1; }
+          /* Subtle film grade + cinematic fade-in on the hero video */
+          .hero-video {
+            opacity: 0;
+            animation: heroVideoFade 1.6s cubic-bezier(.2,.7,.2,1) 0.15s forwards;
+            filter: saturate(1.06) contrast(1.02);
+            will-change: opacity, transform;
           }
-          @keyframes heroSlide1 {
-            0%, 22% { opacity: 0; }
-            25%, 47% { opacity: 1; }
-            50%, 100% { opacity: 0; }
-          }
-          @keyframes heroSlide2 {
-            0%, 47% { opacity: 0; }
-            50%, 72% { opacity: 1; }
-            75%, 100% { opacity: 0; }
-          }
-          @keyframes heroSlide3 {
-            0%, 72% { opacity: 0; }
-            75%, 97% { opacity: 1; }
-            100% { opacity: 0; }
-          }
-          @keyframes heroDot0 {
-            0%, 22% { background: #fff; transform: scale(1.3); }
-            25%, 97% { background: rgba(255,255,255,0.35); transform: scale(1); }
-            100% { background: #fff; transform: scale(1.3); }
-          }
-          @keyframes heroDot1 {
-            0%, 22% { background: rgba(255,255,255,0.35); transform: scale(1); }
-            25%, 47% { background: #fff; transform: scale(1.3); }
-            50%, 100% { background: rgba(255,255,255,0.35); transform: scale(1); }
-          }
-          @keyframes heroDot2 {
-            0%, 47% { background: rgba(255,255,255,0.35); transform: scale(1); }
-            50%, 72% { background: #fff; transform: scale(1.3); }
-            75%, 100% { background: rgba(255,255,255,0.35); transform: scale(1); }
-          }
-          @keyframes heroDot3 {
-            0%, 72% { background: rgba(255,255,255,0.35); transform: scale(1); }
-            75%, 97% { background: #fff; transform: scale(1.3); }
-            100% { background: rgba(255,255,255,0.35); transform: scale(1); }
+          @keyframes heroVideoFade {
+            from { opacity: 0; transform: scale(1.04); }
+            to   { opacity: 1; transform: scale(1); }
           }
 
-          /* Cinematic Ken Burns zoom on hero images */
-          @keyframes kenBurns {
-            0%   { transform: scale(1.08) translate3d(0,0,0); filter: saturate(1.05); }
-            50%  { transform: scale(1.18) translate3d(-1%, -1%, 0); filter: saturate(1.12); }
-            100% { transform: scale(1.08) translate3d(0,0,0); filter: saturate(1.05); }
+          /* On reduced-motion or no-video support, fall back to the static poster image */
+          @media (prefers-reduced-motion: reduce) {
+            .hero-video { display: none; }
+          }
+
+          /* Scroll indicator — gentle vertical drift on the line */
+          .hero-scroll-indicator {
+            animation: heroScrollFloat 2.4s ease-in-out infinite;
+          }
+          @keyframes heroScrollFloat {
+            0%, 100% { transform: translate(-50%, 0); opacity: 0.55; }
+            50%      { transform: translate(-50%, 6px); opacity: 1; }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .hero-scroll-indicator { animation: none; }
           }
 
           /* Staggered reveal for hero content */
@@ -704,523 +498,427 @@ export default function HomePage() {
         `}</style>
       </section>
 
-      {/* ── 3b. Trust Strip ─────────────────────────────────────────── */}
-      <section style={{ background: "#fff", borderBottom: "1px solid rgba(220,30,60,0.08)", padding: "0 24px" }}>
-        <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4" >
+      {/* ════════════════════════════════════════════════════════
+          Trust strip — typographic, no boxes
+          ════════════════════════════════════════════════════════ */}
+      <section style={{ background: "#fdf9f4", borderTop: "1px solid rgba(26,10,20,0.08)", borderBottom: "1px solid rgba(26,10,20,0.08)" }}>
+        <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4">
           {[
-            { icon: <Sparkles  className="h-5 w-5" strokeWidth={1.6} />, title: "Hand-Picked Profiles", desc: "Every member personally vetted" },
-            { icon: <BadgeCheck className="h-5 w-5" strokeWidth={1.6} />, title: "UK Registered",       desc: "Based & regulated in the United Kingdom" },
-            { icon: <Lock      className="h-5 w-5" strokeWidth={1.6} />, title: "Discreet & Private",   desc: "Your data is never shared without consent" },
-            { icon: <Handshake className="h-5 w-5" strokeWidth={1.6} />, title: "Personal Advisors",    desc: "Real people guiding your journey" },
+            { Icon: Sparkles,   title: "Hand-picked profiles", desc: "Every member personally vetted" },
+            { Icon: BadgeCheck, title: "UK-registered",         desc: "Based and regulated in Britain" },
+            { Icon: Lock,       title: "Discreet by default",   desc: "Never shared without consent" },
+            { Icon: Handshake,  title: "Personal advisors",     desc: "Real people guiding the journey" },
           ].map((item, i) => (
             <div key={item.title} style={{
-              padding: "28px 20px",
-              textAlign: "center",
-              borderRight: i < 3 ? "1px solid rgba(220,30,60,0.07)" : "none",
+              padding: "32px 24px",
+              borderRight: i < 3 ? "1px solid rgba(26,10,20,0.06)" : "none",
             }}>
-              <div style={{ display: "inline-flex", marginBottom: 12, color: "#dc1e3c" }}>{item.icon}</div>
-              <p style={{ fontSize: 13, fontWeight: 700, color: "#1a0a14", marginBottom: 4, fontFamily: "var(--font-display, serif)", letterSpacing: "-0.01em" }}>{item.title}</p>
-              <p style={{ fontSize: 11.5, color: "#777", lineHeight: 1.55 }}>{item.desc}</p>
+              <item.Icon size={18} strokeWidth={1.5} style={{ color: "#dc1e3c", marginBottom: 12, opacity: 0.85 }} />
+              <p className="font-display" style={{ fontSize: 15, fontWeight: 600, color: "#1a0a14", marginBottom: 4, letterSpacing: "-0.01em" }}>
+                {item.title}
+              </p>
+              <p style={{ fontSize: 12.5, color: "#88787f", lineHeight: 1.55 }}>
+                {item.desc}
+              </p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── 4. How It Works ──────────────────────────────────────────── */}
-      <section id="how-it-works" className="reveal" style={{ padding: "96px 24px", background: "#fdfbf9", position: "relative", overflow: "hidden" }}>
-        {/* Subtle background motif */}
-        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "700px", height: "700px", borderRadius: "50%", background: "radial-gradient(circle, rgba(220,30,60,0.03) 0%, transparent 70%)", pointerEvents: "none" }} />
+      {/* ════════════════════════════════════════════════════════
+          I — How we work
+          ════════════════════════════════════════════════════════ */}
+      <section className="editorial-reveal" id="how-it-works" style={{ padding: "clamp(72px, 9vw, 112px) 24px", background: "#fdf9f4" }}>
+        <div className="max-w-7xl mx-auto">
+          <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 48, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+              I — How we work
+            </span>
+            <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)", minWidth: 40 }} />
+          </div>
+          <h2 className="font-display" style={{ fontSize: "clamp(34px, 4.5vw, 60px)", fontWeight: 500, lineHeight: 1.05, letterSpacing: "-0.02em", marginBottom: 56, maxWidth: 820, color: "#1a0a14" }}>
+            From the first conversation to{" "}
+            <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#dc1e3c" }}>
+              the wedding day.
+            </span>
+          </h2>
 
-        <div className="max-w-5xl mx-auto" style={{ position: "relative" }}>
-          {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "72px", flexWrap: "wrap", gap: "24px" }}>
-            <div>
-              <span style={{ fontSize: "12px", fontWeight: 700, color: "#dc1e3c", textTransform: "uppercase", letterSpacing: "0.2em", display: "block", marginBottom: "12px" }}>Your Journey</span>
-              <h2 className="font-playfair" style={{ fontSize: "clamp(32px, 4vw, 52px)", fontWeight: 700, color: "#1a0a14", lineHeight: 1.1, margin: 0 }}>
-                From First Step to <span style={{ color: "#dc1e3c", fontFamily: "var(--font-great-vibes)", fontSize: "clamp(40px, 5vw, 64px)", fontStyle: "normal", fontWeight: 400 }}>Forever</span>
-              </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4" style={{ rowGap: 48, columnGap: 40 }}>
+            {[
+              { n: "01", title: "Tell us about you", body: "Begin with a private intake call. Our advisor takes the time to understand who you are, what matters, and what you are looking for in a partner." },
+              { n: "02", title: "We hand-pick matches", body: "We curate three to five compatible introductions per month. No algorithm, no swiping — just considered, advisor-led suggestions." },
+              { n: "03", title: "Connect in private", body: "Express interest discreetly. Your contact details are shared only when both sides have indicated mutual interest." },
+              { n: "04", title: "Begin forever", body: "Meet families and take the next step. Our advisors stay alongside you — through the introductions, the meetings, and the wedding." },
+            ].map((step) => (
+              <article key={step.n} style={{ position: "relative", paddingTop: 24, borderTop: "1px solid rgba(26,10,20,0.16)" }}>
+                <span className="font-display" style={{ position: "absolute", top: -14, left: 0, background: "#fdf9f4", paddingRight: 12, fontSize: 13, fontWeight: 700, letterSpacing: "0.18em", color: "#dc1e3c" }}>
+                  {step.n}
+                </span>
+                <h3 className="font-display" style={{ fontSize: 20, fontWeight: 600, lineHeight: 1.25, marginBottom: 12, letterSpacing: "-0.01em", color: "#1a0a14" }}>
+                  {step.title}
+                </h3>
+                <p style={{ fontSize: 14.5, lineHeight: 1.75, color: "#4a3a40", margin: 0 }}>
+                  {step.body}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════
+          II — Members are introduced privately
+          ════════════════════════════════════════════════════════ */}
+      <section className="editorial-reveal" style={{ padding: "clamp(72px, 9vw, 112px) 24px", background: "#faf3eb" }}>
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
+          <div className="lg:col-span-5">
+            <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+                II — By invitation
+              </span>
+              <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
             </div>
-            <a href="/auth/register" style={{
-              display: "inline-block", background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
-              color: "#fff", padding: "14px 32px", borderRadius: "9999px",
-              fontSize: "14px", fontWeight: 600, textDecoration: "none",
-              boxShadow: "0 4px 20px rgba(220,30,60,0.25)", whiteSpace: "nowrap",
+            <h2 className="font-display" style={{ fontSize: "clamp(28px, 3.6vw, 44px)", fontWeight: 500, lineHeight: 1.1, letterSpacing: "-0.02em", marginBottom: 20, color: "#1a0a14" }}>
+              Members are{" "}
+              <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#dc1e3c" }}>
+                personally introduced.
+              </span>
+            </h2>
+            <p style={{ fontSize: 16, lineHeight: 1.75, color: "#4a3a40", marginBottom: 28 }}>
+              For their privacy, member profiles are not visible to the open
+              internet. Every introduction begins with a confidential call —
+              and only after we genuinely believe two families are right for
+              each other.
+            </p>
+            <Link
+              href="/auth/register"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                background: "#1a0a14",
+                color: "#fdf9f4",
+                padding: "14px 28px",
+                borderRadius: 9999,
+                fontSize: 14,
+                fontWeight: 600,
+                textDecoration: "none",
+                letterSpacing: "0.02em",
+              }}
+            >
+              Find your forever
+              <ArrowRight size={15} strokeWidth={2} />
+            </Link>
+          </div>
+
+          <div className="lg:col-span-7" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
+            {[
+              { kicker: "01", title: "Confidential intake", body: "A 30-minute call with one of our advisors to understand what matters to you and your family." },
+              { kicker: "02", title: "Hand-picked profiles", body: "Three to five considered introductions per month — never automated, never compromised." },
+              { kicker: "03", title: "Guided introduction", body: "When you are both interested, we facilitate the family meeting with discretion and care." },
+            ].map((step) => (
+              <article key={step.kicker} style={{
+                background: "#fdf9f4",
+                border: "1px solid rgba(26,10,20,0.08)",
+                borderRadius: 4,
+                padding: "26px 28px",
+                display: "grid",
+                gridTemplateColumns: "auto 1fr",
+                gap: 24,
+                alignItems: "start",
+              }}>
+                <span className="font-display" style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.22em", color: "#dc1e3c", paddingTop: 4 }}>
+                  {step.kicker}
+                </span>
+                <div>
+                  <h3 className="font-display" style={{ fontSize: 18, fontWeight: 600, color: "#1a0a14", margin: "0 0 6px", letterSpacing: "-0.01em" }}>
+                    {step.title}
+                  </h3>
+                  <p style={{ fontSize: 14, color: "#4a3a40", lineHeight: 1.7, margin: 0 }}>
+                    {step.body}
+                  </p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════
+          III — Why this approach (3 principles)
+          ════════════════════════════════════════════════════════ */}
+      <section className="editorial-reveal" style={{ padding: "clamp(72px, 9vw, 112px) 24px", background: "#1a0a14", color: "#fdf9f4" }}>
+        <div className="max-w-7xl mx-auto">
+          <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 48, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "rgba(255,220,180,0.7)", textTransform: "uppercase" }}>
+              III — Why this approach
+            </span>
+            <span style={{ flex: 1, height: 1, background: "rgba(255,220,180,0.18)", minWidth: 40 }} />
+          </div>
+          <h2 className="font-display" style={{ fontSize: "clamp(30px, 4vw, 52px)", fontWeight: 500, lineHeight: 1.08, letterSpacing: "-0.02em", marginBottom: 64, maxWidth: 760 }}>
+            Three principles that make a{" "}
+            <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#ffd87a" }}>
+              difference.
+            </span>
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3" style={{ gap: 56 }}>
+            {[
+              { Icon: Sparkles, title: "Hand-picked, not crowded", body: "We deliberately stay small. Every profile is reviewed by the same advisors who later make the introduction. No algorithm sits between you." },
+              { Icon: ShieldCheck, title: "Verified before introduced", body: "Identity, profession, and intent are checked privately first. By the time you see a profile, the meaningful background work is done." },
+              { Icon: Handshake, title: "Advisors, not operators", body: "Our role does not end at the introduction. We remain on the call through hesitations, family conversations, and the months that follow." },
+            ].map((p) => (
+              <article key={p.title} style={{ paddingTop: 24, borderTop: "1px solid rgba(255,220,180,0.18)" }}>
+                <p.Icon size={20} strokeWidth={1.4} style={{ color: "#ffd87a", marginBottom: 16 }} />
+                <h3 className="font-display" style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.25, marginBottom: 12, letterSpacing: "-0.01em" }}>
+                  {p.title}
+                </h3>
+                <p style={{ fontSize: 14.5, lineHeight: 1.75, color: "rgba(253,249,244,0.72)", margin: 0 }}>
+                  {p.body}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════
+          IV — Stories
+          ════════════════════════════════════════════════════════ */}
+      <section className="editorial-reveal" id="success-stories" style={{ padding: "clamp(72px, 9vw, 112px) 24px", background: "#fdf9f4" }}>
+        <div className="max-w-7xl mx-auto">
+          <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 48, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+              IV — Stories so far
+            </span>
+            <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)", minWidth: 40 }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 48, gap: 32, flexWrap: "wrap" }}>
+            <h2 className="font-display" style={{ fontSize: "clamp(30px, 4vw, 52px)", fontWeight: 500, lineHeight: 1.08, letterSpacing: "-0.02em", maxWidth: 720, margin: 0, color: "#1a0a14" }}>
+              They found each other{" "}
+              <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#dc1e3c" }}>
+                here.
+              </span>
+            </h2>
+            <Link href="/success-stories" style={{
+              display: "inline-flex", alignItems: "center", gap: 8,
+              fontSize: 14, fontWeight: 600, color: "#1a0a14",
+              textDecoration: "none",
+              borderBottom: "1px solid rgba(26,10,20,0.25)",
+              paddingBottom: 2,
               flexShrink: 0,
             }}>
-              Begin Your Journey →
-            </a>
+              See all stories <ArrowRight size={13} strokeWidth={2} />
+            </Link>
           </div>
 
-          {/* Steps — horizontal layout */}
-          <div style={{ position: "relative" }}>
-            {/* Horizontal connecting line */}
-            <div style={{
-              position: "absolute",
-              top: "32px",
-              left: "calc(12.5%)",
-              right: "calc(12.5%)",
-              height: "1px",
-              background: "linear-gradient(to right, rgba(220,30,60,0.2), rgba(220,30,60,0.5), rgba(220,30,60,0.2))",
-            }} />
-
-            <div className="grid grid-cols-2 lg:grid-cols-4" style={{ gap: "0", position: "relative" }}>
-              {[
-                { num: "01", title: "Tell Us About You",       desc: "Create your profile. Every profile is personally reviewed before going live.", tag: "Profile" },
-                { num: "02", title: "We Do the Matching",      desc: "Our advisors hand-pick compatible profiles. No algorithms, no endless swiping.", tag: "Matching" },
-                { num: "03", title: "Connect with Discretion", desc: "Express interest privately. Your details are shared only with mutual consent.", tag: "Connection" },
-                { num: "04", title: "Begin Forever",           desc: "Meet families and take the next step, with our advisors guiding you throughout.", tag: "Forever" },
-              ].map((step, i) => (
-                <div key={step.num} style={{ padding: "0 24px 0", textAlign: "center" }}>
-                  {/* Circle */}
-                  <div style={{
-                    width: "64px", height: "64px", borderRadius: "50%",
-                    background: "#fff",
-                    border: "2px solid #dc1e3c",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    margin: "0 auto 24px",
-                    boxShadow: "0 4px 24px rgba(220,30,60,0.12)",
-                    position: "relative", zIndex: 1,
-                  }}>
-                    <span className="font-playfair" style={{ fontSize: "18px", fontWeight: 700, color: "#dc1e3c" }}>{step.num}</span>
-                  </div>
-                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#dc1e3c", textTransform: "uppercase", letterSpacing: "0.15em", display: "block", marginBottom: "8px" }}>{step.tag}</span>
-                  <h3 className="font-playfair" style={{ fontSize: "18px", fontWeight: 700, color: "#1a0a14", marginBottom: "10px", lineHeight: 1.3 }}>{step.title}</h3>
-                  <p style={{ fontSize: "13px", color: "#777", lineHeight: 1.7, margin: 0 }}>{step.desc}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" style={{ gap: 32 }}>
+            {stories.map((s) => (
+              <article key={s.names} style={{ display: "flex", flexDirection: "column" }}>
+                <div style={{ aspectRatio: "4 / 5", overflow: "hidden", borderRadius: 4, marginBottom: 20, background: "#faf3eb" }}>
+                  <img
+                    src={s.img}
+                    alt={s.names}
+                    loading="lazy"
+                    style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }}
+                  />
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── 5b. Membership Invitation (no mock profiles shown publicly) ── */}
-      <section className="reveal" style={{ padding: "80px 24px", background: "#fff" }}>
-        <div className="max-w-4xl mx-auto" style={{ textAlign: "center" }}>
-          <span style={{ fontSize: "12px", fontWeight: 700, color: "#dc1e3c", textTransform: "uppercase", letterSpacing: "0.15em" }}>
-            Exclusively curated · By invitation
-          </span>
-          <h2 className="font-playfair" style={{ fontSize: "clamp(26px, 3.5vw, 40px)", fontWeight: 700, color: "#1a0a14", marginTop: "12px", marginBottom: "16px" }}>
-            Members are personally introduced
-          </h2>
-          <p style={{ color: "#666", fontSize: "15px", maxWidth: "640px", margin: "0 auto 32px", lineHeight: 1.7 }}>
-            For their privacy and discretion, member profiles are not displayed publicly. Every introduction is hand-selected by our advisors after a confidential call with you and your family.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" style={{ maxWidth: "780px", margin: "0 auto 40px" }}>
-            {[
-              { kicker: "01", title: "Confidential intake", body: "A 30-minute call with one of our advisors to understand what matters to you." },
-              { kicker: "02", title: "Hand-picked profiles", body: "We curate three to five compatible introductions per month — no algorithms, no swiping." },
-              { kicker: "03", title: "Guided introduction", body: "When you're both interested, we facilitate the family meeting with discretion." },
-            ].map((step) => (
-              <div key={step.kicker} style={{
-                background: "#fdfbf9",
-                border: "1px solid rgba(220,30,60,0.08)",
-                borderRadius: "16px",
-                padding: "20px",
-                textAlign: "left",
-              }}>
-                <span className="font-playfair" style={{ fontSize: "12px", fontWeight: 700, color: "#dc1e3c", letterSpacing: "0.18em" }}>{step.kicker}</span>
-                <p className="font-playfair" style={{ fontSize: "16px", fontWeight: 700, color: "#1a0a14", margin: "8px 0 6px" }}>{step.title}</p>
-                <p style={{ fontSize: "13px", color: "#777", lineHeight: 1.6, margin: 0 }}>{step.body}</p>
-              </div>
-            ))}
-          </div>
-          <Link href="/auth/register" style={{
-            display: "inline-block",
-            background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
-            color: "#fff", padding: "14px 40px", borderRadius: "9999px",
-            fontSize: "14px", fontWeight: 600, textDecoration: "none",
-            boxShadow: "0 4px 20px rgba(220,30,60,0.25)",
-          }}>
-            Begin your private intake
-          </Link>
-        </div>
-      </section>
-
-      {/* ── 6. Success Stories ────────────────────────────────────────── */}
-      <section id="success-stories" className="reveal py-20 px-4 sm:px-6 bg-white">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <span className="text-sm font-medium tracking-wide uppercase" style={{ color: "#dc1e3c" }}>Real Love Stories</span>
-            <h2 className="font-playfair text-3xl sm:text-4xl font-bold mt-2" style={{ color: "#1a0a14" }}>They Found Each Other Here</h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {stories.map((story) => (
-              <div key={story.names} className="warm-card overflow-hidden">
-                <img
-                  src={story.img}
-                  alt={story.names}
-                  className="w-full object-cover"
-                  style={{ aspectRatio: "16/10", objectPosition: "top" }}
-                />
-                <div className="p-6">
-                  <div className="flex items-center gap-1 mb-3">
-                    {[1,2,3,4,5].map((s) => (
-                      <Star key={s} className="h-3.5 w-3.5" style={{ color: "#f59e0b", fill: "#f59e0b" }} />
-                    ))}
-                  </div>
-                  <p className="text-sm italic mb-4" style={{ color: "#555", lineHeight: 1.85, fontFamily: "var(--font-display-alt, serif)" }}>
-                    &ldquo;{story.quote}&rdquo;
-                  </p>
-                  <p className="font-display font-semibold" style={{ color: "#1a0a14", fontSize: 17 }}>{story.names}</p>
-                  <p style={{ fontSize: 12, color: "#888", marginTop: 4, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                    <MapPin className="h-3 w-3" /> {story.location}
-                  </p>
-                  <span className="ml-2 inline-block mt-3 text-xs px-3 py-1 rounded-full font-medium" style={{ backgroundColor: "rgba(220,30,60,0.08)", color: "#dc1e3c" }}>
-                    {story.year}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── 7. Why Us / Features ──────────────────────────────────────── */}
-      <section className="reveal py-20 px-4 sm:px-6 section-cream">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <span className="text-sm font-medium tracking-wide uppercase" style={{ color: "#dc1e3c" }}>Why We Are Different</span>
-            <h2 className="font-playfair text-3xl sm:text-4xl font-bold mt-2" style={{ color: "#1a0a14" }}>The Elite Difference</h2>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <img
-              src="/images/why-different.jpg"
-              alt="Why We Are Different"
-              className="w-full rounded-2xl object-cover"
-              style={{ aspectRatio: "4/3", boxShadow: "0 12px 40px rgba(102,69,28,0.1)" }}
-            />
-
-            <div className="space-y-6">
-              {features.map((f) => (
-                <div key={f.title} className="flex gap-4">
-                  <div
-                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white"
-                    style={{ backgroundColor: "#dc1e3c" }}
-                  >
-                    <Check className="h-4 w-4" strokeWidth={2.5} />
-                  </div>
-                  <div>
-                    <h3 className="font-display font-semibold text-lg" style={{ color: "#1a0a14", letterSpacing: "-0.01em" }}>{f.title}</h3>
-                    <p className="text-sm mt-1" style={{ color: "#555" }}>{f.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── 8b. Trusted By ───────────────────────────────────────────── */}
-      <section style={{ padding: "48px 24px", background: "#fdfbf9", borderTop: "1px solid rgba(220,30,60,0.06)" }}>
-        <div className="max-w-5xl mx-auto">
-          <p style={{ textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.2em", marginBottom: "28px" }}>
-            Trusted by families across the world
-          </p>
-          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "12px 16px" }}>
-            {([
-              { code: "GB", label: "United Kingdom" },
-              { code: "US", label: "United States"  },
-              { code: "IN", label: "India"          },
-              { code: "CA", label: "Canada"         },
-              { code: "DE", label: "Germany"        },
-              { code: "AU", label: "Australia"      },
-              { code: "AE", label: "UAE"            },
-              { code: "SG", label: "Singapore"      },
-              { code: "NZ", label: "New Zealand"    },
-              { code: "FR", label: "France"         },
-            ] as const).map((c) => (
-              <span key={c.code} style={{
-                display: "inline-flex", alignItems: "center", gap: 8,
-                fontSize: 13, fontWeight: 600, color: "#666",
-                padding: "6px 14px",
-                border: "1px solid rgba(220,30,60,0.10)",
-                borderRadius: "9999px",
-                background: "#fff",
-              }}>
-                <CountryFlag code={c.code as CountryCode} rounded="sm" />
-                {c.label}
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── 8c. FAQ ──────────────────────────────────────────────────── */}
-      <section id="faq" className="reveal" style={{ padding: "80px 24px", background: "#fff" }}>
-        <div className="max-w-3xl mx-auto">
-          <div style={{ textAlign: "center", marginBottom: "56px" }}>
-            <span style={{ fontSize: "12px", fontWeight: 700, color: "#dc1e3c", textTransform: "uppercase", letterSpacing: "0.15em" }}>Common Questions</span>
-            <h2 className="font-playfair" style={{ fontSize: "clamp(26px, 3.5vw, 40px)", fontWeight: 700, color: "#1a0a14", marginTop: "12px" }}>Frequently Asked</h2>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
-            {[
-              {
-                q: "How is Match4Marriage different from other matrimony sites?",
-                a: "We are a boutique service, not a mass-market platform. Every profile is hand-picked and personally vetted by our team. We focus on quality introductions, not volume.",
-              },
-              {
-                q: "How does the matching process work?",
-                a: "Once you register, our advisors review your profile and preferences. We personally curate compatible introductions for you. No swiping, no endless browsing. Just meaningful, considered matches.",
-              },
-              {
-                q: "Is my information kept private?",
-                a: "Absolutely. Your contact details and personal information are never shared without your explicit consent. All data is handled in compliance with UK GDPR regulations.",
-              },
-              {
-                q: "How long does it typically take to find a match?",
-                a: "Every journey is unique. Some of our members have found their match within weeks; others take a few months. We guide you at every stage and never rush the process.",
-              },
-              {
-                q: "Do you serve families outside the UK?",
-                a: "Yes. While our primary focus is the British Indian community, we connect families globally, including India, UAE, Canada, Australia, and the USA.",
-              },
-            ].map((faq, i) => (
-              <details key={i} style={{
-                borderBottom: "1px solid rgba(220,30,60,0.08)",
-                padding: "0",
-              }}>
-                <summary style={{
-                  padding: "20px 0",
-                  fontSize: "15px", fontWeight: 600, color: "#1a0a14",
-                  cursor: "pointer", listStyle: "none",
-                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                }}>
-                  {faq.q}
-                  <span style={{ color: "#dc1e3c", fontSize: "20px", flexShrink: 0, marginLeft: "16px" }}>+</span>
-                </summary>
-                <p style={{ padding: "0 0 20px", fontSize: "14px", color: "#777", lineHeight: 1.8, margin: 0 }}>
-                  {faq.a}
-                </p>
-              </details>
-            ))}
-          </div>
-        </div>
-      </section>
-
-
-
-      {/* ── 8d. Contact / Enquiry ────────────────────────────────────── */}
-      <section id="contact" className="reveal" style={{ padding: "80px 24px", background: "#fdfbf9" }}>
-        <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          <div>
-            <span style={{ fontSize: "12px", fontWeight: 700, color: "#dc1e3c", textTransform: "uppercase", letterSpacing: "0.15em" }}>Get in Touch</span>
-            <h2 className="font-playfair" style={{ fontSize: "clamp(26px, 3.5vw, 40px)", fontWeight: 700, color: "#1a0a14", marginTop: "12px", marginBottom: "16px" }}>
-              Speak to Our Team
-            </h2>
-            <p style={{ color: "#777", fontSize: "15px", lineHeight: 1.8, marginBottom: "32px" }}>
-              Have a question? Want to learn more before registering? Our advisors are here to help, no pressure, just a friendly conversation.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {([
-                { Icon: Mail,           label: "Email Us",  value: "enquiry@match4marriage.com",    href: "mailto:enquiry@match4marriage.com", brand: false },
-                { Icon: Phone,          label: "Call Us",   value: "+44 7476 212655",                href: "tel:+447476212655",                  brand: false },
-                { Icon: MessageCircle,  label: "WhatsApp",  value: "Message us on WhatsApp",         href: "https://wa.me/447476212655",         brand: true  },
-              ] as const).map((c) => (
-                <a key={c.label} href={c.href} target={c.href.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 16, textDecoration: "none" }}>
-                  <div style={{
-                    width: 44, height: 44, borderRadius: 12,
-                    background: c.brand ? "rgba(37,211,102,0.10)" : "rgba(220,30,60,0.08)",
-                    color: c.brand ? "#25d366" : "#dc1e3c",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    flexShrink: 0,
-                  }}>
-                    <c.Icon className="h-5 w-5" strokeWidth={1.6} />
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.12em", margin: 0 }}>{c.label}</p>
-                    <p style={{ fontSize: 14, color: c.brand ? "#25d366" : "#1a0a14", fontWeight: 600, margin: 0 }}>{c.value}</p>
-                  </div>
-                </a>
-              ))}
-            </div>
-          </div>
-          <div style={{
-            background: "#fff",
-            borderRadius: "20px",
-            padding: "36px",
-            boxShadow: "0 4px 32px rgba(26,10,20,0.08)",
-            border: "1px solid rgba(220,30,60,0.08)",
-          }}>
-            <h3 className="font-playfair" style={{ fontSize: "20px", fontWeight: 700, color: "#1a0a14", marginBottom: "24px" }}>Send an Enquiry</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              {["Your Name", "Email Address", "Phone Number"].map((field) => (
-                <input
-                  key={field}
-                  type="text"
-                  placeholder={field}
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.22em", color: "#a78a8f", textTransform: "uppercase", marginBottom: 10 }}>
+                  {s.year} · {s.location}
+                </span>
+                <h3 className="font-display" style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.2, color: "#1a0a14", marginBottom: 12, letterSpacing: "-0.01em" }}>
+                  {s.names}
+                </h3>
+                <Quote size={20} strokeWidth={1} style={{ color: "#dc1e3c", opacity: 0.5, marginBottom: 8 }} />
+                <p
+                  className="font-display-alt"
                   style={{
-                    width: "100%", padding: "12px 16px",
-                    border: "1px solid rgba(220,30,60,0.15)",
-                    borderRadius: "10px", fontSize: "14px",
-                    color: "#1a0a14", background: "#fdfbf9",
-                    outline: "none", boxSizing: "border-box",
+                    fontFamily: "var(--font-display-alt, 'Cormorant', serif)",
+                    fontStyle: "italic",
+                    fontSize: 16,
+                    lineHeight: 1.65,
+                    color: "#4a3a40",
+                    margin: 0,
                   }}
-                />
-              ))}
-              <textarea
-                placeholder="Your message (optional)"
-                rows={3}
-                style={{
-                  width: "100%", padding: "12px 16px",
-                  border: "1px solid rgba(220,30,60,0.15)",
-                  borderRadius: "10px", fontSize: "14px",
-                  color: "#1a0a14", background: "#fdfbf9",
-                  outline: "none", resize: "none", boxSizing: "border-box",
-                }}
-              />
-              <button style={{
-                background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
-                color: "#fff", padding: "14px",
-                borderRadius: "10px", fontSize: "14px",
-                fontWeight: 600, border: "none", cursor: "pointer",
-                boxShadow: "0 4px 16px rgba(220,30,60,0.25)",
-              }}>
-                Send Enquiry
-              </button>
-            </div>
+                >
+                  {s.quote}
+                </p>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ── 9. Community Stats Banner ────────────────────────────────── */}
-      <section className="py-16 px-4 sm:px-6" style={{ background: "linear-gradient(to right, #dc1e3c, #3b3fa0)" }}>
-        <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-center text-white">
-          {([
-            { num: "100+",      label: "Elite Verified Profiles", icon: <Sparkles  className="h-5 w-5 text-white/80" /> },
-            { num: "UK",        label: "Headquarters",            icon: <CountryFlag code="GB" rounded="sm" className="!text-base" /> },
-            { num: "Est. 2020", label: "Established",              icon: <Gem       className="h-5 w-5 text-white/80" /> },
-            { num: "4.9",       label: "Client Satisfaction",      icon: <Star      className="h-5 w-5 text-white/80" fill="currentColor" /> },
-          ] as const).map((stat) => (
-            <div key={stat.label}>
-              <div className="flex items-center justify-center gap-2.5">
-                {stat.icon}
-                <p className="text-3xl sm:text-4xl font-display font-semibold tracking-tight">{stat.num}</p>
-              </div>
-              <p className="text-sm mt-1.5 opacity-80">{stat.label}</p>
+      {/* ════════════════════════════════════════════════════════
+          V — Why we are different (split feature list)
+          ════════════════════════════════════════════════════════ */}
+      <section className="editorial-reveal" style={{ padding: "clamp(72px, 9vw, 112px) 24px", background: "#faf3eb" }}>
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20 items-start">
+          <div className="lg:col-span-5">
+            <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+                V — What we offer
+              </span>
+              <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
             </div>
-          ))}
+            <h2 className="font-display" style={{ fontSize: "clamp(30px, 4vw, 52px)", fontWeight: 500, lineHeight: 1.08, letterSpacing: "-0.02em", marginBottom: 24, color: "#1a0a14" }}>
+              Six reasons families{" "}
+              <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#dc1e3c" }}>
+                stay with us.
+              </span>
+            </h2>
+            <p style={{ fontSize: 16, lineHeight: 1.7, color: "#4a3a40", margin: 0 }}>
+              Every detail of how we work has been chosen with a single
+              question in mind — what would we want for our own family?
+            </p>
+          </div>
+          <div className="lg:col-span-7">
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gridTemplateColumns: "1fr", gap: 0 }}>
+              {features.map((f, i) => (
+                <li key={f.title} style={{
+                  padding: "20px 0",
+                  borderTop: i === 0 ? "1px solid rgba(26,10,20,0.16)" : "none",
+                  borderBottom: "1px solid rgba(26,10,20,0.10)",
+                  display: "grid",
+                  gridTemplateColumns: "auto 1fr",
+                  gap: 24,
+                  alignItems: "baseline",
+                }}>
+                  <span className="font-display" style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.18em", color: "#dc1e3c", minWidth: 32 }}>
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <div>
+                    <p className="font-display" style={{ fontSize: 17, fontWeight: 600, color: "#1a0a14", margin: "0 0 4px", letterSpacing: "-0.01em" }}>
+                      {f.title}
+                    </p>
+                    <p style={{ fontSize: 14, color: "#4a3a40", lineHeight: 1.6, margin: 0 }}>
+                      {f.desc}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </section>
 
-      {/* ── 10. CTA Section ──────────────────────────────────────────── */}
-      <section className="reveal py-24 px-4 sm:px-6 section-cream text-center relative overflow-hidden">
-        {/* Decorative rings */}
-        <div className="absolute top-10 left-10 w-32 h-32 rounded-full border-2 opacity-10 pointer-events-none" style={{ borderColor: "#dc1e3c" }} />
-        <div className="absolute bottom-10 right-10 w-48 h-48 rounded-full border-2 opacity-10 pointer-events-none" style={{ borderColor: "#dc1e3c" }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full border opacity-5 pointer-events-none" style={{ borderColor: "#dc1e3c" }} />
-
-        <div className="relative z-10 max-w-2xl mx-auto">
-          <h2 className="font-playfair text-3xl sm:text-5xl font-bold mb-4" style={{ color: "#1a0a14" }}>
-            Begin Your Journey Today
+      {/* ════════════════════════════════════════════════════════
+          VI — Common questions
+          ════════════════════════════════════════════════════════ */}
+      <section className="editorial-reveal" id="faq" style={{ padding: "clamp(72px, 9vw, 112px) 24px", background: "#fdf9f4" }}>
+        <div className="max-w-3xl mx-auto">
+          <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+              VI — Common questions
+            </span>
+            <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
+          </div>
+          <h2 className="font-display" style={{ fontSize: "clamp(28px, 3.6vw, 44px)", fontWeight: 500, lineHeight: 1.1, letterSpacing: "-0.02em", marginBottom: 48, color: "#1a0a14" }}>
+            Before you{" "}
+            <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#dc1e3c" }}>
+              begin.
+            </span>
           </h2>
-          <p className="text-lg mb-8" style={{ color: "#555" }}>
-            Join the UK&apos;s most trusted boutique Indian matrimonial service, where every connection is personal, verified, and meaningful.
+
+          <div>
+            {[
+              { q: "How is Match4Marriage different from other matrimony sites?", a: "We are a boutique service, not a mass-market platform. Every profile is hand-picked and personally vetted by our team. We focus on quality introductions, not volume." },
+              { q: "How does the matching process work?", a: "Once you register, our advisors review your profile and preferences. We personally curate compatible introductions. No swiping, no endless browsing — just meaningful, considered matches." },
+              { q: "Is my information kept private?", a: "Absolutely. Your contact details and personal information are never shared without explicit consent. All data is handled in compliance with UK GDPR regulations." },
+              { q: "How long does it typically take to find a match?", a: "Every journey is unique. Some members find their match within weeks; others take a few months. We guide you at every stage and never rush the process." },
+              { q: "Do you serve families outside the UK?", a: "Yes. While our primary focus is the British Indian community, we connect families globally — including India, UAE, Canada, Australia, and the USA." },
+            ].map((faq, i) => {
+              const open = openFaq === i;
+              return (
+                <div key={i} style={{ borderBottom: "1px solid rgba(26,10,20,0.10)" }}>
+                  <button
+                    onClick={() => setOpenFaq(open ? null : i)}
+                    style={{
+                      width: "100%",
+                      padding: "22px 0",
+                      background: "none",
+                      border: 0,
+                      cursor: "pointer",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 16,
+                      textAlign: "left",
+                      color: "#1a0a14",
+                      fontFamily: "inherit",
+                    }}
+                    aria-expanded={open}
+                  >
+                    <span className="font-display" style={{ fontSize: 17, fontWeight: 600, lineHeight: 1.4, letterSpacing: "-0.005em" }}>
+                      {faq.q}
+                    </span>
+                    <span style={{ flexShrink: 0, color: "#dc1e3c" }}>
+                      {open ? <Minus size={18} strokeWidth={2} /> : <Plus size={18} strokeWidth={2} />}
+                    </span>
+                  </button>
+                  {open && (
+                    <p style={{ paddingBottom: 22, fontSize: 14.5, lineHeight: 1.75, color: "#4a3a40", margin: 0, maxWidth: 620 }}>
+                      {faq.a}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <p style={{ fontSize: 14, color: "#88787f", marginTop: 32 }}>
+            More questions? See our{" "}
+            <Link href="/faq" style={{ color: "#1a0a14", textDecoration: "none", fontWeight: 600, borderBottom: "1px solid rgba(26,10,20,0.25)" }}>
+              full FAQ
+            </Link>{" "}
+            or{" "}
+            <Link href="/contact" style={{ color: "#1a0a14", textDecoration: "none", fontWeight: 600, borderBottom: "1px solid rgba(26,10,20,0.25)" }}>
+              speak to an advisor
+            </Link>.
           </p>
-          <div className="flex justify-center">
-            <Link href="/auth/register" className="btn-gold px-10 py-3 text-base">
-              Register to View Profiles
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════
+          VII — Final CTA, restrained
+          ════════════════════════════════════════════════════════ */}
+      <section className="editorial-reveal" style={{ padding: "clamp(72px, 9vw, 128px) 24px", background: "#faf3eb" }}>
+        <div className="max-w-3xl mx-auto" style={{ textAlign: "center" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 10, fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase", marginBottom: 24 }}>
+            <CountryFlag code="GB" rounded="sm" /> Match4Marriage · United Kingdom
+          </span>
+          <h2 className="font-display" style={{ fontSize: "clamp(30px, 4.4vw, 56px)", fontWeight: 500, lineHeight: 1.08, letterSpacing: "-0.02em", marginBottom: 20, color: "#1a0a14" }}>
+            Begin a quieter way to{" "}
+            <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#dc1e3c" }}>
+              find one another.
+            </span>
+          </h2>
+          <p style={{ fontSize: 16, lineHeight: 1.7, color: "#4a3a40", maxWidth: 540, margin: "0 auto 36px" }}>
+            Begin with a private call — no commitment, just a conversation about
+            what you and your family are looking for.
+          </p>
+          <div style={{ display: "inline-flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>
+            <Link href="/auth/register" style={{
+              display: "inline-flex", alignItems: "center", gap: 8,
+              background: "#1a0a14", color: "#fdf9f4",
+              padding: "14px 32px", borderRadius: 9999,
+              fontSize: 14, fontWeight: 600, textDecoration: "none", letterSpacing: "0.02em",
+            }}>
+              Find your forever <ArrowRight size={15} strokeWidth={2} />
+            </Link>
+            <Link href="/contact" style={{
+              display: "inline-flex", alignItems: "center", gap: 8,
+              padding: "14px 32px",
+              border: "1px solid rgba(26,10,20,0.20)",
+              borderRadius: 9999,
+              fontSize: 14, fontWeight: 600, color: "#1a0a14", textDecoration: "none",
+            }}>
+              Speak to an advisor
             </Link>
           </div>
         </div>
       </section>
 
-      {/* ── 11. Footer ───────────────────────────────────────────────── */}
-      <footer style={{ backgroundColor: "#1a0a14", padding: "48px 24px 24px" }}>
-        <div style={{ maxWidth: "1152px", margin: "0 auto" }}>
-
-          {/* Main row */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: "48px", marginBottom: "36px", alignItems: "start" }}>
-
-            {/* Brand */}
-            <div>
-              <span className="font-playfair" style={{ fontSize: "22px", fontWeight: 700, color: "#fff" }}>
-                Match<span style={{ color: "#dc1e3c" }}>4</span>Marriage
-              </span>
-              <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.45)", lineHeight: 1.7, margin: "12px 0 16px", maxWidth: "280px" }}>
-                Elite Indian Matrimony, UK registered, connecting the global Indian community with trust and discretion.
-              </p>
-              <div style={{ display: "flex", gap: "10px" }}>
-                {[
-                  { label: "Facebook", icon: "f", href: "https://www.facebook.com/profile.php?id=61579547022417" },
-                  { label: "Instagram", icon: "ig", href: "https://www.instagram.com/match4marriage_uk_matrimony" },
-                ].map((s) => (
-                  <a key={s.label} href={s.href} title={s.label} target="_blank" rel="noopener noreferrer" style={{
-                    width: "32px", height: "32px", borderRadius: "50%",
-                    border: "1px solid rgba(255,255,255,0.15)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.5)",
-                    textDecoration: "none",
-                  }}>
-                    {s.icon}
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            {/* Quick Links */}
-            <div>
-              <p style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "14px" }}>Links</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {[
-                  { label: "Home", href: "/" },
-                  { label: "Browse Profiles", href: "/profiles" },
-                  { label: "Success Stories", href: "/success-stories" },
-                  { label: "About Us", href: "/about" },
-              { label: "Pricing", href: "/pricing" },
-                ].map((link) => (
-                  <a key={link.label} href={link.href} style={{ fontSize: "13px", color: "rgba(255,255,255,0.45)", textDecoration: "none" }}>
-                    {link.label}
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            {/* Legal */}
-            <div>
-              <p style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "14px" }}>Legal</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {[
-                  { label: "Privacy Policy", href: "/privacy" },
-                  { label: "Terms of Service", href: "/terms" },
-                  { label: "Cookie Policy", href: "#" },
-                  { label: "GDPR", href: "#" },
-                ].map((link) => (
-                  <a key={link.label} href={link.href} style={{ fontSize: "13px", color: "rgba(255,255,255,0.45)", textDecoration: "none" }}>
-                    {link.label}
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            {/* Contact */}
-            <div>
-              <p style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "14px" }}>Contact</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                <a href="mailto:enquiry@match4marriage.com" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "rgba(255,255,255,0.45)", textDecoration: "none" }}>
-                  <Mail className="h-3.5 w-3.5" strokeWidth={1.6} /> enquiry@match4marriage.com
-                </a>
-                <p style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "rgba(255,255,255,0.45)", margin: 0 }}>
-                  <MapPin className="h-3.5 w-3.5" strokeWidth={1.6} /> Solihull, England, B92 7AF
-                </p>
-                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", margin: 0 }}>Co. No. 15272378</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom bar */}
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: "20px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
-            <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)", margin: 0 }}>
-              © 2026 Match4Marriage Limited. All rights reserved. Registered in England & Wales.
-            </p>
-            <p style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0 }}>
-              <Lock className="h-3 w-3" strokeWidth={1.8} /> SSL Secured · GDPR Compliant
-            </p>
-          </div>
-
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

@@ -1,171 +1,292 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { Lock, Sparkles } from "lucide-react";
+import { Lock, ArrowRight, Check } from "lucide-react";
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
 
-const plans = [
+/* ────────────────────────────────────────────────────────────────
+   Pricing — editorial. Quiet hero, plans presented as four numbered
+   tiers in a single horizontal row at lg, stacked on smaller views.
+   ──────────────────────────────────────────────────────────────── */
+
+interface Plan {
+  n: string;
+  name: string;
+  tagline: string;
+  price: string;
+  period: string;
+  bestFor: string;
+  features: string[];
+  cta: string;
+  ctaHref: string;
+  recommended?: boolean;
+  bespoke?: boolean;
+}
+
+const plans: Plan[] = [
   {
+    n: "I",
     name: "Basic",
+    tagline: "Begin the conversation.",
     price: "£100",
-    period: "/ 6 months",
-    badge: null,
-    highlighted: false,
-    features: ["Curated Matches", "View profiles", "AI compatibility score", "Basic search filters"],
-    cta: "Get Started",
+    period: "for 6 months",
+    bestFor: "Early enquiries",
+    features: ["Curated match suggestions", "View profiles", "Compatibility insights", "Standard search filters"],
+    cta: "Get started",
     ctaHref: "/auth/register",
   },
   {
+    n: "II",
     name: "Premium",
+    tagline: "When you are ready to engage.",
     price: "£300",
-    period: "/ 6 months",
-    badge: "Most Popular",
-    highlighted: true,
-    features: ["Unlimited interests", "Direct messaging", "Photo access", "Advanced search filters", "AI compatibility score", "Priority listing"],
+    period: "for 6 months",
+    bestFor: "Most members",
+    features: ["Unlimited expressions of interest", "Direct messaging", "Photo access", "Advanced search filters", "Compatibility insights", "Priority placement"],
     cta: "Choose Premium",
     ctaHref: "/auth/register",
+    recommended: true,
   },
   {
+    n: "III",
     name: "Elite",
+    tagline: "Personally guided throughout.",
     price: "£1,000",
-    period: "/ 6 months",
-    badge: null,
-    highlighted: false,
-    features: ["Everything in Premium", "Dedicated relationship advisor", "Background verification", "Privacy shield", "Featured profile placement", "WhatsApp support", "Profile boosting (4× / month)", "Horoscope matching", "Family background check"],
+    period: "for 6 months",
+    bestFor: "Concierge support",
+    features: ["Everything in Premium", "Dedicated relationship advisor", "Background verification", "Privacy shield", "Featured placement", "WhatsApp support", "Profile boosting (4× / month)", "Horoscope matching", "Family background check"],
     cta: "Choose Elite",
     ctaHref: "/auth/register",
   },
   {
+    n: "IV",
     name: "VIP Concierge",
+    tagline: "Tailored to your family.",
     price: "Bespoke",
     period: "tailored to you",
-    badge: "VIP",
-    highlighted: false,
-    vip: true,
-    features: ["Everything in Elite", "Personal matchmaker assigned", "Curated hand-picked profiles", "1-on-1 strategy call", "Profile photography consultation", "Family liaison service", "Unlimited profile boosts", "Financial due diligence", "24/7 WhatsApp concierge support"],
-    cta: "Schedule a Call",
-    ctaHref: "https://calendly.com/match4marriage",
+    bestFor: "By application",
+    features: ["Everything in Elite", "Personal matchmaker assigned", "Hand-curated profiles", "1-on-1 strategy call", "Profile photography consultation", "Family liaison service", "Unlimited profile boosts", "Financial due diligence", "24 / 7 WhatsApp concierge"],
+    cta: "Schedule a call",
+    ctaHref: "/contact?subject=VIP+Concierge",
+    bespoke: true,
   },
 ];
 
 export default function PricingPage() {
+  useEffect(() => {
+    const els = document.querySelectorAll<HTMLElement>(".editorial-reveal");
+    if (!els.length || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add("in");
+            io.unobserve(e.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -60px 0px" }
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+
   return (
-    <div style={{ minHeight: "100vh", background: "#fff", fontFamily: "var(--font-poppins, sans-serif)" }}>
+    <div style={{ minHeight: "100vh", background: "#fdf9f4", color: "#1a0a14" }}>
       <PublicHeader />
 
-      {/* Hero */}
-      <div style={{ background: "linear-gradient(135deg, #dc1e3c 0%, #a0153c 50%, #3b3fa0 100%)", padding: "72px 24px 56px", textAlign: "center" }}>
-        <span style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.75)", textTransform: "uppercase", letterSpacing: "0.2em", marginBottom: "12px", display: "block" }}>Membership Plans</span>
-        <h1 style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "clamp(28px, 4vw, 52px)", fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>
-          Invest in Your Forever
-        </h1>
-        <p style={{ color: "rgba(255,255,255,0.85)", fontSize: "16px", maxWidth: "520px", margin: "0 auto" }}>
-          Transparent pricing · No hidden fees · Cancel anytime
-        </p>
-      </div>
+      {/* ── Editorial hero ───────────────────────────────────── */}
+      <section style={{ padding: "clamp(64px, 9vw, 120px) 24px clamp(48px, 6vw, 72px)", background: "linear-gradient(180deg, #fdf9f4 0%, #faf3eb 100%)" }}>
+        <div className="max-w-4xl mx-auto" style={{ textAlign: "center" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase", marginBottom: 24 }}>
+            <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
+            Membership
+            <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
+          </span>
+          <h1
+            className="font-display"
+            style={{
+              fontSize: "clamp(40px, 6vw, 80px)",
+              fontWeight: 500,
+              lineHeight: 1.04,
+              letterSpacing: "-0.025em",
+              marginBottom: 20,
+            }}
+          >
+            Four ways to{" "}
+            <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#dc1e3c" }}>
+              begin.
+            </span>
+          </h1>
+          <p style={{ fontSize: "clamp(15px, 1.4vw, 18px)", lineHeight: 1.7, color: "#4a3a40", maxWidth: 580, margin: "0 auto" }}>
+            Choose the level of guidance that suits your family. Every plan
+            includes hand-picked introductions, full discretion, and a real
+            advisor on the other end of the line.
+          </p>
+        </div>
+      </section>
 
-      {/* Plans section */}
-      <div style={{ maxWidth: "960px", margin: "0 auto", padding: "72px 24px" }}>
-
-        {/* Subtitle */}
-        <p style={{ textAlign: "center", fontSize: "16px", color: "#888", marginBottom: "56px", lineHeight: 1.7 }}>
-          Choose the plan that fits your journey. Upgrade or cancel any time.
-        </p>
-
-        {/* Plan cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "24px", alignItems: "stretch" }}>
-          {plans.map((plan) => {
-            const isVip = (plan as any).vip === true;
+      {/* ── Plans ─────────────────────────────────────────────── */}
+      <section className="editorial-reveal" style={{ padding: "0 24px clamp(56px, 7vw, 88px)", background: "#fdf9f4" }}>
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4" style={{ gap: 0 }}>
+          {plans.map((plan, i) => {
+            const isDark = !!plan.bespoke;
+            const accent = isDark ? "#ffd87a" : "#dc1e3c";
             return (
-            <div
-              key={plan.name}
-              style={{
-                position: "relative",
-                borderRadius: "20px",
-                padding: "36px 32px",
-                border: isVip ? "2px solid rgba(200,144,32,0.6)" : plan.highlighted ? "2px solid #dc1e3c" : "1px solid rgba(220,30,60,0.12)",
-                background: isVip ? "linear-gradient(160deg,#1a0a14,#2d0f20)" : plan.highlighted ? "linear-gradient(160deg,#fff5f7,#fff)" : "#fdfbf9",
-                boxShadow: isVip ? "0 8px 32px rgba(200,144,32,0.2)" : plan.highlighted ? "0 8px 40px rgba(220,30,60,0.12)" : "0 2px 12px rgba(0,0,0,0.04)",
-                display: "flex",
-                flexDirection: "column",
-              }}
-            >
-              {/* Badge */}
-              {plan.badge && (
-                <div style={{
-                  position: "absolute", top: "-16px", left: "50%", transform: "translateX(-50%)",
-                  background: isVip ? "linear-gradient(135deg,#C89020,#9A6B00)" : "linear-gradient(135deg,#dc1e3c,#a0153c)",
-                  color: "#fff", fontSize: "12px", fontWeight: 700,
-                  padding: "5px 20px", borderRadius: "9999px", whiteSpace: "nowrap",
-                }}>
-                  {plan.badge}
-                </div>
-              )}
-
-              {/* Plan name */}
-              <p style={{ fontSize: "12px", fontWeight: 700, color: isVip ? "#C89020" : "#dc1e3c", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "12px" }}>
-                {plan.name}
-              </p>
-
-              {/* Price */}
-              <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "28px" }}>
-                <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: isVip ? "32px" : "40px", fontWeight: 700, color: isVip ? "#C89020" : "#1a0a14", lineHeight: 1 }}>
-                  {plan.price}
-                </span>
-                {plan.period && (
-                  <span style={{ fontSize: "13px", color: isVip ? "rgba(200,144,32,0.7)" : "#aaa", fontWeight: 400, whiteSpace: "nowrap" }}>{plan.period}</span>
-                )}
-              </div>
-
-              {/* Divider */}
-              <div style={{ height: "1px", background: isVip ? "rgba(200,144,32,0.2)" : "rgba(220,30,60,0.1)", marginBottom: "24px" }} />
-
-              {/* Features */}
-              <ul style={{ listStyle: "none", padding: 0, margin: "0 0 32px", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
-                {plan.features.map((f) => (
-                  <li key={f} style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "14px", color: isVip ? "rgba(255,255,255,0.75)" : "#444" }}>
-                    <span style={{
-                      width: "20px", height: "20px", borderRadius: "50%",
-                      background: isVip ? "rgba(200,144,32,0.15)" : "rgba(220,30,60,0.08)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      flexShrink: 0,
-                    }}>
-                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                        <path d="M1 4L3.5 6.5L9 1" stroke={isVip ? "#C89020" : "#dc1e3c"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </span>
-                    {f}
-                  </li>
-                ))}
-              </ul>
-
-              {/* CTA */}
-              <Link
-                href={plan.ctaHref}
+              <article
+                key={plan.name}
                 style={{
-                  display: "block", textAlign: "center",
-                  padding: "14px 24px", borderRadius: "12px",
-                  fontSize: "15px", fontWeight: 700,
-                  textDecoration: "none",
-                  background: isVip ? "linear-gradient(135deg,#C89020,#9A6B00)" : plan.highlighted ? "linear-gradient(135deg,#dc1e3c,#a0153c)" : "transparent",
-                  color: isVip ? "#1a0a14" : plan.highlighted ? "#fff" : "#dc1e3c",
-                  border: isVip || plan.highlighted ? "none" : "2px solid #dc1e3c",
-                  boxShadow: isVip ? "0 4px 20px rgba(200,144,32,0.35)" : plan.highlighted ? "0 4px 20px rgba(220,30,60,0.3)" : "none",
+                  position: "relative",
+                  background: isDark ? "#1a0a14" : "#fdf9f4",
+                  color: isDark ? "#fdf9f4" : "#1a0a14",
+                  padding: "44px 28px 36px",
+                  borderTop: "1px solid rgba(26,10,20,0.16)",
+                  borderRight: i < plans.length - 1 ? `1px solid ${isDark ? "rgba(255,220,180,0.18)" : "rgba(26,10,20,0.10)"}` : "none",
+                  borderBottom: "1px solid rgba(26,10,20,0.16)",
+                  display: "flex",
+                  flexDirection: "column",
                 }}
               >
-                {plan.cta}
-              </Link>
-            </div>
+                {plan.recommended && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: -1,
+                      left: -1,
+                      background: "#dc1e3c",
+                      color: "#fdf9f4",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: "0.22em",
+                      textTransform: "uppercase",
+                      padding: "6px 14px",
+                    }}
+                  >
+                    Most chosen
+                  </span>
+                )}
+
+                <span className="font-display" style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.22em", color: accent, marginBottom: 18 }}>
+                  {plan.n}
+                </span>
+
+                <h2 className="font-display" style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-0.01em", marginBottom: 6 }}>
+                  {plan.name}
+                </h2>
+                <p
+                  className="font-display-alt"
+                  style={{
+                    fontFamily: "var(--font-display-alt, 'Cormorant', serif)",
+                    fontStyle: "italic",
+                    fontSize: 16,
+                    color: isDark ? "rgba(253,249,244,0.7)" : "#88787f",
+                    margin: "0 0 28px",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {plan.tagline}
+                </p>
+
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                  <span className="font-display" style={{ fontSize: plan.bespoke ? 28 : 36, fontWeight: 600, letterSpacing: "-0.02em", color: accent }}>
+                    {plan.price}
+                  </span>
+                </div>
+                <p style={{ fontSize: 12, color: isDark ? "rgba(253,249,244,0.55)" : "#88787f", margin: "0 0 6px", letterSpacing: "0.02em" }}>
+                  {plan.period}
+                </p>
+                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.18em", color: isDark ? "rgba(255,220,180,0.65)" : "#a78a8f", textTransform: "uppercase", margin: "12px 0 28px" }}>
+                  Best for · {plan.bestFor}
+                </p>
+
+                <hr style={{ border: 0, borderTop: `1px solid ${isDark ? "rgba(255,220,180,0.20)" : "rgba(26,10,20,0.10)"}`, margin: "0 0 24px" }} />
+
+                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 32px", display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
+                  {plan.features.map((f) => (
+                    <li key={f} style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13.5, lineHeight: 1.55, color: isDark ? "rgba(253,249,244,0.78)" : "#4a3a40" }}>
+                      <Check size={13} strokeWidth={2.4} style={{ color: accent, marginTop: 4, flexShrink: 0 }} />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <Link
+                  href={plan.ctaHref}
+                  target={plan.ctaHref.startsWith("http") ? "_blank" : undefined}
+                  rel={plan.ctaHref.startsWith("http") ? "noopener noreferrer" : undefined}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    width: "100%",
+                    padding: "13px 20px",
+                    borderRadius: 9999,
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    textDecoration: "none",
+                    letterSpacing: "0.02em",
+                    background: isDark ? "#ffd87a" : plan.recommended ? "#1a0a14" : "transparent",
+                    color: isDark ? "#1a0a14" : plan.recommended ? "#fdf9f4" : "#1a0a14",
+                    border: plan.recommended || isDark ? "1px solid transparent" : "1px solid rgba(26,10,20,0.20)",
+                  }}
+                >
+                  {plan.cta}
+                  <ArrowRight size={14} strokeWidth={2} />
+                </Link>
+              </article>
             );
           })}
         </div>
 
-        {/* Footer note */}
-        <p style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", marginTop: 36, fontSize: 13, color: "#888", width: "100%" }}>
-          <Lock className="h-3.5 w-3.5" strokeWidth={1.6} /> Secure payment · Cancel anytime · GDPR compliant
+        <p style={{ textAlign: "center", marginTop: 36, fontSize: 12.5, color: "#88787f", display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", width: "100%", letterSpacing: "0.02em" }}>
+          <Lock size={13} strokeWidth={1.8} />
+          Secure payment · Cancel anytime · GDPR compliant
         </p>
-      </div>
+      </section>
+
+      {/* ── Closing note ──────────────────────────────────────── */}
+      <section className="editorial-reveal" style={{ padding: "clamp(72px, 9vw, 120px) 24px", background: "#faf3eb" }}>
+        <div className="max-w-3xl mx-auto" style={{ textAlign: "center" }}>
+          <h2 className="font-display" style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 500, lineHeight: 1.1, letterSpacing: "-0.02em", marginBottom: 20, color: "#1a0a14" }}>
+            Not sure which is{" "}
+            <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#dc1e3c" }}>
+              right for you?
+            </span>
+          </h2>
+          <p style={{ fontSize: 16, lineHeight: 1.7, color: "#4a3a40", maxWidth: 520, margin: "0 auto 32px" }}>
+            Speak to an advisor. We will talk through what you are looking for
+            and recommend the level of support that suits your family.
+          </p>
+          <div style={{ display: "inline-flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>
+            <Link
+              href="/contact"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                background: "#1a0a14", color: "#fdf9f4",
+                padding: "14px 28px", borderRadius: 9999,
+                fontSize: 14, fontWeight: 600, textDecoration: "none", letterSpacing: "0.02em",
+              }}
+            >
+              Speak to an advisor <ArrowRight size={15} strokeWidth={2} />
+            </Link>
+            <Link
+              href="/faq"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "14px 28px",
+                border: "1px solid rgba(26,10,20,0.20)",
+                borderRadius: 9999,
+                fontSize: 14, fontWeight: 600, color: "#1a0a14", textDecoration: "none",
+              }}
+            >
+              See common questions
+            </Link>
+          </div>
+        </div>
+      </section>
 
       <PublicFooter />
     </div>

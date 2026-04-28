@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   Search, X, ChevronLeft, ChevronRight, AlertTriangle,
-  CreditCard, Crown,
+  CreditCard, Crown, ArrowRight,
 } from "lucide-react";
 import { PageShell, GlassCard, fadeUp } from "@/components/admin/PageShell";
 import { adminApi, ApiError } from "@/lib/api";
@@ -305,7 +305,9 @@ function SubRow({ sub, index }: { sub: SubscriptionRow; index: number }) {
         <div style={{ fontSize: 11, color: "#888" }}>
           {sub.current_period_start ? formatDate(sub.current_period_start) : "—"}
           <br />
-          <span style={{ color: "#bbb" }}>→ {formatDate(sub.current_period_end)}</span>
+          <span style={{ color: "#bbb", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <ArrowRight size={11} strokeWidth={2} /> {formatDate(sub.current_period_end)}
+          </span>
         </div>
 
         <div style={{ textAlign: "right", fontSize: 12, fontWeight: 600, color: renewColor }}>

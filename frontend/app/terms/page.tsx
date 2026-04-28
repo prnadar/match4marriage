@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileText, Building2, MapPin, Mail } from "lucide-react";
+import { FileText, Building2, MapPin, Mail, ArrowRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
@@ -245,8 +245,8 @@ export default function TermsPage() {
               These Terms were last updated on <strong>23 March 2026</strong>. If you have any concerns, please contact our team.
             </p>
             <div style={{ display: "flex", gap: "16px", justifyContent: "center", flexWrap: "wrap" }}>
-              <Link href="/privacy" style={{ fontSize: "13px", color: "#dc1e3c", textDecoration: "none", fontWeight: 600 }}>Privacy Policy →</Link>
-              <Link href="/" style={{ fontSize: "13px", color: "#dc1e3c", textDecoration: "none", fontWeight: 600 }}>Back to Home →</Link>
+              <Link href="/privacy" style={{ fontSize: "13px", color: "#dc1e3c", textDecoration: "none", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>Privacy Policy <ArrowRight size={13} strokeWidth={2.2} /></Link>
+              <Link href="/" style={{ fontSize: "13px", color: "#dc1e3c", textDecoration: "none", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>Back to Home <ArrowRight size={13} strokeWidth={2.2} /></Link>
             </div>
           </div>
 

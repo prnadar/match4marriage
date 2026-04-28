@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft, Mail, Phone, MapPin, Calendar, Shield,
   AlertTriangle, ChevronUp, ChevronDown,
-  UserX, UserCheck, Trash2, RotateCcw,
+  UserX, UserCheck, Trash2, RotateCcw, BadgeCheck,
 } from "lucide-react";
 import { PageShell, Button, GlassCard, fadeUp } from "@/components/admin/PageShell";
 import { adminApi, ApiError } from "@/lib/api";
@@ -141,8 +141,22 @@ export default function AdminUserDetailPage() {
                 </span>
               </div>
               <div style={{ fontSize: 12, color: "#666", display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {user.email && <MetaPill icon={Mail}>{user.email} {user.is_email_verified && <span style={{ color: "#5C7A52" }}>✓</span>}</MetaPill>}
-                {user.phone && <MetaPill icon={Phone}>{user.phone} {user.is_phone_verified && <span style={{ color: "#5C7A52" }}>✓</span>}</MetaPill>}
+                {user.email && (
+                  <MetaPill icon={Mail}>
+                    {user.email}
+                    {user.is_email_verified && (
+                      <BadgeCheck aria-label="Email verified" size={13} strokeWidth={2.2} style={{ color: "#5C7A52", marginLeft: 4, display: "inline-block", verticalAlign: "-2px" }} />
+                    )}
+                  </MetaPill>
+                )}
+                {user.phone && (
+                  <MetaPill icon={Phone}>
+                    {user.phone}
+                    {user.is_phone_verified && (
+                      <BadgeCheck aria-label="Phone verified" size={13} strokeWidth={2.2} style={{ color: "#5C7A52", marginLeft: 4, display: "inline-block", verticalAlign: "-2px" }} />
+                    )}
+                  </MetaPill>
+                )}
                 {user.city && <MetaPill icon={MapPin}>{user.city}{user.country ? `, ${user.country}` : ""}</MetaPill>}
                 {user.created_at && <MetaPill icon={Calendar}>Joined {new Date(user.created_at).toLocaleDateString()}</MetaPill>}
               </div>

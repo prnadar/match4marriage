@@ -6,20 +6,21 @@ import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Heart, MessageCircle, User, Star, Globe,
   Shield, Bell, Settings, LogOut, ChevronRight, Users, Star as StarIcon,
-  CreditCard, Home, Menu, X, AlertTriangle, Mail, MapPin,
+  CreditCard, Home, Menu, X, AlertTriangle, Mail, MapPin, ArrowRight,
 } from "lucide-react";
 import { profileApi } from "@/lib/api";
 import { clearClientState, firebaseAuth, rememberSessionUid } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 
+// Side-nav entries shown to authenticated members. Notification badges are
+// omitted until they're wired to real counts — fake numbers erode trust.
+// /nri-hub and /family are hidden until those features ship.
 const navItems = [
   { href: "/profile/me",   label: "My Profile",   icon: User            },
   { href: "/dashboard",    label: "My Matches",   icon: LayoutDashboard },
   { href: "/matches",      label: "Browse",        icon: Heart           },
-  { href: "/interests",    label: "Interests",     icon: Star, badge: 6  },
-  { href: "/messages",     label: "Messages",      icon: MessageCircle, badge: 3 },
-  { href: "/nri-hub",      label: "NRI Hub",       icon: Globe           },
-  { href: "/family",       label: "Family Mode",   icon: Users           },
+  { href: "/interests",    label: "Interests",     icon: Star            },
+  { href: "/messages",     label: "Messages",      icon: MessageCircle   },
   { href: "/subscription", label: "Subscription",  icon: CreditCard      },
 ];
 
@@ -62,8 +63,8 @@ function VerificationBanner() {
         </span>
         <p style={{ margin: 0, color: "#fff", fontSize: "14px", lineHeight: 1.5 }}>
           <strong>Complete your profile &amp; verify your ID.</strong> You must complete your profile and verify your identity to view other profiles and send interests.{" "}
-          <a href="/profile/me" style={{ color: "#ffd4dc", fontWeight: 700, textDecoration: "underline" }}>
-            Complete now →
+          <a href="/profile/me" style={{ color: "#ffd4dc", fontWeight: 700, textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: 3 }}>
+            Complete now <ArrowRight size={12} strokeWidth={2.4} />
           </a>
         </p>
       </div>
@@ -238,8 +239,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ href, label, icon: Icon, badge }) => {
+          {navItems.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+            const badge: number | undefined = undefined;
             return (
               <Link
                 key={href}
@@ -307,10 +309,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Bottom actions */}
         <div className="px-2 py-4 space-y-0.5" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
           {[
-            { href: "/notifications", label: "Notifications", icon: Bell,     badge: 2 },
-            { href: "/settings",      label: "Settings",      icon: Settings          },
-            { href: "/",              label: "Home",           icon: Home               },
-          ].map(({ href, label, icon: Icon, badge }) => {
+            { href: "/notifications", label: "Notifications", icon: Bell     },
+            { href: "/settings",      label: "Settings",      icon: Settings },
+            { href: "/",              label: "Home",          icon: Home     },
+          ].map(({ href, label, icon: Icon }) => {
+            const badge: number | undefined = undefined;
             const active = pathname === href;
             return (
               <Link

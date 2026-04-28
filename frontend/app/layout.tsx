@@ -4,6 +4,10 @@ import QueryProvider from "@/lib/providers/query-provider";
 import "./globals.css";
 
 const Preloader = dynamic(() => import("@/components/Preloader"), { ssr: false });
+const AnimatedHeartCursor = dynamic(
+  () => import("@/components/ui/animated-heart-cursor").then((m) => m.AnimatedHeartCursor),
+  { ssr: false }
+);
 
 export const metadata: Metadata = {
   title: {
@@ -59,6 +63,7 @@ export default function RootLayout({
       </head>
       <body>
         <Preloader />
+        <AnimatedHeartCursor />
         <QueryProvider>{children}</QueryProvider>
       </body>
     </html>

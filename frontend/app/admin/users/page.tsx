@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, X, ChevronLeft, ChevronRight, AlertTriangle, Users as UsersIcon,
-  Download, UserX, UserCheck,
+  Download, UserX, UserCheck, BadgeCheck,
 } from "lucide-react";
 import { PageShell, GlassCard, Button, fadeUp } from "@/components/admin/PageShell";
 import { useToast } from "@/components/admin/Toast";
@@ -403,13 +403,27 @@ function UserRow({
           {user.email ? (
             <div title={user.email} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {user.email}
-              {user.is_email_verified && <span title="Email verified" style={{ color: "#5C7A52", marginLeft: 4 }}>✓</span>}
+              {user.is_email_verified && (
+                <BadgeCheck
+                  aria-label="Email verified"
+                  size={12}
+                  strokeWidth={2.2}
+                  style={{ color: "#5C7A52", marginLeft: 4, verticalAlign: "-2px", display: "inline-block" }}
+                />
+              )}
             </div>
           ) : null}
           {user.phone ? (
             <div style={{ color: "#888" }}>
               {user.phone}
-              {user.is_phone_verified && <span title="Phone verified" style={{ color: "#5C7A52", marginLeft: 4 }}>✓</span>}
+              {user.is_phone_verified && (
+                <BadgeCheck
+                  aria-label="Phone verified"
+                  size={12}
+                  strokeWidth={2.2}
+                  style={{ color: "#5C7A52", marginLeft: 4, verticalAlign: "-2px", display: "inline-block" }}
+                />
+              )}
             </div>
           ) : null}
           {!user.email && !user.phone && <span>—</span>}

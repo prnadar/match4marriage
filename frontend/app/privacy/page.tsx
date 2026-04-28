@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Lock, Building2, FileText, MapPin, Mail, Scale } from "lucide-react";
+import { Lock, Building2, FileText, MapPin, Mail, Scale, ArrowRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
@@ -250,8 +250,8 @@ export default function PrivacyPage() {
               This Privacy Policy was last updated on <strong>23 March 2026</strong>.
             </p>
             <div style={{ display: "flex", gap: "16px", justifyContent: "center", flexWrap: "wrap" }}>
-              <Link href="/terms" style={{ fontSize: "13px", color: "#dc1e3c", textDecoration: "none", fontWeight: 600 }}>Terms & Conditions →</Link>
-              <Link href="/" style={{ fontSize: "13px", color: "#dc1e3c", textDecoration: "none", fontWeight: 600 }}>Back to Home →</Link>
+              <Link href="/terms" style={{ fontSize: "13px", color: "#dc1e3c", textDecoration: "none", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>Terms &amp; Conditions <ArrowRight size={13} strokeWidth={2.2} /></Link>
+              <Link href="/" style={{ fontSize: "13px", color: "#dc1e3c", textDecoration: "none", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>Back to Home <ArrowRight size={13} strokeWidth={2.2} /></Link>
             </div>
           </div>
 

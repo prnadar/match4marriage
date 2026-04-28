@@ -436,3 +436,596 @@
   from { transform: translateX(-100%); }
   to   { transform: translateX(100%); }
 }
+
+/* ================================================================
+   Public site header (PublicHeader.tsx) — all layout + animation
+   styles live here so the cascade is reliable regardless of where
+   the component is mounted.
+   ================================================================ */
+
+/* ---- Top announcement bar ---- */
+.m4m-top-bar {
+  position: relative;
+  width: 100%;
+  padding: 8px 16px;
+  color: #fff;
+  background: linear-gradient(120deg, #b8152f 0%, #dc1e3c 35%, #ff3050 50%, #dc1e3c 65%, #b8152f 100%);
+  background-size: 220% 100%;
+  animation: m4mTopBarSweep 14s ease-in-out infinite;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+@keyframes m4mTopBarSweep {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+.m4m-top-bar__shine {
+  position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.14) 50%, transparent 65%);
+  transform: translateX(-100%);
+  animation: m4mTopBarShine 9s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes m4mTopBarShine {
+  0%        { transform: translateX(-100%); }
+  55%, 100% { transform: translateX(120%); }
+}
+.m4m-top-bar__gem {
+  animation: m4mGemBeat 3.4s ease-in-out infinite;
+  transform-origin: center;
+}
+@keyframes m4mGemBeat {
+  0%, 100% { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(255,255,255,0)); }
+  50%      { transform: scale(1.15); filter: drop-shadow(0 0 6px rgba(255,255,255,0.55)); }
+}
+
+.m4m-top-bar__row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  text-align: center;
+}
+@media (min-width: 640px) {
+  .m4m-top-bar__row {
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12.5px;
+    text-align: left;
+  }
+}
+
+/* Mail-only variant: single right-aligned link, never stacks. */
+.m4m-top-bar__row--mail-only {
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: center;
+  text-align: right;
+  font-size: 12.5px;
+}
+.m4m-top-bar__brand {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1;
+  min-width: 0;
+}
+.m4m-top-bar__mail {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255,255,255,0.95);
+  line-height: 1;
+  flex-shrink: 0;
+  position: relative;
+  text-decoration: none;
+  max-width: 100%;
+  transition: color 0.2s ease;
+}
+.m4m-top-bar__mail > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.m4m-top-bar__mail::after {
+  content: "";
+  position: absolute;
+  left: 50%; right: 50%;
+  bottom: -3px;
+  height: 1px;
+  background: rgba(255,255,255,0.85);
+  transition: left 0.32s cubic-bezier(.2,.7,.2,1), right 0.32s cubic-bezier(.2,.7,.2,1);
+}
+.m4m-top-bar__mail:hover { color: #fff; }
+.m4m-top-bar__mail:hover::after { left: 22px; right: 0; }
+
+/* ---- Main nav ---- */
+.m4m-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(255,255,255,1);
+  border-bottom: 1px solid rgba(220,30,60,0.10);
+  transition: background 0.3s ease, backdrop-filter 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.m4m-nav.is-scrolled {
+  background: rgba(255,255,255,0.78);
+  backdrop-filter: saturate(170%) blur(14px);
+  -webkit-backdrop-filter: saturate(170%) blur(14px);
+  box-shadow: 0 8px 28px rgba(220,30,60,0.07);
+  border-bottom-color: rgba(220,30,60,0.14);
+}
+
+/* 3-column row: side rails sized to their content; middle column takes
+   remaining width so the nav links sit on the visual horizontal centre. */
+.m4m-nav__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 64px;
+  position: relative;
+}
+.m4m-nav__center {
+  display: none;
+  flex: 1 1 0%;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  min-width: 0;
+}
+@media (min-width: 1024px) {
+  .m4m-nav__center { display: flex; }
+}
+.m4m-nav__right {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.m4m-nav__logo {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  min-height: auto;
+  flex-shrink: 0;
+  line-height: 0;
+}
+.m4m-nav__logo img {
+  height: 48px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+  transition: transform 0.45s cubic-bezier(.2,.7,.2,1), filter 0.4s ease;
+}
+.m4m-nav__logo:hover img {
+  transform: scale(1.04) rotate(-1.5deg);
+  filter: drop-shadow(0 6px 18px rgba(220,30,60,0.18));
+}
+
+.m4m-nav__link {
+  position: relative;
+  font-size: 14px;
+  font-weight: 500;
+  color: #2a1a22;
+  text-decoration: none;
+  padding: 0;
+  height: 32px;
+  background: none;
+  border: 0;
+  min-height: auto;
+  font-family: inherit;
+  cursor: inherit;
+  line-height: 1;
+  transition: color 0.25s ease;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.m4m-nav__link::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  right: 50%;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(to right, #dc1e3c, #ff5570);
+  border-radius: 2px;
+  opacity: 0.95;
+  transition: left 0.32s cubic-bezier(.2,.7,.2,1), right 0.32s cubic-bezier(.2,.7,.2,1), opacity 0.2s;
+}
+.m4m-nav__link:hover { color: #dc1e3c; }
+.m4m-nav__link:hover::after,
+.m4m-nav__link.is-active::after {
+  left: 0;
+  right: 0;
+}
+.m4m-nav__link.is-active { color: #dc1e3c; }
+.m4m-nav__link.is-active::after {
+  background: linear-gradient(to right, #dc1e3c, #ffd87a);
+}
+
+.m4m-nav__help { position: relative; display: inline-flex; align-items: center; }
+.m4m-nav__help-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: inherit;
+}
+.m4m-nav__help-chevron {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+  line-height: 0;
+}
+
+.m4m-nav__dropdown {
+  position: absolute;
+  top: calc(100% + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  border-radius: 14px;
+  min-width: 200px;
+  box-shadow: 0 14px 40px rgba(220,30,60,0.14), 0 2px 8px rgba(0,0,0,0.04);
+  border: 1px solid rgba(220,30,60,0.10);
+  padding: 6px;
+  z-index: 100;
+  transform-origin: 50% 0%;
+}
+.m4m-nav__dropdown-arrow {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border-top: 1px solid rgba(220,30,60,0.10);
+  border-left: 1px solid rgba(220,30,60,0.10);
+  border-radius: 2px;
+  transform: translateX(-50%) rotate(45deg);
+}
+.m4m-nav__dropdown-item {
+  display: block;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #2a1a22;
+  font-weight: 500;
+  text-decoration: none;
+  min-height: auto;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.22s cubic-bezier(.2,.7,.2,1);
+}
+.m4m-nav__dropdown-item:hover {
+  background: linear-gradient(135deg, rgba(220,30,60,0.08), rgba(255,85,112,0.06));
+  color: #dc1e3c;
+  transform: translateX(2px);
+}
+
+.m4m-nav__login {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2a1a22;
+  text-decoration: none;
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 9999px;
+  border: 1.5px solid transparent;
+  align-items: center;
+  line-height: 1;
+  min-height: auto;
+  transition: color 0.25s ease, border-color 0.25s ease, background 0.25s ease, transform 0.25s cubic-bezier(.2,.7,.2,1), box-shadow 0.25s ease;
+}
+.m4m-nav__login:hover {
+  color: #dc1e3c;
+  border-color: rgba(220,30,60,0.45);
+  background: rgba(220,30,60,0.04);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(220,30,60,0.14);
+}
+
+.m4m-nav__register {
+  position: relative;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  text-decoration: none;
+  height: 38px;
+  padding: 0 22px 0 18px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #dc1e3c, #a0153c);
+  box-shadow: 0 6px 18px rgba(220,30,60,0.32);
+  overflow: hidden;
+  isolation: isolate;
+  align-items: center;
+  gap: 8px;
+  line-height: 1;
+  min-height: auto;
+  transition: transform 0.25s cubic-bezier(.2,.7,.2,1), box-shadow 0.25s ease;
+}
+.m4m-nav__register::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.42) 50%, transparent 70%);
+  transform: translateX(-130%);
+  transition: transform 1s cubic-bezier(.2,.7,.2,1);
+  pointer-events: none;
+}
+.m4m-nav__register:hover {
+  transform: translateY(-1.5px);
+  box-shadow: 0 14px 32px rgba(220,30,60,0.42);
+}
+.m4m-nav__register:hover::after { transform: translateX(130%); }
+.m4m-nav__register-heart {
+  color: #fff;
+  animation: m4mRegisterHeart 1.6s ease-in-out infinite;
+  transform-origin: 50% 55%;
+}
+@keyframes m4mRegisterHeart {
+  0%, 30%, 70%, 100% { transform: scale(1);    }
+  15%                { transform: scale(1.22); }
+  45%                { transform: scale(1.08); }
+}
+
+/* Burger — visible only below 1024px. Owns its own display rule
+   inside a max-width media query to avoid Tailwind utility races. */
+.m4m-nav__burger {
+  background: none;
+  border: 0;
+  padding: 8px;
+  width: 40px;
+  height: 40px;
+  cursor: inherit;
+  display: none;
+}
+@media (max-width: 1023.98px) {
+  .m4m-nav__burger {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+  }
+}
+.m4m-nav__burger-bar {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: #1a0a14;
+  border-radius: 2px;
+  transition: transform 0.32s cubic-bezier(.2,.7,.2,1), opacity 0.2s ease;
+}
+.m4m-nav__burger-bar[data-state="open-1"] { transform: translateY(7px) rotate(45deg); }
+.m4m-nav__burger-bar[data-state="open-2"] { opacity: 0; transform: scaleX(0.4); }
+.m4m-nav__burger-bar[data-state="open-3"] { transform: translateY(-7px) rotate(-45deg); }
+
+/* Mobile drawer */
+.m4m-nav__mobile {
+  overflow: hidden;
+  background: #fff;
+  border-top: 1px solid rgba(220,30,60,0.10);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.06);
+}
+.m4m-nav__mobile-inner { padding: 16px 24px 24px; }
+.m4m-nav__mobile-link {
+  display: block;
+  padding: 12px 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: #1a0a14;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(220,30,60,0.06);
+  min-height: auto;
+  transition: color 0.2s, padding-left 0.25s cubic-bezier(.2,.7,.2,1);
+}
+.m4m-nav__mobile-link:hover { color: #dc1e3c; padding-left: 6px; }
+.m4m-nav__mobile-link.is-active { color: #dc1e3c; font-weight: 700; }
+.m4m-nav__mobile-section {
+  font-size: 11px;
+  font-weight: 700;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 18px;
+  margin-bottom: 6px;
+}
+.m4m-nav__mobile-sublink {
+  display: block;
+  padding: 10px 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #555;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(220,30,60,0.06);
+  min-height: auto;
+  transition: color 0.2s, padding-left 0.25s cubic-bezier(.2,.7,.2,1);
+}
+.m4m-nav__mobile-sublink:hover { color: #dc1e3c; padding-left: 6px; }
+.m4m-nav__mobile-cta { display: flex; gap: 10px; margin-top: 22px; }
+.m4m-nav__mobile-login {
+  flex: 1;
+  text-align: center;
+  padding: 11px 0;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 2px solid rgba(220,30,60,0.3);
+  color: #dc1e3c;
+  text-decoration: none;
+  min-height: auto;
+}
+.m4m-nav__mobile-register {
+  flex: 1;
+  text-align: center;
+  padding: 11px 0;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #dc1e3c, #a0153c);
+  color: #fff;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: auto;
+  box-shadow: 0 6px 18px rgba(220,30,60,0.32);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m4m-top-bar,
+  .m4m-top-bar__shine,
+  .m4m-top-bar__gem,
+  .m4m-nav__register-heart {
+    animation: none !important;
+  }
+  .m4m-nav__logo:hover img { transform: none; filter: none; }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Floating header mode — used on the homepage so the bar dissolves
+   into the cinematic video hero. The overlay variants are absolutely
+   positioned over the page content and only apply their dark/cream
+   "floating" tone when `is-floating` is also set (i.e. the user has
+   not yet scrolled past the hero).
+   ──────────────────────────────────────────────────────────────── */
+
+/* By default the typographic wordmark is hidden — only the JPEG logo shows */
+.m4m-nav__logo-wordmark { display: none; }
+
+/* Top-bar overlay: pulled out of normal flow so the video starts at y=0,
+   and pinned to the viewport so it stays put as the user scrolls past
+   the hero (its background then transitions back to the red gradient). */
+.m4m-top-bar--overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 51;
+  transition: background 0.4s ease, color 0.4s ease, border-color 0.4s ease, backdrop-filter 0.4s ease;
+}
+.m4m-top-bar.is-floating {
+  background: linear-gradient(180deg, rgba(10,4,8,0.62) 0%, rgba(10,4,8,0.30) 100%);
+  border-bottom: 1px solid rgba(253,249,244,0.10);
+  animation: none;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.m4m-top-bar.is-floating .m4m-top-bar__shine { display: none; }
+.m4m-top-bar.is-floating .m4m-top-bar__gem { animation: none; }
+.m4m-top-bar.is-floating .m4m-top-bar__row,
+.m4m-top-bar.is-floating .m4m-top-bar__brand {
+  color: rgba(253,249,244,0.92);
+}
+.m4m-top-bar.is-floating .m4m-top-bar__mail { color: rgba(253,249,244,0.85); }
+.m4m-top-bar.is-floating .m4m-top-bar__mail:hover { color: #FFE4A8; }
+.m4m-top-bar.is-floating .m4m-top-bar__mail::after { background: rgba(255,228,168,0.85); }
+
+/* Main nav overlay: also fixed, sitting below the top bar. The default
+   `top: 56px` covers the taller stacked-mobile top bar; at sm+ the bar is
+   single-line ~36px tall so the nav slides up. */
+.m4m-nav--overlay {
+  position: fixed;
+  top: 36px;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  transition: background 0.4s ease, backdrop-filter 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease;
+}
+.m4m-nav.is-floating {
+  background: linear-gradient(180deg, rgba(10,4,8,0.55) 0%, rgba(10,4,8,0.20) 100%);
+  border-bottom: 1px solid rgba(253,249,244,0.10);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: none;
+}
+
+/* Floating logo: hide the JPEG (which has a hard cream background and won't
+   read on a dark video) and show the typographic wordmark instead. */
+.m4m-nav.is-floating .m4m-nav__logo-img { display: none; }
+.m4m-nav.is-floating .m4m-nav__logo-wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  font-size: clamp(20px, 1.8vw, 26px);
+  font-weight: 500;
+  color: #fdf9f4;
+  letter-spacing: -0.012em;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 2px 18px rgba(0,0,0,0.45);
+}
+.m4m-nav.is-floating .m4m-nav__logo:hover .m4m-nav__logo-wordmark {
+  filter: drop-shadow(0 4px 18px rgba(255,180,90,0.30));
+}
+
+/* Nav links go cream, with a gold-to-rose gradient underline */
+.m4m-nav.is-floating .m4m-nav__link { color: rgba(253,249,244,0.85); }
+.m4m-nav.is-floating .m4m-nav__link:hover { color: #FFE4A8; }
+.m4m-nav.is-floating .m4m-nav__link::after {
+  background: linear-gradient(to right, #FFE4A8, #FF7A8A);
+}
+.m4m-nav.is-floating .m4m-nav__link.is-active { color: #FFE4A8; }
+
+/* Right-side CTAs flip to cream/gold */
+.m4m-nav.is-floating .m4m-nav__login {
+  color: #fdf9f4;
+  border-color: rgba(253,249,244,0.30);
+  background: rgba(253,249,244,0.04);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.m4m-nav.is-floating .m4m-nav__login:hover {
+  color: #1a0a14;
+  background: #fdf9f4;
+  border-color: #fdf9f4;
+  box-shadow: 0 8px 22px rgba(253,249,244,0.22);
+}
+.m4m-nav.is-floating .m4m-nav__register {
+  background: linear-gradient(135deg, #FFE4A8 0%, #FFB347 100%);
+  color: #1a0a14;
+  box-shadow: 0 8px 24px rgba(255,180,90,0.32);
+}
+.m4m-nav.is-floating .m4m-nav__register:hover {
+  box-shadow: 0 14px 32px rgba(255,180,90,0.45);
+}
+.m4m-nav.is-floating .m4m-nav__register-heart { color: #1a0a14; }
+
+/* Burger bars become cream so they read on the dark video */
+.m4m-nav.is-floating .m4m-nav__burger-bar { background: #fdf9f4; }
+
+/* Help dropdown chevron inherits the link colour automatically */
+
+/* ================================================================
+   Editorial reveal — used across the public pages (about, pricing,
+   contact, faq, success-stories) for the on-scroll fade-up effect.
+   Apply `.editorial-reveal` to any section; the page-level
+   IntersectionObserver toggles `.in` once it crosses the viewport.
+   ================================================================ */
+.editorial-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.9s ease, transform 0.9s cubic-bezier(.2,.7,.2,1);
+}
+.editorial-reveal.in {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .editorial-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

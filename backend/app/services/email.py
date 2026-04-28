@@ -283,6 +283,7 @@ async def send_interest_notification_email(
     Returns True on delivery success, False otherwise.
     """
     subject = f"{from_name} is interested in your profile"
+    cta_href = f"{settings.FRONTEND_URL.rstrip('/')}/notifications"
 
     html = f"""
 <!DOCTYPE html>
@@ -312,7 +313,7 @@ async def send_interest_notification_email(
               Log in to view their profile and decide if you'd like to connect.
             </p>
             <!-- CTA button -->
-            <a href="#"
+            <a href="{cta_href}"
                style="display:inline-block; background:#c0392b; color:#ffffff; font-size:15px;
                       font-weight:bold; padding:14px 32px; border-radius:6px;
                       text-decoration:none; margin:0 0 28px;">

@@ -159,17 +159,26 @@ export function CountryFlag({
   className,
   rounded = "sm",
   ariaLabel,
+  /** Width in pixels. Default is 18px (~1.25em at 14px text). */
+  width = 18,
 }: {
   code: CountryCode | string;
   className?: string;
   rounded?: "sm" | "md" | "full" | "none";
   ariaLabel?: string;
+  width?: number;
 }) {
   const radius =
     rounded === "full" ? "rounded-full" :
     rounded === "md"   ? "rounded-md" :
     rounded === "sm"   ? "rounded-[3px]" :
     "";
+
+  // Hard pixel dimensions (3:2 ratio). Don't rely on `aspect-ratio` CSS — it's
+  // unreliable in some Safari contexts and lets the inner SVG fall back to its
+  // default 300x150 when the wrapper's computed height resolves to 0.
+  const w = width;
+  const h = Math.round(width * (2 / 3));
 
   const flag = FLAGS[code as CountryCode];
 
@@ -182,10 +191,35 @@ export function CountryFlag({
         radius,
         className,
       )}
-      style={{ width: "1.25em", aspectRatio: "3 / 2", lineHeight: 1 }}
+      style={{
+        width: `${w}px`,
+        height: `${h}px`,
+        lineHeight: 0, // suppress text-line spacing
+        flexShrink: 0,
+      }}
     >
-      {flag ?? (
-        <span className="flex h-full w-full items-center justify-center bg-rose-50 text-[8px] font-semibold text-rose-700">
+      {flag ? (
+        // Re-clone the SVG with explicit width/height attributes so it
+        // renders at the wrapper size in every browser, regardless of
+        // CSS aspect-ratio support.
+        <svg
+          viewBox="0 0 60 40"
+          width={w}
+          height={h}
+          xmlns="http://www.w3.org/2000/svg"
+          style={{ display: "block" }}
+        >
+          {(flag as any).props.children}
+        </svg>
+      ) : (
+        <span
+          style={{
+            display: "flex", width: w, height: h,
+            alignItems: "center", justifyContent: "center",
+            background: "#FFF5F7", color: "#7d0a35",
+            fontSize: 8, fontWeight: 600,
+          }}
+        >
           {String(code).slice(0, 2).toUpperCase()}
         </span>
       )}

@@ -5,7 +5,7 @@ All values sourced from environment variables — 12-factor compliant.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AnyHttpUrl, EmailStr
+from pydantic import AnyHttpUrl, EmailStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,10 +25,15 @@ class Settings(BaseSettings):
     ENVIRONMENT: Literal["development", "staging", "production"] = "development"
     DEBUG: bool = False
     API_PREFIX: str = "/api/v1"
-    ALLOWED_ORIGINS: str = "http://localhost:3000,https://frontend-black-psi-12.vercel.app,https://match4marriage.com,https://www.match4marriage.com"
+    ALLOWED_ORIGINS: str = "http://localhost:3000,https://match4marriage.com,https://www.match4marriage.com"
+    # Used for absolute links in transactional emails. Override in production.
+    FRONTEND_URL: str = "http://localhost:3000"
 
     # ── Database ─────────────────────────────────────────────────────────
-    DATABASE_URL: str = "sqlite+aiosqlite:///./bandhan_demo.db"
+    # Defaults to a local SQLite file for development. In production this
+    # must be overridden via env var to a managed Postgres URL — the
+    # `_check_production_secrets` validator below enforces that.
+    DATABASE_URL: str = "sqlite+aiosqlite:///./match4marriage_dev.db"
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
@@ -86,52 +91,77 @@ class Settings(BaseSettings):
 
     # ── Email ────────────────────────────────────────────────────────────
     RESEND_API_KEY: str = ""
-    RESEND_FROM_EMAIL: EmailStr = "hello@bandhan.in"  # type: ignore[assignment]
+    RESEND_FROM_EMAIL: EmailStr = "hello@match4marriage.com"  # type: ignore[assignment]
 
     # ── Multi-tenancy / White-label ───────────────────────────────────────
-    # Each tenant gets their own subdomain: {slug}.bandhan.in
-    DEFAULT_TENANT_SLUG: str = "bandhan"
+    DEFAULT_TENANT_SLUG: str = "match4marriage"
     TENANT_HEADER: str = "X-Tenant-ID"
 
     # ── Rate limiting ────────────────────────────────────────────────────
     RATE_LIMIT_DEFAULT: str = "100/minute"
     RATE_LIMIT_AUTH: str = "10/minute"
 
-    # ── Firebase ─────────────────────────────────────────────────────────
-    # Service account credentials for Firebase Admin SDK (phone auth verify)
-    FIREBASE_PROJECT_ID: str = ""
-    FIREBASE_CLIENT_EMAIL: str = ""
-    FIREBASE_PRIVATE_KEY: str = ""   # PEM key; literal \n accepted
-
     # ── OTP ──────────────────────────────────────────────────────────────
     OTP_EXPIRY_SECONDS: int = 300
     OTP_LENGTH: int = 6
 
     # ── Demo Mode ────────────────────────────────────────────────────────
-    # When DEMO_MODE=true, OTP "000000" is always accepted (for client demos)
+    # When DEMO_MODE=true, OTP "000000" is always accepted (for client demos).
+    # Production validator below explicitly forbids this in production.
     DEMO_MODE: bool = False
 
     # ── Celery ───────────────────────────────────────────────────────────
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
 
-    # ── Subscription plans (prices in paise / lowest currency unit) ──────
-    SILVER_PRICE_INR: int = 89900   # Rs 899
-    GOLD_PRICE_INR: int = 249900    # Rs 2,499
-    PLATINUM_PRICE_INR: int = 399900  # Rs 3,999
+    # ── Subscription plans ────────────────────────────────────────────────
+    # The internal DB tier names (silver / gold / platinum on
+    # SubscriptionTier enum) map to the customer-facing names
+    # Basic / Premium / Elite. Prices are stored in the smallest currency
+    # unit (pence for GBP, paise for INR) so they can be passed straight
+    # to Stripe / Razorpay. Override these via env in production if the
+    # marketing prices change.
+    #
+    #   silver   → "Basic Plan"     → £100 / 6 months    (~₹10,500)
+    #   gold     → "Premium Plan"   → £300 / 6 months    (~₹31,500)
+    #   platinum → "Elite Plan"     → £1,000 / 6 months  (~₹105,000)
+    SILVER_PRICE_GBP: int = 10000     # £100.00
+    GOLD_PRICE_GBP: int = 30000       # £300.00
+    PLATINUM_PRICE_GBP: int = 100000  # £1,000.00
 
-    # ── Subscription plans (prices in pence — GBP diaspora / UK) ─────────
-    SILVER_PRICE_GBP: int = 999     # £9.99
-    GOLD_PRICE_GBP: int = 2499      # £24.99
-    PLATINUM_PRICE_GBP: int = 3999  # £39.99
-
-    # Stripe prices in pence (GBP × 100)
-    SILVER_PRICE_GBP: int = 999     # £9.99
-    GOLD_PRICE_GBP: int = 2499      # £24.99
-    PLATINUM_PRICE_GBP: int = 3999  # £39.99
+    SILVER_PRICE_INR: int = 1050000     # ₹10,500.00
+    GOLD_PRICE_INR: int = 3150000       # ₹31,500.00
+    PLATINUM_PRICE_INR: int = 10500000  # ₹105,000.00
 
     # Stripe publishable key (returned to frontend for Razorpay-style flows if needed)
     STRIPE_PUBLISHABLE_KEY: str = ""
+
+    # ── Production safety ────────────────────────────────────────────────
+    # Refuses to start the API with insecure defaults when ENVIRONMENT is
+    # "production". Each guard targets one of the launch-day blockers:
+    #   - SECRET_KEY left as the dev placeholder
+    #   - DATABASE_URL still pointing at SQLite
+    #   - REDIS_URL still pointing at localhost
+    #   - DEMO_MODE accidentally enabled (would let OTP "000000" pass)
+    @model_validator(mode="after")
+    def _check_production_secrets(self) -> "Settings":
+        if self.ENVIRONMENT != "production":
+            return self
+        problems: list[str] = []
+        if self.SECRET_KEY in {"", "dev-only-replace-in-prod"}:
+            problems.append("SECRET_KEY is unset or still the dev placeholder")
+        if self.DATABASE_URL.startswith("sqlite"):
+            problems.append("DATABASE_URL is still pointing at SQLite — set a Postgres URL")
+        if "localhost" in self.REDIS_URL or "127.0.0.1" in self.REDIS_URL:
+            problems.append("REDIS_URL is still pointing at localhost")
+        if self.DEMO_MODE:
+            problems.append("DEMO_MODE is enabled — OTP '000000' would be accepted in production")
+        if problems:
+            raise ValueError(
+                "Refusing to start in production with insecure config:\n  - "
+                + "\n  - ".join(problems)
+            )
+        return self
 
     @property
     def allowed_origins_list(self) -> list[str]:

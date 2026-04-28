@@ -5,9 +5,9 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { profileApi, api } from "@/lib/api";
 import {
-  Shield, CheckCircle, AlertCircle, AlertTriangle, Clock, Info, Camera, Upload,
+  Shield, CheckCircle, CheckCircle2, Check, AlertCircle, AlertTriangle, Clock, Info, Camera, Upload,
   Plus, X, Edit3, Heart, Star, Users, Briefcase, GraduationCap,
-  MapPin, Globe,
+  MapPin, Globe, ArrowRight,
 } from "lucide-react";
 import { CompletionStrip } from "./_components/CompletionStrip";
 import { SubmitCelebration } from "./_components/SubmitCelebration";
@@ -628,7 +628,9 @@ export default function MyProfilePage() {
                 Submitting…
               </>
             ) : (
-              <>Submit for verification →</>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                Submit for verification <ArrowRight size={15} strokeWidth={2.2} />
+              </span>
             )}
           </button>
         )}
@@ -660,7 +662,7 @@ export default function MyProfilePage() {
           color: "#3F5937",
           display: "flex", gap: 10, alignItems: "flex-start",
         }}>
-          <span style={{ fontSize: 16, flexShrink: 0 }}>✅</span>
+          <CheckCircle2 size={18} strokeWidth={2.2} style={{ flexShrink: 0, color: "#3F5937", marginTop: 1 }} />
           <div>
             <strong style={{ color: "#3F5937" }}>Submitted for review.</strong>{" "}
             We&apos;ll notify you once the team has looked at it.
@@ -762,7 +764,11 @@ export default function MyProfilePage() {
                     lineHeight: 1.4,
                     transition: "background 0.2s, color 0.2s",
                   }}>
-                    {isComplete ? "✓" : `${filled}/${total}`}
+                    {isComplete ? (
+                      <Check size={13} strokeWidth={3} style={{ display: "block", margin: "0 auto" }} />
+                    ) : (
+                      `${filled}/${total}`
+                    )}
                   </span>
                 </button>
               );
@@ -1718,7 +1724,13 @@ function SaveButton({
         marginTop: 8,
       }}
     >
-      {saving ? "✓  Saved!" : label}
+      {saving ? (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Check size={15} strokeWidth={2.5} /> Saved!
+        </span>
+      ) : (
+        label
+      )}
     </button>
   );
 }
@@ -1815,7 +1827,9 @@ function PhotoCard({ name }: { name: string }) {
           color: "#888",
           marginTop: 2,
         }}>
-          Edit your profile below →
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            Edit your profile below <ArrowRight size={11} strokeWidth={2} />
+          </span>
         </p>
       </div>
     </div>

@@ -392,18 +392,26 @@ export const adminApi = {
   me: () => api.get("/api/v1/auth/me"),
 };
 
+/**
+ * Backend route layout — verified against app/routers/matches.py + profile.py:
+ *   GET  /api/v1/matches/daily                 (matches router)
+ *   GET  /api/v1/profile/browse                (profile router — NOT matches)
+ *   GET  /api/v1/interests/received            (mounted under "" not /matches)
+ *   GET  /api/v1/interests/sent                (idem)
+ *   POST /api/v1/interests/{receiver_id}       (idem)
+ *
+ * No backend route exists for /matches (list), /matches/feed, or
+ * /matches/{id}/accept|decline — those used to be planned but were never
+ * shipped. Calling them was returning 404. They've been removed below.
+ */
 export const matchApi = {
-  list: () => api.get("/api/v1/matches"),
-  feed: () => api.get("/api/v1/matches/feed"),
-  /** Browse / discover profiles — backend mounts this on the *profile* router. */
+  /** Browse / discover profiles — backend mounts this on the profile router. */
   browseProfiles: (params?: Record<string, string | number>) => {
     const qs = params ? "?" + new URLSearchParams(params as Record<string, string>).toString() : "";
     return api.get(`/api/v1/profile/browse${qs}`);
   },
-  getDailyMatches: () => api.get("/api/v1/matches/daily"),
-  getReceivedInterests: () => api.get("/api/v1/matches/interests/received"),
-  getSentInterests: () => api.get("/api/v1/matches/interests/sent"),
-  sendInterest: (toUserId: string) => api.post(`/api/v1/matches/${toUserId}/interest`),
-  accept: (matchId: string) => api.post(`/api/v1/matches/${matchId}/accept`),
-  decline: (matchId: string) => api.post(`/api/v1/matches/${matchId}/decline`),
+  getDailyMatches:      () => api.get("/api/v1/matches/daily"),
+  getReceivedInterests: () => api.get("/api/v1/interests/received"),
+  getSentInterests:     () => api.get("/api/v1/interests/sent"),
+  sendInterest: (toUserId: string) => api.post(`/api/v1/interests/${toUserId}`),
 };

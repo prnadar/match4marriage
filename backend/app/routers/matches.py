@@ -43,6 +43,18 @@ def _get_user_uuid(current_user: dict) -> uuid.UUID | None:
         return None
 
 
+async def _resolve_tenant(db: AsyncSession, tenant_slug: str) -> uuid.UUID:
+    """Resolve tenant slug -> tenant_id, raise 404 if unknown.
+    Matches the helper used elsewhere; imported lazily to avoid a circular
+    import on app.routers.profile.
+    """
+    from app.routers.profile import _resolve_tenant_uuid
+    t = await _resolve_tenant_uuid(db, tenant_slug)
+    if t is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return t
+
+
 @router.get("/matches/daily", response_model=APIResponse[DailyMatchFeed])
 async def get_daily_matches(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -107,21 +119,26 @@ async def get_daily_matches(
 @router.post("/interests/{receiver_id}", response_model=APIResponse[InterestRead])
 async def send_interest(
     receiver_id: uuid.UUID,
-    payload: SendInterestRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
+    payload: SendInterestRequest = SendInterestRequest(),
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
-    """Send interest to another user. Checks plan limits."""
+    """Send interest to another user. Body is optional — `receiver_id` comes
+    from the URL path; only `is_super_interest`, `match_id`, and `message`
+    are read from body."""
     sender_id = _get_user_uuid(current_user)
     if not sender_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user session")
+
+    tenant_uuid = await _resolve_tenant(db, tenant_slug)
 
     # Check for existing interest
     existing = await db.execute(
         select(Interest).where(
             Interest.sender_id == sender_id,
             Interest.receiver_id == receiver_id,
+            Interest.tenant_id == tenant_uuid,
             Interest.deleted_at.is_(None),
         )
     )
@@ -132,7 +149,7 @@ async def send_interest(
         )
 
     interest = Interest(
-        tenant_id=uuid.uuid4(),  # resolved from tenant context in Sprint 2
+        tenant_id=tenant_uuid,
         sender_id=sender_id,
         receiver_id=receiver_id,
         match_id=payload.match_id,
@@ -147,6 +164,7 @@ async def send_interest(
         select(Interest).where(
             Interest.sender_id == receiver_id,
             Interest.receiver_id == sender_id,
+            Interest.tenant_id == tenant_uuid,
             Interest.status == InterestStatus.PENDING,
             Interest.deleted_at.is_(None),
         )

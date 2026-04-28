@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Bell, Heart, MessageCircle, Shield, Star, CheckCheck, Settings, Trash2, Check, Loader2, AlertCircle } from "lucide-react";
+import { Bell, Heart, MessageCircle, Shield, Star, CheckCheck, Settings, Trash2, Check, Loader2, AlertCircle, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { notificationsApi } from "@/lib/api";
 
@@ -332,16 +332,17 @@ export default function NotificationsPage() {
                         href={notif.link}
                         onClick={() => markRead(notif.id)}
                         style={{
-                          display: "inline-block", marginTop: 8,
+                          display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8,
                           fontSize: 12, fontWeight: 600, color: "#dc1e3c",
                           textDecoration: "none",
                           fontFamily: "var(--font-poppins, sans-serif)",
                         }}
                       >
-                        {notif.type === "interest" ? "View Interest →" :
-                         notif.type === "message"  ? "Open Chat →" :
-                         notif.type === "match"    ? "View Profile →" :
-                         "View →"}
+                        {notif.type === "interest" ? "View Interest" :
+                         notif.type === "message"  ? "Open Chat" :
+                         notif.type === "match"    ? "View Profile" :
+                         "View"}
+                        <ArrowRight size={12} strokeWidth={2.2} />
                       </Link>
                     )}
                   </div>

@@ -23,7 +23,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Heart, User as UserIcon, Phone, Shield, Mail, Lock, Eye, EyeOff,
-  ArrowRight, ArrowLeft, Check, AlertCircle, Loader2, Upload,
+  ArrowRight, ArrowLeft, Check, AlertCircle, Loader2, Upload, BadgeCheck,
 } from "lucide-react";
 import {
   createUserWithEmailAndPassword,
@@ -283,7 +283,7 @@ export default function OnboardingPage() {
           fill
           priority
           sizes="(max-width: 1024px) 100vw, 55vw"
-          style={{ objectFit: "cover", objectPosition: "center" }}
+          style={{ objectFit: "cover", objectPosition: "center 22%" }}
         />
         <div aria-hidden style={{
           position: "absolute", inset: 0,
@@ -438,8 +438,9 @@ export default function OnboardingPage() {
           Already have an account?{" "}
           <Link href="/auth/login" style={{
             color: "#dc1e3c", fontWeight: 600, textDecoration: "none",
+            display: "inline-flex", alignItems: "center", gap: 4,
           }}>
-            Sign in →
+            Sign in <ArrowRight size={13} strokeWidth={2.2} />
           </Link>
         </div>
       </section>
@@ -770,7 +771,15 @@ function Step2Profile({
               disabled={!canSendOtp || otpState === "sending" || otpState === "sent"}
               style={sendOtpBtnStyle(otpState === "sent")}
             >
-              {otpState === "sending" ? "Sending…" : otpState === "sent" ? "Sent ✓" : "Send code"}
+              {otpState === "sending" ? (
+                "Sending…"
+              ) : otpState === "sent" ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <Check size={14} strokeWidth={2.5} /> Sent
+                </span>
+              ) : (
+                "Send code"
+              )}
             </button>
           </div>
         </Field>
@@ -872,7 +881,12 @@ function Step3IdVerify({
         <Shield style={{ width: 16, height: 16, flexShrink: 0, marginTop: 1 }} />
         <div style={{ lineHeight: 1.55 }}>
           <strong>Your data is protected.</strong> ID documents are encrypted and only visible to our
-          verification team. Only your verified ✓ status is shown on your profile.
+          verification team. Only your{" "}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, verticalAlign: "middle" }}>
+            verified
+            <BadgeCheck size={13} strokeWidth={2} style={{ color: "#5C7A52" }} />
+          </span>{" "}
+          status is shown on your profile.
         </div>
       </div>
 

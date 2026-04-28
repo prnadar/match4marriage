@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
               </h1>
             </div>
             <div style="background: #fff; border-radius: 16px; padding: 32px; border: 1px solid rgba(220,30,60,0.1);">
-              <h2 style="color: #1a0a14; font-size: 20px; margin: 0 0 8px;">Welcome${name ? `, ${name.split(" ")[0]}` : ""}! 💍</h2>
+              <h2 style="color: #1a0a14; font-size: 20px; margin: 0 0 8px;">Welcome${name ? `, ${name.split(" ")[0]}` : ""}</h2>
               <p style="color: #666; font-size: 14px; margin: 0 0 24px;">Your verification code is:</p>
               <div style="background: #1a0a14; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
                 <span style="font-size: 40px; font-weight: 700; letter-spacing: 12px; color: #fff;">${otp}</span>

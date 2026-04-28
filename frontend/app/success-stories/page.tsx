@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
-  Heart, ArrowRight, Sparkles, Star, MapPin, AlertCircle, Loader2,
+  ArrowRight, MapPin, AlertCircle, Loader2, Quote,
 } from "lucide-react";
 import { successStoriesApi, ApiError } from "@/lib/api";
 import PublicHeader from "@/components/PublicHeader";
@@ -42,161 +42,224 @@ export default function SuccessStoriesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Editorial reveal
+  useEffect(() => {
+    const els = document.querySelectorAll<HTMLElement>(".editorial-reveal");
+    if (!els.length || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add("in");
+            io.unobserve(e.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -60px 0px" }
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [stories]);
+
   return (
-    <main className="min-h-screen" style={{ background: "#fdfbf9" }}>
+    <main style={{ minHeight: "100vh", background: "#fdf9f4", color: "#1a0a14" }}>
       <PublicHeader />
 
-      {/* Editorial hero */}
-      <section className="px-6 pb-10 pt-16 lg:pt-24">
-        <div className="mx-auto max-w-[760px] text-center">
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-50 to-amber-50 ring-1 ring-rose-100">
-            <Heart className="h-6 w-6 text-rose-700" strokeWidth={1.6} />
-          </div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-rose-700/80">
+      {/* ── Editorial hero ───────────────────────────────────── */}
+      <section style={{ padding: "clamp(64px, 9vw, 120px) 24px clamp(48px, 6vw, 72px)", background: "linear-gradient(180deg, #fdf9f4 0%, #faf3eb 100%)" }}>
+        <div className="max-w-4xl mx-auto" style={{ textAlign: "center" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase", marginBottom: 24 }}>
+            <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
             Real love stories
-          </p>
-          <h1 className="font-display mt-2 text-[34px] font-semibold leading-tight text-[#1a0a14] sm:text-[44px]">
-            Stories told by the couples themselves
+            <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
+          </span>
+          <h1
+            className="font-display"
+            style={{
+              fontSize: "clamp(40px, 6vw, 80px)",
+              fontWeight: 500,
+              lineHeight: 1.04,
+              letterSpacing: "-0.025em",
+              marginBottom: 20,
+            }}
+          >
+            Stories told by{" "}
+            <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#dc1e3c" }}>
+              the couples themselves.
+            </span>
           </h1>
-          <p className="mx-auto mt-4 max-w-[560px] text-[15px] leading-relaxed text-[#6a5560]">
-            We honour our members' privacy — every story below is shared with explicit consent. A glimpse of journeys that began here.
+          <p style={{ fontSize: "clamp(15px, 1.4vw, 18px)", lineHeight: 1.7, color: "#4a3a40", maxWidth: 580, margin: "0 auto" }}>
+            We honour our members&apos; privacy — every story is shared with
+            explicit consent. A glimpse of journeys that began here.
           </p>
         </div>
       </section>
 
-      {/* Loading */}
+      {/* ── Loading ───────────────────────────────────────────── */}
       {loading && (
-        <section className="px-6 pb-20">
-          <div className="mx-auto grid max-w-[1100px] grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <section style={{ padding: "0 24px clamp(72px, 9vw, 112px)" }}>
+          <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" style={{ gap: 32 }}>
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="overflow-hidden rounded-3xl border border-rose-100/70 bg-white shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
-                <div className="m4m-skeleton h-[220px] rounded-none" />
-                <div className="p-5">
-                  <div className="m4m-skeleton mb-2 h-4 w-2/3" />
-                  <div className="m4m-skeleton mb-2 h-3 w-full" />
-                  <div className="m4m-skeleton h-3 w-3/4" />
-                </div>
+              <div key={i} style={{ display: "flex", flexDirection: "column" }}>
+                <div className="m4m-skeleton" style={{ aspectRatio: "4 / 5", borderRadius: 4, marginBottom: 20 }} />
+                <div className="m4m-skeleton" style={{ height: 12, width: "40%", marginBottom: 12 }} />
+                <div className="m4m-skeleton" style={{ height: 22, width: "70%", marginBottom: 14 }} />
+                <div className="m4m-skeleton" style={{ height: 14, width: "100%", marginBottom: 8 }} />
+                <div className="m4m-skeleton" style={{ height: 14, width: "85%" }} />
               </div>
             ))}
           </div>
         </section>
       )}
 
-      {/* Error */}
+      {/* ── Error ─────────────────────────────────────────────── */}
       {!loading && error && (
-        <section className="px-6 pb-20">
-          <div className="mx-auto max-w-[680px] rounded-3xl border border-rose-100/70 bg-white px-6 py-12 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
-            <AlertCircle className="mx-auto h-9 w-9 text-rose-700/60" />
-            <h3 className="font-display mt-3 text-[18px] font-semibold text-[#1a0a14]">Couldn't load success stories</h3>
-            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-[#6a5560]">{error}</p>
+        <section style={{ padding: "0 24px clamp(72px, 9vw, 112px)" }}>
+          <div className="max-w-2xl mx-auto" style={{
+            padding: "40px 32px",
+            border: "1px solid rgba(26,10,20,0.10)",
+            borderRadius: 4,
+            background: "#fdf9f4",
+            textAlign: "center",
+          }}>
+            <AlertCircle size={28} strokeWidth={1.4} style={{ color: "#dc1e3c", margin: "0 auto 12px", opacity: 0.7 }} />
+            <h3 className="font-display" style={{ fontSize: 22, fontWeight: 600, color: "#1a0a14", marginBottom: 8, letterSpacing: "-0.01em" }}>
+              We couldn&apos;t load the stories
+            </h3>
+            <p style={{ fontSize: 14, color: "#88787f", lineHeight: 1.6, marginBottom: 20 }}>{error}</p>
             <button
               onClick={load}
-              className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_20px_rgba(220,30,60,0.28)] hover:shadow-[0_10px_26px_rgba(220,30,60,0.38)]"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                background: "#1a0a14", color: "#fdf9f4",
+                padding: "12px 24px", borderRadius: 9999,
+                fontSize: 13, fontWeight: 600, border: 0, cursor: "pointer", letterSpacing: "0.02em",
+              }}
             >
-              <Loader2 className="h-3.5 w-3.5" /> Retry
+              <Loader2 size={14} strokeWidth={2} /> Retry
             </button>
           </div>
         </section>
       )}
 
-      {/* Empty state — backend is wired but admin hasn't published any yet */}
+      {/* ── Empty state ──────────────────────────────────────── */}
       {!loading && !error && stories.length === 0 && (
-        <section className="px-6 pb-24">
-          <div className="mx-auto max-w-[680px] rounded-3xl border border-rose-100/70 bg-white px-6 py-16 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
-            <Sparkles className="mx-auto h-9 w-9 text-rose-700/60" />
-            <h3 className="font-display mt-3 text-[20px] font-semibold text-[#1a0a14]">
-              Stories arriving soon
+        <section style={{ padding: "0 24px clamp(72px, 9vw, 120px)" }}>
+          <div className="max-w-2xl mx-auto" style={{ textAlign: "center", padding: "48px 24px" }}>
+            <Quote size={32} strokeWidth={1} style={{ color: "#dc1e3c", opacity: 0.4, margin: "0 auto 16px" }} />
+            <h3
+              className="font-display-alt"
+              style={{
+                fontFamily: "var(--font-display-alt, 'Cormorant', serif)",
+                fontStyle: "italic",
+                fontSize: "clamp(22px, 2.6vw, 30px)",
+                color: "#1a0a14",
+                lineHeight: 1.5,
+                marginBottom: 24,
+                fontWeight: 500,
+              }}
+            >
+              The first stories are being written.
             </h3>
-            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-[#6a5560]">
-              We're collecting stories from couples who've found each other here, with their consent. New stories arrive every month. Our advisors can also connect you with members who've offered to share their experience on a private call.
+            <p style={{ fontSize: 15, lineHeight: 1.7, color: "#4a3a40", marginBottom: 32, maxWidth: 540, margin: "0 auto 32px" }}>
+              We&apos;re collecting stories from couples who found each other here, with their consent. New ones arrive every month. Our advisors can also connect you with members who have offered to share their experience on a private call.
             </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-3">
-              <Link
-                href="/contact"
-                className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_20px_rgba(220,30,60,0.28)] hover:shadow-[0_10px_26px_rgba(220,30,60,0.38)]"
-              >
-                <Sparkles className="h-3.5 w-3.5" /> Speak to an advisor
+            <div style={{ display: "inline-flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>
+              <Link href="/contact" style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                background: "#1a0a14", color: "#fdf9f4",
+                padding: "14px 28px", borderRadius: 9999,
+                fontSize: 14, fontWeight: 600, textDecoration: "none", letterSpacing: "0.02em",
+              }}>
+                Speak to an advisor <ArrowRight size={15} strokeWidth={2} />
               </Link>
-              <Link
-                href="/auth/register"
-                className="inline-flex items-center gap-1.5 rounded-full bg-white px-5 py-2.5 text-[13px] font-semibold text-rose-700 ring-1 ring-rose-100 hover:bg-rose-50"
-              >
-                Begin private intake <ArrowRight className="h-3.5 w-3.5" />
+              <Link href="/auth/register" style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "14px 28px",
+                border: "1px solid rgba(26,10,20,0.20)",
+                borderRadius: 9999,
+                fontSize: 14, fontWeight: 600, color: "#1a0a14", textDecoration: "none",
+              }}>
+                Find your forever
               </Link>
             </div>
           </div>
         </section>
       )}
 
-      {/* Stories grid */}
+      {/* ── Stories grid ─────────────────────────────────────── */}
       {!loading && !error && stories.length > 0 && (
-        <section className="px-6 pb-24">
-          <div className="mx-auto grid max-w-[1100px] grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {stories.map((s, i) => (
-              <article
-                key={s.id}
-                className="fade-in-up group flex flex-col overflow-hidden rounded-3xl border border-rose-100/70 bg-white shadow-[0_2px_14px_rgba(220,30,60,0.05)] transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(160,21,60,0.16)]"
-                style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}
-              >
-                {/* Photo */}
-                <div className="relative aspect-[4/3] w-full overflow-hidden bg-gradient-to-br from-rose-50 to-amber-50">
+        <section style={{ padding: "0 24px clamp(72px, 9vw, 120px)" }}>
+          <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" style={{ gap: 48 }}>
+            {stories.map((s) => (
+              <article key={s.id} className="editorial-reveal" style={{ display: "flex", flexDirection: "column" }}>
+                <div style={{ aspectRatio: "4 / 5", overflow: "hidden", borderRadius: 4, marginBottom: 20, background: "#faf3eb", position: "relative" }}>
                   {s.photo_url ? (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={s.photo_url}
                       alt={s.couple_names}
                       loading="lazy"
-                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+                      style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 25%" }}
                     />
                   ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Heart className="h-10 w-10 text-rose-300" strokeWidth={1.4} />
+                    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Quote size={40} strokeWidth={1} style={{ color: "#dc1e3c", opacity: 0.25 }} />
                     </div>
                   )}
-                  {/* Bottom darken for overlay legibility */}
-                  <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 55%, rgba(20,8,14,0.55) 100%)" }} />
-                  {/* Year badge */}
-                  <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-semibold text-rose-700 backdrop-blur" style={{ boxShadow: "0 4px 12px rgba(0,0,0,0.10)" }}>
-                    <Sparkles className="h-3 w-3" /> Married {s.year_married}
-                  </span>
-                  {/* Five stars over photo bottom — universal at this product tier */}
-                  <div className="absolute bottom-3 left-3 inline-flex items-center gap-0.5">
-                    {Array.from({ length: 5 }).map((_, j) => (
-                      <Star key={j} className="h-3 w-3 text-[#f0b340]" fill="#f0b340" />
-                    ))}
-                  </div>
                 </div>
-
-                {/* Body */}
-                <div className="flex flex-1 flex-col p-5">
-                  {s.quote && (
-                    <p className="font-display-alt mb-3 text-[14.5px] italic leading-[1.7] text-[#1a0a14]/80">
-                      &ldquo;{s.quote}&rdquo;
-                    </p>
-                  )}
-                  <p className="font-display text-[18px] font-semibold leading-tight text-[#1a0a14]">
-                    {s.couple_names}
-                  </p>
-                  {s.location && (
-                    <p className="mt-1 inline-flex items-center gap-1 text-[12px] text-[#6a5560]">
-                      <MapPin className="h-3 w-3" /> {s.location}
-                    </p>
-                  )}
-                  {/* Headline as kicker */}
-                  <p className="mt-2 text-[13px] font-medium uppercase tracking-[0.12em] text-rose-700/70">
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.22em", color: "#a78a8f", textTransform: "uppercase", marginBottom: 10 }}>
+                  Married {s.year_married}{s.location ? ` · ${s.location}` : ""}
+                </span>
+                <h3 className="font-display" style={{ fontSize: 24, fontWeight: 600, lineHeight: 1.2, letterSpacing: "-0.01em", color: "#1a0a14", marginBottom: 14 }}>
+                  {s.couple_names}
+                </h3>
+                {s.headline && (
+                  <p style={{ fontSize: 13, fontWeight: 600, color: "#dc1e3c", letterSpacing: "0.04em", marginBottom: 12 }}>
                     {s.headline}
                   </p>
-                </div>
+                )}
+                {s.quote && (
+                  <>
+                    <Quote size={18} strokeWidth={1} style={{ color: "#dc1e3c", opacity: 0.55, marginBottom: 8 }} />
+                    <p
+                      className="font-display-alt"
+                      style={{
+                        fontFamily: "var(--font-display-alt, 'Cormorant', serif)",
+                        fontStyle: "italic",
+                        fontSize: 17,
+                        lineHeight: 1.65,
+                        color: "#1a0a14",
+                        margin: 0,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {s.quote}
+                    </p>
+                  </>
+                )}
+                {s.body && (
+                  <p style={{ fontSize: 14, color: "#4a3a40", lineHeight: 1.7, marginTop: 12 }}>
+                    {s.body}
+                  </p>
+                )}
+                {s.location && (
+                  <p style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#88787f", marginTop: 16 }}>
+                    <MapPin size={12} strokeWidth={1.8} /> {s.location}
+                  </p>
+                )}
               </article>
             ))}
           </div>
 
-          <div className="mt-12 text-center">
-            <Link
-              href="/auth/register"
-              className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-6 py-3 text-[14px] font-semibold text-white shadow-[0_8px_22px_rgba(220,30,60,0.32)] transition-all hover:shadow-[0_12px_28px_rgba(220,30,60,0.40)]"
-            >
-              <Sparkles className="h-4 w-4" /> Begin your story
+          <div style={{ marginTop: 80, textAlign: "center" }}>
+            <Link href="/auth/register" style={{
+              display: "inline-flex", alignItems: "center", gap: 8,
+              background: "#1a0a14", color: "#fdf9f4",
+              padding: "14px 32px", borderRadius: 9999,
+              fontSize: 14, fontWeight: 600, textDecoration: "none", letterSpacing: "0.02em",
+            }}>
+              Begin your story <ArrowRight size={15} strokeWidth={2} />
             </Link>
           </div>
         </section>
