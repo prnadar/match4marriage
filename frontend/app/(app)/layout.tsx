@@ -11,6 +11,7 @@ import {
 import { profileApi } from "@/lib/api";
 import { clearClientState, firebaseAuth, rememberSessionUid } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
+import PublicHeader from "@/components/PublicHeader";
 
 // Side-nav entries shown to authenticated members. Notification badges are
 // omitted until they're wired to real counts — fake numbers erode trust.
@@ -179,13 +180,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             {collapsed ? <Menu className="w-5 h-5" /> : <X className="w-5 h-5" />}
           </button>
-          {!collapsed && (
-            <Link href="/dashboard" style={{ textDecoration: "none", marginLeft: "10px", display: "flex", alignItems: "center", minHeight: "auto" }}>
-              <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "15px", fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>
-                Match4Marriage
-              </span>
-            </Link>
-          )}
+          {/* Brand wordmark removed from the sidebar — the shared
+              PublicHeader at the top of the page now owns the brand bar
+              across every page (public and authenticated). The burger
+              toggle alone is enough here. */}
         </div>
 
         {/* Profile mini */}
@@ -378,55 +376,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         className="flex-1 min-h-screen flex flex-col transition-all duration-300"
         style={{ marginLeft: sidebarWidth, background: "#fdfbf9" }}
       >
-        {/* ── Top Header ── */}
-        <header style={{
-          position: "sticky", top: 0, zIndex: 30,
-          background: "rgba(253,251,249,0.92)",
-          backdropFilter: "blur(12px)",
-          borderBottom: "1px solid rgba(220,30,60,0.10)",
-          padding: "0 32px",
-          height: "60px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-        }}>
-          {/* Brand logo in header */}
-          <Link href="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", minHeight: "auto" }}>
-            <img src="/images/logo.jpeg" alt="Match4Marriage" style={{ height: "48px", width: "auto", objectFit: "contain" }} />
-          </Link>
-
-          {/* Right side */}
-          <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-            <Link href="/notifications" style={{ position: "relative", textDecoration: "none", display: "flex", alignItems: "center", color: "#1a0a14", minHeight: "auto" }}>
-              <Bell className="w-5 h-5" style={{ color: "rgba(26,10,20,0.55)" }} />
-              <span style={{
-                position: "absolute", top: "-4px", right: "-6px",
-                background: "#dc1e3c", color: "#fff",
-                fontSize: "10px", fontWeight: 700,
-                width: "16px", height: "16px",
-                borderRadius: "50%",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>2</span>
-            </Link>
-            <Link href="/messages" style={{ position: "relative", textDecoration: "none", display: "flex", alignItems: "center", minHeight: "auto" }}>
-              <MessageCircle className="w-5 h-5" style={{ color: "rgba(26,10,20,0.55)" }} />
-              <span style={{
-                position: "absolute", top: "-4px", right: "-6px",
-                background: "#dc1e3c", color: "#fff",
-                fontSize: "10px", fontWeight: 700,
-                width: "16px", height: "16px",
-                borderRadius: "50%",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>3</span>
-            </Link>
-            <Link href="/profile/me" style={{ textDecoration: "none", minHeight: "auto" }}>
-              <div style={{
-                width: "34px", height: "34px", borderRadius: "50%",
-                background: "linear-gradient(135deg,#dc1e3c,#a0153c)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: "#fff", fontWeight: 700, fontSize: "13px",
-              }}>{sidebarInitial || "?"}</div>
-            </Link>
-          </div>
-        </header>
+        {/* Shared brand bar — same component the public site uses. It detects
+            Firebase auth state and renders Bell / Messages / Avatar in place
+            of the Log In / Register CTAs, so authenticated and anonymous
+            visitors see one consistent top bar everywhere. */}
+        <PublicHeader />
 
         {/* ── ID Verification Warning Banner ── */}
         <VerificationBanner />

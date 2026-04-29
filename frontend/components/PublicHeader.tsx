@@ -2,8 +2,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
-import { Mail, ChevronDown, Heart } from "lucide-react";
+import { Mail, ChevronDown, Heart, Bell, MessageCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { firebaseAuth } from "@/lib/firebase";
 
 interface PublicHeaderProps {
   /**
@@ -20,13 +21,31 @@ interface PublicHeaderProps {
   transparentUntil?: number;
 }
 
+type AuthSnapshot =
+  | { status: "pending" }
+  | { status: "anonymous" }
+  | { status: "signed-in"; initial: string };
+
 export default function PublicHeader({ transparent = false, transparentUntil }: PublicHeaderProps = {}) {
   const pathname = usePathname();
   const [helpOpen, setHelpOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [pastHero, setPastHero] = useState(false);
+  const [auth, setAuth] = useState<AuthSnapshot>({ status: "pending" });
   const helpRef = useRef<HTMLDivElement>(null);
+
+  // Track Firebase auth so the right-side actions (Login/Register vs.
+  // Bell/Messages/Avatar) match the user's session on every page.
+  useEffect(() => {
+    const unsub = firebaseAuth.onAuthStateChanged((user) => {
+      if (!user) { setAuth({ status: "anonymous" }); return; }
+      const seed = user.displayName || user.email || "";
+      const initial = (seed.trim().charAt(0) || "?").toUpperCase();
+      setAuth({ status: "signed-in", initial });
+    });
+    return () => unsub();
+  }, []);
 
   // When floating is active and the menu is open we always want solid styling
   // so the dropdown contents read clearly.
@@ -183,15 +202,38 @@ export default function PublicHeader({ transparent = false, transparentUntil }: 
             </div>
           </div>
 
-          {/* Right column — CTAs + burger */}
+          {/* Right column — auth-aware: signed-in users get Bell/Messages/Avatar,
+              anonymous visitors get Log In + Register CTAs. While auth is
+              still resolving we render nothing on this side to avoid the
+              flicker of CTAs flashing on for a signed-in user. */}
           <div className="m4m-nav__right">
-            <Link href="/auth/login" className="m4m-nav__login hidden sm:inline-flex">
-              Log In
-            </Link>
-            <Link href="/auth/register" className="m4m-nav__register hidden sm:inline-flex">
-              <Heart className="m4m-nav__register-heart h-3.5 w-3.5" fill="currentColor" strokeWidth={0} />
-              <span>Register Free</span>
-            </Link>
+            {auth.status === "signed-in" ? (
+              <>
+                <Link href="/notifications" className="m4m-nav__icon-btn hidden sm:inline-flex" aria-label="Notifications">
+                  <Bell className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                </Link>
+                <Link href="/messages" className="m4m-nav__icon-btn hidden sm:inline-flex" aria-label="Messages">
+                  <MessageCircle className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                </Link>
+                <Link
+                  href="/profile/me"
+                  className="m4m-nav__avatar"
+                  aria-label="My profile"
+                >
+                  {auth.initial}
+                </Link>
+              </>
+            ) : auth.status === "anonymous" ? (
+              <>
+                <Link href="/auth/login" className="m4m-nav__login hidden sm:inline-flex">
+                  Log In
+                </Link>
+                <Link href="/auth/register" className="m4m-nav__register hidden sm:inline-flex">
+                  <Heart className="m4m-nav__register-heart h-3.5 w-3.5" fill="currentColor" strokeWidth={0} />
+                  <span>Register Free</span>
+                </Link>
+              </>
+            ) : null}
 
             {/* Burger — visibility owned by .m4m-nav__burger media query in globals.css */}
             <button
@@ -255,15 +297,27 @@ export default function PublicHeader({ transparent = false, transparentUntil }: 
                   </motion.div>
                 ))}
 
-                <div className="m4m-nav__mobile-cta">
-                  <Link href="/auth/login" onClick={() => setMobileOpen(false)} className="m4m-nav__mobile-login">
-                    Log In
-                  </Link>
-                  <Link href="/auth/register" onClick={() => setMobileOpen(false)} className="m4m-nav__mobile-register">
-                    <Heart className="h-3.5 w-3.5" fill="currentColor" strokeWidth={0} />
-                    <span>Register Free</span>
-                  </Link>
-                </div>
+                {auth.status === "signed-in" ? (
+                  <div className="m4m-nav__mobile-cta">
+                    <Link href="/profile/me" onClick={() => setMobileOpen(false)} className="m4m-nav__mobile-login">
+                      My Profile
+                    </Link>
+                    <Link href="/messages" onClick={() => setMobileOpen(false)} className="m4m-nav__mobile-register">
+                      <MessageCircle className="h-3.5 w-3.5" strokeWidth={2} />
+                      <span>Messages</span>
+                    </Link>
+                  </div>
+                ) : auth.status === "anonymous" ? (
+                  <div className="m4m-nav__mobile-cta">
+                    <Link href="/auth/login" onClick={() => setMobileOpen(false)} className="m4m-nav__mobile-login">
+                      Log In
+                    </Link>
+                    <Link href="/auth/register" onClick={() => setMobileOpen(false)} className="m4m-nav__mobile-register">
+                      <Heart className="h-3.5 w-3.5" fill="currentColor" strokeWidth={0} />
+                      <span>Register Free</span>
+                    </Link>
+                  </div>
+                ) : null}
               </div>
             </motion.div>
           )}

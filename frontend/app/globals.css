@@ -779,6 +779,58 @@
   45%                { transform: scale(1.08); }
 }
 
+/* Auth-mode (signed-in) right-side controls. Used when PublicHeader detects
+   a Firebase user — replaces Log In / Register CTAs with quiet icon buttons
+   and an avatar that links into the app. */
+.m4m-nav__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 9999px;
+  color: #2a1a22;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.25s cubic-bezier(.2,.7,.2,1);
+}
+.m4m-nav__icon-btn:hover {
+  background: rgba(220,30,60,0.06);
+  color: #dc1e3c;
+  transform: translateY(-1px);
+}
+.m4m-nav.is-floating .m4m-nav__icon-btn {
+  color: rgba(255,255,255,0.85);
+}
+.m4m-nav.is-floating .m4m-nav__icon-btn:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.10);
+}
+
+.m4m-nav__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #dc1e3c, #a0153c);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-decoration: none;
+  box-shadow: 0 6px 14px rgba(220,30,60,0.28);
+  transition: transform 0.25s cubic-bezier(.2,.7,.2,1), box-shadow 0.25s ease;
+  margin-left: 4px;
+}
+.m4m-nav__avatar:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(220,30,60,0.42);
+}
+.m4m-nav.is-floating .m4m-nav__avatar {
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.15);
+}
+
 /* Burger — visible only below 1024px. Owns its own display rule
    inside a max-width media query to avoid Tailwind utility races. */
 .m4m-nav__burger {
