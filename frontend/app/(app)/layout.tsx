@@ -12,6 +12,7 @@ import { profileApi } from "@/lib/api";
 import { clearClientState, firebaseAuth, rememberSessionUid } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 import PublicHeader from "@/components/PublicHeader";
+import { useProfilePhoto } from "@/lib/profilePhoto";
 
 // Side-nav entries shown to authenticated members. Notification badges are
 // omitted until they're wired to real counts — fake numbers erode trust.
@@ -85,6 +86,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarName, setSidebarName] = useState("");
   const [sidebarInitial, setSidebarInitial] = useState("");
   const [sidebarTrustScore, setSidebarTrustScore] = useState<number | null>(null);
+  // Same hook PublicHeader uses; keeps the sidebar avatar in lock-step
+  // with the top-bar avatar after a primary-photo change.
+  const sidebarPhotoUrl = useProfilePhoto();
 
   // Auth guard: if Firebase says no user, send to onboarding.
   // If user exists but has no backend profile, also send to onboarding.
@@ -195,9 +199,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             >
               <div
                 className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm flex-shrink-0"
-                style={{ background: "linear-gradient(135deg,#dc1e3c,#a0153c)" }}
+                style={{
+                  background: sidebarPhotoUrl
+                    ? `url(${sidebarPhotoUrl}) center/cover no-repeat, linear-gradient(135deg,#dc1e3c,#a0153c)`
+                    : "linear-gradient(135deg,#dc1e3c,#a0153c)",
+                  color: sidebarPhotoUrl ? "transparent" : "#fff",
+                }}
               >
-                {sidebarInitial || "?"}
+                {sidebarPhotoUrl ? "" : (sidebarInitial || "?")}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate" style={{ color: "#ffffff" }}>{sidebarName || "My Profile"}</p>
@@ -216,8 +225,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="flex justify-center py-3 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
             <div
               className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm"
-              style={{ background: "linear-gradient(135deg,#dc1e3c,#a0153c)" }}
-            >{sidebarInitial || "?"}</div>
+              style={{
+                background: sidebarPhotoUrl
+                  ? `url(${sidebarPhotoUrl}) center/cover no-repeat, linear-gradient(135deg,#dc1e3c,#a0153c)`
+                  : "linear-gradient(135deg,#dc1e3c,#a0153c)",
+                color: sidebarPhotoUrl ? "transparent" : "#fff",
+              }}
+            >{sidebarPhotoUrl ? "" : (sidebarInitial || "?")}</div>
           </div>
         )}
 

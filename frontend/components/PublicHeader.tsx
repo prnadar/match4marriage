@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from "react";
 import { Mail, ChevronDown, Heart, Bell, MessageCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { firebaseAuth } from "@/lib/firebase";
+import { useProfilePhoto } from "@/lib/profilePhoto";
 
 interface PublicHeaderProps {
   /**
@@ -33,6 +34,7 @@ export default function PublicHeader({ transparent = false, transparentUntil }: 
   const [scrolled, setScrolled] = useState(false);
   const [pastHero, setPastHero] = useState(false);
   const [auth, setAuth] = useState<AuthSnapshot>({ status: "pending" });
+  const photoUrl = useProfilePhoto();
   const helpRef = useRef<HTMLDivElement>(null);
 
   // Track Firebase auth so the right-side actions (Login/Register vs.
@@ -219,8 +221,14 @@ export default function PublicHeader({ transparent = false, transparentUntil }: 
                   href="/profile/me"
                   className="m4m-nav__avatar"
                   aria-label="My profile"
+                  style={photoUrl ? {
+                    backgroundImage: `url(${photoUrl})`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                    color: "transparent",
+                  } : undefined}
                 >
-                  {auth.initial}
+                  {photoUrl ? "" : auth.initial}
                 </Link>
               </>
             ) : auth.status === "anonymous" ? (

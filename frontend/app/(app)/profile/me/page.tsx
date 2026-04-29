@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { profileApi, api } from "@/lib/api";
+import { useProfilePhoto } from "@/lib/profilePhoto";
 import {
   Shield, CheckCircle, CheckCircle2, Check, AlertCircle, AlertTriangle, Clock, Info, Camera, Upload,
   Plus, X, Edit3, Heart, Star, Users, Briefcase, GraduationCap,
@@ -136,6 +137,9 @@ export default function MyProfilePage() {
   const reduceMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState("general");
   const [savedTab,  setSavedTab]  = useState<string | null>(null);
+  // Subscribes to the in-app primary-photo event bus so the profile
+  // card avatar updates the moment PhotoGrid changes the primary.
+  const primaryPhotoUrl = useProfilePhoto();
 
   // General Info
   const [general, setGeneral] = useState({
@@ -728,7 +732,7 @@ export default function MyProfilePage() {
       }}>
         {/* ── Left Sidebar ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          <PhotoCard name={general.name || "Your Name"} />
+          <PhotoCard name={general.name || "Your Name"} photoUrl={primaryPhotoUrl} />
           <TrustScoreCard score={40} />
           <CompletenessCard completeness={completenessScore} />
         </div>
@@ -1776,7 +1780,7 @@ function SaveButton({
 // ─── Left Sidebar Components ───────────────────────────────────────────────────
 
 
-function PhotoCard({ name }: { name: string }) {
+function PhotoCard({ name, photoUrl }: { name: string; photoUrl?: string | null }) {
   const [hovered, setHovered] = useState(false);
   const initials = name
     .split(" ")
@@ -1796,7 +1800,9 @@ function PhotoCard({ name }: { name: string }) {
       <div
         style={{
           height: 220,
-          background: "linear-gradient(135deg,#dc1e3c,#a0153c)",
+          background: photoUrl
+            ? `url(${photoUrl}) center/cover no-repeat, linear-gradient(135deg,#dc1e3c,#a0153c)`
+            : "linear-gradient(135deg,#dc1e3c,#a0153c)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -1807,6 +1813,7 @@ function PhotoCard({ name }: { name: string }) {
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
+        {!photoUrl && (
         <div style={{
           width: 88,
           height: 88,
@@ -1827,6 +1834,7 @@ function PhotoCard({ name }: { name: string }) {
             {initials || "?"}
           </span>
         </div>
+        )}
         {hovered && (
           <div style={{
             position: "absolute",

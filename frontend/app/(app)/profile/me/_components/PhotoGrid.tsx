@@ -6,6 +6,7 @@ import {
   Camera, Upload, Trash2, Crown, Star, AlertCircle,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { notifyProfilePhotoUpdate } from "@/lib/profilePhoto";
 
 interface PhotoItem {
   /** Cloudinary public_id — also our stable React key. */
@@ -47,6 +48,10 @@ export function PhotoGrid() {
             .filter((p) => p && p.url && p.key)
             .map((p) => ({ id: p.key, url: p.url, isPrimary: !!p.is_primary }))
           );
+          // Broadcast on initial load so the header/sidebar avatars
+          // hydrate from the same source if they mounted before the
+          // GET /profile/me round-trip resolved.
+          notifyProfilePhotoUpdate(list);
         }
       } catch {
         // Non-fatal — empty grid stays.
@@ -63,6 +68,10 @@ export function PhotoGrid() {
       .filter((p: any) => p && p.url && p.key)
       .map((p: any) => ({ id: p.key, url: p.url, isPrimary: !!p.is_primary }))
     );
+    // Tell every avatar surface (top header, sidebar, profile card) the
+    // primary changed — keeps them in lock-step with the grid without
+    // any cross-component prop plumbing.
+    notifyProfilePhotoUpdate(list);
   };
 
   const handleFiles = async (fileList: FileList | null) => {
@@ -182,6 +191,9 @@ export function PhotoGrid() {
     // First photo is primary.
     const reflagged = next.map((p, i) => ({ ...p, isPrimary: i === 0 }));
     setPhotos(reflagged); // optimistic
+    notifyProfilePhotoUpdate(
+      reflagged.map((p) => ({ url: p.url, key: p.id, is_primary: p.isPrimary }))
+    );
 
     try {
       const res = await api.put<{ data: any }>("/api/v1/profile/me/photos/reorder", {
@@ -203,7 +215,13 @@ export function PhotoGrid() {
 
   // ── Per-photo actions ─────────────────────────────────────────────────────
   const makePrimary = async (id: string) => {
-    setPhotos((prev) => prev.map((p) => ({ ...p, isPrimary: p.id === id })));
+    const next = photos.map((p) => ({ ...p, isPrimary: p.id === id }));
+    setPhotos(next);
+    // Optimistic: tell the avatar surfaces right away so the user sees their
+    // header/sidebar avatar update the moment they click "Set primary".
+    notifyProfilePhotoUpdate(
+      next.map((p) => ({ url: p.url, key: p.id, is_primary: p.isPrimary }))
+    );
     try {
       const res = await api.post<{ data: any }>("/api/v1/profile/me/photos/primary", { key: id });
       const profile = (res.data as any)?.data;
@@ -214,7 +232,13 @@ export function PhotoGrid() {
   };
 
   const removePhoto = async (id: string) => {
-    setPhotos((prev) => prev.filter((p) => p.id !== id));
+    const next = photos.filter((p) => p.id !== id);
+    // First remaining photo becomes primary (mirrors the backend tie-break).
+    if (next.length > 0 && !next.some((p) => p.isPrimary)) next[0].isPrimary = true;
+    setPhotos(next);
+    notifyProfilePhotoUpdate(
+      next.map((p) => ({ url: p.url, key: p.id, is_primary: p.isPrimary }))
+    );
     try {
       const res = await api.delete<{ data: any }>(`/api/v1/profile/me/photos?key=${encodeURIComponent(id)}`);
       const profile = (res.data as any)?.data;
