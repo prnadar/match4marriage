@@ -45,6 +45,17 @@ const COUNTRIES = [
   "Singapore","Germany","France","Netherlands","New Zealand","Malaysia","Other",
 ];
 
+// Onboarding ships long-form country names ("United Kingdom", "United States");
+// the profile dropdown above uses short codes. Map long → short on load so the
+// stored value lines up with a real <option>, otherwise the select renders blank.
+const COUNTRY_ALIASES: Record<string, string> = {
+  "United Kingdom": "UK",
+  "United States": "USA",
+  "United States of America": "USA",
+};
+const normalizeCountry = (v: string | null | undefined): string =>
+  v ? (COUNTRY_ALIASES[v] || v) : "";
+
 const INCOME_OPTIONS = [
   "Not Specified","Below £20k","£20k–£30k","£30k–£50k",
   "£50k–£75k","£75k–£100k","Above £100k",
@@ -200,14 +211,21 @@ export default function MyProfilePage() {
     photos:    { filled: 0, total: 6 },
   };
 
-  // Load profile from backend on mount (uses Firebase auth token via profileApi.me)
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await profileApi.me();
-        const p = (res.data as any)?.data ?? res.data;
-        if (!p) return;
+  // Single source of truth for profile load. Surfaces errors so users can
+  // retry instead of silently rendering blank fields, and gates autosave on
+  // successful load (loadedRef) so a failed load can't trigger a save that
+  // wipes server-side data.
+  const [loadStatus, setLoadStatus] = useState<"loading" | "ok" | "error">("loading");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
+  const loadProfile = useCallback(async () => {
+    setLoadStatus("loading");
+    setLoadError(null);
+    try {
+      const res = await profileApi.me();
+      const p = (res.data as any)?.data ?? res.data;
+
+      if (p) {
         const dob = p.date_of_birth ? new Date(p.date_of_birth) : null;
         setGeneral((prev) => ({
           ...prev,
@@ -221,9 +239,11 @@ export default function MyProfilePage() {
           religion: p.religion ? p.religion.charAt(0).toUpperCase() + p.religion.slice(1) : prev.religion,
           subCaste: p.caste || prev.subCaste,
           motherTongue: p.mother_tongue || prev.motherTongue,
-          countryLivingIn: p.country || prev.countryLivingIn,
+          countryLivingIn: normalizeCountry(p.country) || prev.countryLivingIn,
           currentLocation: p.city || prev.currentLocation,
           aboutMe: p.bio || prev.aboutMe,
+          complexion: p.complexion || prev.complexion,
+          bodyType: p.body_type || prev.bodyType,
           maritalStatus: p.marital_status
             ? String(p.marital_status)
                 .split("_")
@@ -241,18 +261,10 @@ export default function MyProfilePage() {
           annualIncome: p.annual_income_inr ? String(p.annual_income_inr) : prev.annualIncome,
         }));
 
-        // Physical + extras already in general
-        setGeneral((prev) => ({
-          ...prev,
-          complexion: p.complexion || prev.complexion,
-          bodyType: p.body_type || prev.bodyType,
-        }));
-
         if (p.about_family) setFamily((prev) => ({ ...prev, aboutFamily: p.about_family }));
         if (p.family_details) setFamily((prev) => ({ ...prev, ...p.family_details }));
         if (p.partner_prefs) setPartner((prev) => ({ ...prev, ...p.partner_prefs }));
 
-        // Rehydrate from kundali_data JSON bucket
         const k = p.kundali_data || {};
         if (k && Object.keys(k).length > 0) {
           setGeneral((prev) => ({
@@ -275,11 +287,16 @@ export default function MyProfilePage() {
           if (Array.isArray(k.colleges) && k.colleges.length) setColleges(k.colleges);
           if (Array.isArray(k.employment) && k.employment.length) setEmployment(k.employment);
         }
-      } catch (err) {
-        console.warn("Failed to load profile:", err);
+
+        setVerifStatus(p.verification_status || "draft");
+        setRejectionReason(p.rejection_reason || null);
+        setCompletenessScore(typeof p.completeness_score === "number" ? p.completeness_score : 0);
+        versionRef.current = typeof p.version === "number" ? p.version : 0;
       }
 
-      // Fallback: pre-fill from localStorage if backend returned empty fields
+      // Fallback: pre-fill name/gender from localStorage if the response was empty.
+      // Onboarding stamps these values right after Firebase signup, so they're
+      // a useful safety net if the server profile is missing.
       setGeneral((prev) => {
         if (prev.name) return prev;
         const localName = localStorage.getItem("user_name") || "";
@@ -290,8 +307,17 @@ export default function MyProfilePage() {
           gender: prev.gender || (localGender === "male" ? "Male" : localGender === "female" ? "Female" : prev.gender),
         };
       });
-    })();
+
+      loadedRef.current = true;
+      setLoadStatus("ok");
+    } catch (err: any) {
+      console.error("Failed to load profile:", err);
+      setLoadError(err?.message || "Could not load your profile. Please try again.");
+      setLoadStatus("error");
+    }
   }, []);
+
+  useEffect(() => { loadProfile(); }, [loadProfile]);
 
   // ── Verification status (draft | submitted | approved | rejected) ─────────
   const [verifStatus, setVerifStatus] = useState<string>("draft");
@@ -324,23 +350,6 @@ export default function MyProfilePage() {
   useEffect(() => {
     if (autoSaveState === "saved") setSavedTick((t) => t + 1);
   }, [autoSaveState]);
-
-  // Pick up status + version + completeness from first profile load
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await profileApi.me();
-        const p = (res.data as any)?.data ?? res.data;
-        if (p) {
-          setVerifStatus(p.verification_status || "draft");
-          setRejectionReason(p.rejection_reason || null);
-          setCompletenessScore(typeof p.completeness_score === "number" ? p.completeness_score : 0);
-          versionRef.current = typeof p.version === "number" ? p.version : 0;
-        }
-      } catch { /* ignore */ }
-      loadedRef.current = true;
-    })();
-  }, []);
 
   const handleSubmitForReview = async () => {
     setSubmitting(true);
@@ -672,6 +681,35 @@ export default function MyProfilePage() {
       <style jsx>{`
         @keyframes m4m-btn-spin { to { transform: rotate(360deg); } }
       `}</style>
+
+      {loadStatus === "error" && (
+        <div style={{
+          padding: "14px 16px",
+          background: "#fff4e0",
+          border: "1px solid rgba(200,144,32,0.35)",
+          borderRadius: 10, marginBottom: 16, fontSize: 13,
+          color: "#7B2D3A",
+          display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <AlertTriangle style={{ width: 16, height: 16, color: "#b45309", flexShrink: 0, marginTop: 1 }} />
+            <div>
+              <strong style={{ color: "#7B2D3A" }}>We couldn&apos;t load your profile.</strong>{" "}
+              {loadError || "Please check your connection and try again."}
+            </div>
+          </div>
+          <button
+            onClick={loadProfile}
+            style={{
+              padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(123,45,58,0.3)",
+              background: "#fff", color: "#7B2D3A", fontWeight: 600, fontSize: 12,
+              cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       <CompletionStrip
         fallbackScore={completenessScore}

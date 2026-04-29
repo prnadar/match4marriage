@@ -144,17 +144,31 @@ export default function OnboardingPage() {
       // Kick off email verification (non-blocking — we don't wait for them to click it)
       try { await sendEmailVerification(cred.user); } catch { /* non-fatal */ }
 
-      // Save first/last name to our backend immediately
+      // Save first/last name to our backend immediately. If this fails the
+      // user's name never reaches the profile, so they end up on /profile/me
+      // with blank fields — block the step transition and surface the error
+      // so they retry instead of silently losing data.
       const nameParts = fullName.trim().split(/\s+/);
       try {
         await api.patch("/api/v1/profile/me", {
           first_name: nameParts[0] || undefined,
           last_name: nameParts.slice(1).join(" ") || undefined,
         });
-      } catch (e) {
-        // Non-fatal — user still exists in Firebase; profile will be created on next request
-        console.warn("Initial profile save failed:", e);
+      } catch (e: any) {
+        console.error("Initial profile save failed:", e);
+        setError(
+          e?.message ||
+          "We created your account but couldn't save your name. Please check your connection and try again."
+        );
+        setLoading(false);
+        return false;
       }
+
+      // Best-effort cache so /profile/me can fall back to it if the backend
+      // round-trips drop the name (used by the load fallback in the profile page).
+      try {
+        localStorage.setItem("user_name", fullName.trim());
+      } catch { /* private mode / quota — non-fatal */ }
 
       setStep(2);
       return true;
@@ -227,6 +241,11 @@ export default function OnboardingPage() {
         education_level: payload.education || undefined,
         occupation: payload.profession || undefined,
       });
+
+      // Cache gender for the profile page's localStorage fallback.
+      try {
+        if (payload.gender) localStorage.setItem("user_gender", payload.gender.toLowerCase());
+      } catch { /* private mode / quota — non-fatal */ }
 
       setStep(3);
       return true;

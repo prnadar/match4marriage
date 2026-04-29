@@ -197,7 +197,15 @@ export function CompletionStrip({ fallbackScore = 0, onJumpToTab, refreshKey }: 
             </button>
           </>
         ) : (
-          <div style={{ fontSize: 13, color: "#888" }}>Loading completion…</div>
+          // Load finished, but no "next missing" target was returned. This
+          // usually means the strip is in fallback mode (the /completion
+          // call failed) — show the parent's score instead of a stale spinner.
+          <div style={{
+            fontFamily: "var(--font-playfair, serif)",
+            fontSize: 17, fontWeight: 600, color: "#1a0a14",
+          }}>
+            Keep building your profile
+          </div>
         )}
       </div>
 
