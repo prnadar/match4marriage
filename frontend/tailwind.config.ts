@@ -8,8 +8,28 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      // ── Match4Marriage · Warm Luxury Rose Gold Design System ─────────────────
+      // ── Match4Marriage · Ruby Red + Navy Blue brand palette ──────────────────
       colors: {
+        ruby: {
+          50:      "#FFF1F4",
+          100:     "#FFD9E0",
+          200:     "#FFB1BE",
+          300:     "#F77C92",
+          DEFAULT: "#DC1E3C",   // Primary ruby red — used in CTAs, accents, links
+          600:     "#B5102C",
+          700:     "#8A0820",
+          dark:    "#5E0218",
+        },
+        navy: {
+          50:      "#EEF1F8",
+          100:     "#D5DCEC",
+          200:     "#9FAEC9",
+          300:     "#5F73A1",
+          DEFAULT: "#1F2D5C",   // Primary navy blue — pairs with ruby across UI
+          600:     "#152144",
+          700:     "#0E1832",
+          dark:    "#070D1E",
+        },
         rose: {
           50:      "#FFF5F7",
           100:     "#FFE4EA",
@@ -87,11 +107,13 @@ const config: Config = {
         },
       },
       fontFamily: {
-        display:     ["Fraunces", "Playfair Display", "Georgia", "serif"],
+        // Brand stack — Cinzel headings, Montserrat for nav/CTAs, Open Sans body
+        display:     ["Cinzel", "Playfair Display", "Georgia", "serif"],
+        nav:         ["Montserrat", "Inter", "system-ui", "sans-serif"],
         editorial:   ["Cormorant", "Playfair Display", "Georgia", "serif"],
         script:      ["Great Vibes", "cursive"],
         devanagari:  ["Noto Serif Devanagari", "serif"],
-        body:        ["Inter", "system-ui", "-apple-system", "sans-serif"],
+        body:        ["Open Sans", "Inter", "system-ui", "-apple-system", "sans-serif"],
       },
       fontSize: {
         body: ["1rem", { lineHeight: "1.6" }],

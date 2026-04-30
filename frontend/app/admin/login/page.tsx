@@ -206,7 +206,7 @@ export default function AdminLoginPage() {
               fontSize: 10.5, fontWeight: 700, color: "rgba(255,255,255,0.78)",
               letterSpacing: "0.14em", textTransform: "uppercase",
             }}>
-              Trusted by families since 2024
+              Trusted by families since 2023
             </span>
           </motion.div>
 

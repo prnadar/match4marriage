@@ -15,20 +15,22 @@
     --border-gold: rgba(220, 30, 60, 0.12);
     --shadow-warm: 0 4px 20px rgba(220, 30, 60, 0.06);
 
-    /* ── Type scale — Fraunces (display) + Inter (body) is the new system.
-       The legacy Playfair / Poppins variables stay aliased so existing pages
-       keep working until they're migrated. New code should reference
-       --font-display / --font-body / --font-script. */
-    --font-display:    'Fraunces', 'Playfair Display', Georgia, serif;
+    /* ── Type scale — brand stack:
+         Cinzel (display)     — main logo wordmark + section headings
+         Montserrat (nav)     — navigation, buttons, sub-headings
+         Open Sans (body)     — descriptive copy, success-stories, body text
+       The legacy variable aliases stay so existing pages keep working. */
+    --font-display:    'Cinzel', 'Playfair Display', Georgia, serif;
     --font-display-alt:'Cormorant', 'Playfair Display', Georgia, serif;
-    --font-body:       'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-nav:        'Montserrat', 'Inter', system-ui, -apple-system, sans-serif;
+    --font-body:       'Open Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-script:     'Great Vibes', cursive;
 
-    --font-playfair: var(--font-display);
-    --font-poppins:  var(--font-body);
-    --font-lato:     var(--font-body);
+    --font-playfair:   var(--font-display);
+    --font-poppins:    var(--font-nav);
+    --font-lato:       var(--font-body);
     --font-great-vibes: var(--font-script);
-    --font-cinzel:   var(--font-display);
+    --font-cinzel:     var(--font-display);
 
     /* Optical-sized display headings — set by --font-fraunces-opsz */
     --fraunces-display: "opsz" 144, "SOFT" 30, "WONK" 0;
@@ -94,11 +96,16 @@
     font-feature-settings: "ss01", "cv11", "cv02", "tnum";
   }
 
-  /* Display headings get Fraunces with optical sizing for editorial weight. */
+  /* Display headings — Cinzel for editorial brand weight. */
   h1, h2, h3, h4 {
     font-family: var(--font-display);
-    font-variation-settings: var(--fraunces-display);
-    letter-spacing: -0.012em;
+    letter-spacing: 0.005em;
+  }
+
+  /* Nav, buttons, sub-headings — Montserrat per brand spec. */
+  nav, button, .m4m-nav, .m4m-nav__link, .m4m-nav__login, .m4m-nav__register,
+  .m4m-nav__mobile-link, .m4m-nav__mobile-sublink, .m4m-nav__mobile-section {
+    font-family: var(--font-nav);
   }
 
   /* Great Vibes — for hero taglines, script accents */
@@ -969,7 +976,7 @@
   transition: background 0.4s ease, color 0.4s ease, border-color 0.4s ease, backdrop-filter 0.4s ease;
 }
 .m4m-top-bar.is-floating {
-  background: linear-gradient(180deg, rgba(10,4,8,0.62) 0%, rgba(10,4,8,0.30) 100%);
+  background: linear-gradient(180deg, rgba(14,24,50,0.72) 0%, rgba(14,24,50,0.34) 100%);
   border-bottom: 1px solid rgba(253,249,244,0.10);
   animation: none;
   backdrop-filter: blur(4px);
@@ -997,29 +1004,19 @@
   transition: background 0.4s ease, backdrop-filter 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease;
 }
 .m4m-nav.is-floating {
-  background: linear-gradient(180deg, rgba(10,4,8,0.55) 0%, rgba(10,4,8,0.20) 100%);
+  background: linear-gradient(180deg, rgba(14,24,50,0.65) 0%, rgba(14,24,50,0.24) 100%);
   border-bottom: 1px solid rgba(253,249,244,0.10);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   box-shadow: none;
 }
 
-/* Floating logo: hide the JPEG (which has a hard cream background and won't
-   read on a dark video) and show the typographic wordmark instead. */
-.m4m-nav.is-floating .m4m-nav__logo-img { display: none; }
-.m4m-nav.is-floating .m4m-nav__logo-wordmark {
-  display: inline-flex;
-  align-items: baseline;
-  font-size: clamp(20px, 1.8vw, 26px);
-  font-weight: 500;
-  color: #fdf9f4;
-  letter-spacing: -0.012em;
-  line-height: 1;
-  white-space: nowrap;
-  text-shadow: 0 2px 18px rgba(0,0,0,0.45);
-}
-.m4m-nav.is-floating .m4m-nav__logo:hover .m4m-nav__logo-wordmark {
-  filter: drop-shadow(0 4px 18px rgba(255,180,90,0.30));
+/* Floating logo: keep the JPEG visible on the dark video; the cream
+   backplate gives it the same recognisable mark used everywhere else.
+   The wordmark stays hidden — one logo, on every page. */
+.m4m-nav.is-floating .m4m-nav__logo-img {
+  display: block;
+  filter: drop-shadow(0 6px 22px rgba(0,0,0,0.45));
 }
 
 /* Nav links go cream, with a gold-to-rose gradient underline */

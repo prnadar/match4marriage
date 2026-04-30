@@ -348,7 +348,7 @@ export default function AboutPage() {
                 The Match4Marriage Team
               </p>
               <p style={{ fontSize: 12, color: "#88787f", margin: "2px 0 0", letterSpacing: "0.04em" }}>
-                Solihull, England · Established 2020
+                Solihull, England · Established 2023
               </p>
             </div>
             <CountryFlag code="GB" rounded="sm" width={22} />
@@ -475,7 +475,7 @@ export default function AboutPage() {
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4" style={{ borderTop: "1px solid rgba(26,10,20,0.12)", borderBottom: "1px solid rgba(26,10,20,0.12)" }}>
             {[
-              { num: "2020",    label: "Founded in the UK" },
+              { num: "2023",    label: "Founded in the UK" },
               { num: "100%",    label: "Hand-picked profiles" },
               { num: "By call", label: "Onboarding, not a form" },
               { num: "4.9 / 5", label: "Family-rated, last 18 mo." },

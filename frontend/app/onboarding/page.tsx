@@ -33,7 +33,6 @@ import {
   linkWithCredential,
   PhoneAuthProvider,
   signInWithEmailAndPassword,
-  sendEmailVerification,
   updateProfile as updateFirebaseProfile,
   type ConfirmationResult,
 } from "firebase/auth";
@@ -92,8 +91,12 @@ export default function OnboardingPage() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  // Auth guard: if signed in with profile, skip to dashboard; if signed in
-  // without profile, start at step 2 (they have email but no phone/profile).
+  // Auth-aware step picker. Resumes the user at the first incomplete step:
+  //   profile + phone + id   → /dashboard
+  //   profile + phone, no id → step 3
+  //   profile, no phone      → step 2
+  //   no profile             → step 2 (email exists, profile next)
+  //   not signed in          → step 1
   useEffect(() => {
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
       if (!user) return;
@@ -101,13 +104,20 @@ export default function OnboardingPage() {
       try {
         const res = await api.get("/api/v1/profile/me");
         const p = (res.data as any)?.data;
-        if (p && p.first_name && String(p.first_name).trim()) {
+        const hasProfile = !!(p && p.first_name && String(p.first_name).trim());
+        const hasPhone   = !!(user.phoneNumber && user.phoneNumber.trim());
+        const idUploaded = p?.visa_status === "id_uploaded";
+
+        if (hasProfile && hasPhone && idUploaded) {
           router.replace("/dashboard");
           return;
         }
-      } catch { /* new user — stay on onboarding */ }
-      // Signed in but no profile yet — they completed step 1 on a previous visit
-      setStep(2);
+        if (hasProfile && hasPhone) { setStep(3); return; }
+        // has email account but neither phone nor full profile yet
+        setStep(2);
+      } catch {
+        // backend unreachable — stay on step 1 to retry
+      }
     });
     return unsub;
   }, [router]);
@@ -120,6 +130,12 @@ export default function OnboardingPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Tracks where the user is *within* step 1 — first the details form,
+  // then the email-OTP verification screen. We don't advance the main
+  // step indicator until the email is verified.
+  const [step1Mode, setStep1Mode] = useState<"details" | "verify-email">("details");
+  const [emailVerifyLoading, setEmailVerifyLoading] = useState(false);
 
   const handleCreateAccount = useCallback(async (password: string) => {
     setLoading(true);
@@ -140,9 +156,6 @@ export default function OnboardingPage() {
       try {
         await updateFirebaseProfile(cred.user, { displayName: fullName.trim() });
       } catch { /* non-fatal */ }
-
-      // Kick off email verification (non-blocking — we don't wait for them to click it)
-      try { await sendEmailVerification(cred.user); } catch { /* non-fatal */ }
 
       // Save first/last name to our backend immediately. If this fails the
       // user's name never reaches the profile, so they end up on /profile/me
@@ -170,7 +183,17 @@ export default function OnboardingPage() {
         localStorage.setItem("user_name", fullName.trim());
       } catch { /* private mode / quota — non-fatal */ }
 
-      setStep(2);
+      // Send a 6-digit verification code to the email and switch to the
+      // verify-email sub-screen. We DO NOT advance to step 2 yet — that
+      // happens only after the user enters the code successfully.
+      try {
+        await api.post("/api/v1/auth/send-verification-email");
+      } catch (e: any) {
+        // Non-fatal: surface a soft warning but still let them attempt verify
+        // (they can always tap "Resend" on the next screen).
+        console.warn("Failed to send verification email:", e);
+      }
+      setStep1Mode("verify-email");
       return true;
     } catch (e: any) {
       const code = e?.code || "";
@@ -188,6 +211,49 @@ export default function OnboardingPage() {
       setLoading(false);
     }
   }, [email, fullName]);
+
+  // ─── Step 1 sub-handlers — verify email OTP / resend ─────────────────────
+
+  const handleVerifyEmailOtp = useCallback(async (code: string): Promise<boolean> => {
+    setEmailVerifyLoading(true);
+    setError("");
+    try {
+      const trimmed = code.replace(/\D/g, "").slice(0, 6);
+      if (trimmed.length !== 6) {
+        setError("Please enter the 6-digit code we emailed you.");
+        setEmailVerifyLoading(false);
+        return false;
+      }
+      await api.get(`/api/v1/auth/verify-email?token=${trimmed}`);
+      // Verified — refresh Firebase token (the backend bumped trust_score)
+      try { await firebaseAuth.currentUser?.getIdToken(true); } catch { /* non-fatal */ }
+      setStep1Mode("details"); // reset so coming back to step 1 shows form
+      setStep(2);
+      return true;
+    } catch (e: any) {
+      const detail = (e?.detail as any)?.detail || e?.message || "";
+      if (/expired|invalid/i.test(detail)) {
+        setError("That code is invalid or expired. Tap Resend to get a new one.");
+      } else {
+        setError(detail || "Could not verify the code. Please try again.");
+      }
+      return false;
+    } finally {
+      setEmailVerifyLoading(false);
+    }
+  }, []);
+
+  const handleResendEmailOtp = useCallback(async (): Promise<boolean> => {
+    setError("");
+    try {
+      await api.post("/api/v1/auth/send-verification-email");
+      return true;
+    } catch (e: any) {
+      const detail = (e?.detail as any)?.detail || e?.message || "Could not send the code. Please try again.";
+      setError(detail);
+      return false;
+    }
+  }, []);
 
   // ─── Step 2 (profile + phone link) handler ─────────────────────────────
 
@@ -309,30 +375,22 @@ export default function OnboardingPage() {
           background: "linear-gradient(180deg, rgba(26,10,20,0.6) 0%, rgba(26,10,20,0.1) 35%, rgba(26,10,20,0.15) 60%, rgba(26,10,20,0.85) 100%)",
         }} />
 
-        {/* Brand mark */}
+        {/* Brand mark — same JPEG used across the site */}
         <Link href="/" style={{
-          position: "absolute", top: 32, left: 32, zIndex: 2,
-          display: "inline-flex", alignItems: "center", gap: 10,
-          padding: "8px 12px 8px 10px",
-          background: "rgba(255,255,255,0.08)",
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 999,
-          backdropFilter: "blur(14px)",
+          position: "absolute", top: 28, left: 28, zIndex: 2,
+          display: "inline-flex", alignItems: "center",
+          padding: "6px 10px",
+          background: "rgba(255,255,255,0.92)",
+          borderRadius: 12,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.28)",
           textDecoration: "none",
         }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 8,
-            background: "linear-gradient(135deg, #ff4d79, #a0153c)",
-            display: "grid", placeItems: "center",
-          }}>
-            <Heart style={{ width: 14, height: 14, color: "#fff" }} fill="#fff" />
-          </div>
-          <span style={{
-            fontFamily: "var(--font-playfair, serif)",
-            fontSize: 15, fontWeight: 700, color: "#fff", letterSpacing: "-0.005em",
-          }}>
-            Match<span style={{ color: "#ffb9c8" }}>4</span>Marriage
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/logo.jpeg"
+            alt="Match4Marriage"
+            style={{ height: 36, width: "auto", display: "block" }}
+          />
         </Link>
 
         {/* Bottom: step indicator + copy */}
@@ -429,6 +487,11 @@ export default function OnboardingPage() {
               email={email} setEmail={setEmail}
               loading={loading}
               onSubmit={handleCreateAccount}
+              mode={step1Mode}
+              onEditDetails={() => setStep1Mode("details")}
+              onVerifyOtp={handleVerifyEmailOtp}
+              onResendOtp={handleResendEmailOtp}
+              verifyLoading={emailVerifyLoading}
             />
           )}
           {step === 2 && (
@@ -471,11 +534,17 @@ export default function OnboardingPage() {
 
 function Step1CreateAccount({
   fullName, setFullName, email, setEmail, loading, onSubmit,
+  mode, onEditDetails, onVerifyOtp, onResendOtp, verifyLoading,
 }: {
   fullName: string; setFullName: (v: string) => void;
   email: string; setEmail: (v: string) => void;
   loading: boolean;
   onSubmit: (password: string) => Promise<boolean>;
+  mode: "details" | "verify-email";
+  onEditDetails: () => void;
+  onVerifyOtp: (code: string) => Promise<boolean>;
+  onResendOtp: () => Promise<boolean>;
+  verifyLoading: boolean;
 }) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -486,6 +555,18 @@ function Step1CreateAccount({
     && password.length >= 8
     && !loading;
 
+  if (mode === "verify-email") {
+    return (
+      <Step1VerifyEmail
+        email={email}
+        onBack={onEditDetails}
+        onVerify={onVerifyOtp}
+        onResend={onResendOtp}
+        loading={verifyLoading}
+      />
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -493,7 +574,7 @@ function Step1CreateAccount({
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.35, ease: EASE }}
     >
-      <Eyebrow>Step 1 of 3</Eyebrow>
+      <Eyebrow>Your Details · Step 1 of 3</Eyebrow>
       <H2>Create your account</H2>
       <Sub>We&apos;ll use your email for important updates and as your primary sign-in.</Sub>
 
@@ -552,7 +633,7 @@ function Step1CreateAccount({
         {password.length > 0 && <PasswordStrength score={passwordStrength} />}
 
         <SubmitBtn disabled={!canSubmit} loading={loading}>
-          Continue to profile
+          Continue — verify email
         </SubmitBtn>
       </form>
 
@@ -563,6 +644,181 @@ function Step1CreateAccount({
         <Link href="/terms" style={linkStyle}>Terms</Link> and{" "}
         <Link href="/privacy" style={linkStyle}>Privacy Policy</Link>.
       </p>
+    </motion.div>
+  );
+}
+
+// ─── STEP 1 (sub-screen) — Verify email ─────────────────────────────────────
+//
+// Shown immediately after the user submits their details. Reads the 6-digit
+// code from the email and POSTs to /auth/verify-email. The backend stores
+// the code in Redis with a 10-minute TTL.
+
+function Step1VerifyEmail({
+  email, onBack, onVerify, onResend, loading,
+}: {
+  email: string;
+  onBack: () => void;
+  onVerify: (code: string) => Promise<boolean>;
+  onResend: () => Promise<boolean>;
+  loading: boolean;
+}) {
+  const [digits, setDigits] = useState<string[]>(() => Array(6).fill(""));
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendBusy, setResendBusy] = useState(false);
+  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
+
+  // Cooldown timer for the Resend button
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
+  // Auto-focus the first empty box on mount.
+  useEffect(() => {
+    inputRefs.current[0]?.focus();
+  }, []);
+
+  const code = digits.join("");
+  const canSubmit = code.length === 6 && !loading;
+
+  const handleChange = (i: number, val: string) => {
+    const ch = val.replace(/\D/g, "").slice(0, 1);
+    setDigits((prev) => {
+      const next = [...prev];
+      next[i] = ch;
+      return next;
+    });
+    if (ch && i < 5) inputRefs.current[i + 1]?.focus();
+  };
+
+  const handleKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !digits[i] && i > 0) {
+      inputRefs.current[i - 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!text) return;
+    e.preventDefault();
+    const next = Array(6).fill("").map((_, i) => text[i] || "");
+    setDigits(next);
+    inputRefs.current[Math.min(text.length, 5)]?.focus();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    await onVerify(code);
+  };
+
+  const handleResend = async () => {
+    if (resendCooldown > 0 || resendBusy) return;
+    setResendBusy(true);
+    const ok = await onResend();
+    setResendBusy(false);
+    if (ok) {
+      setDigits(Array(6).fill(""));
+      setResendCooldown(60);
+      inputRefs.current[0]?.focus();
+    }
+  };
+
+  // Mask the email for the friendly inline display: "sa***@gmail.com"
+  const maskedEmail = (() => {
+    if (!email || !email.includes("@")) return email;
+    const [local, domain] = email.split("@");
+    const head = local.slice(0, 2);
+    return `${head}${local.length > 2 ? "***" : ""}@${domain}`;
+  })();
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.35, ease: EASE }}
+    >
+      <button
+        type="button"
+        onClick={onBack}
+        style={{
+          background: "none", border: 0, padding: 0, color: "#78686e",
+          fontSize: 13, cursor: "pointer", display: "inline-flex",
+          alignItems: "center", gap: 6, marginBottom: 18,
+        }}
+      >
+        <ArrowLeft style={{ width: 13, height: 13 }} /> Back
+      </button>
+
+      <Eyebrow>Verify · Step 2 of 3</Eyebrow>
+      <H2>Check your email</H2>
+      <Sub>
+        We&apos;ve sent a 6-digit verification code to{" "}
+        <strong style={{ color: "#1a0a14" }}>{maskedEmail || "your inbox"}</strong>.
+      </Sub>
+      <p style={{ fontSize: 13, color: "#88787f", marginTop: 6, lineHeight: 1.55 }}>
+        Check your inbox (and spam folder). The code expires in 10 minutes.
+      </p>
+
+      <form onSubmit={handleSubmit} style={{ marginTop: 26 }}>
+        <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
+          {digits.map((d, i) => (
+            <input
+              key={i}
+              ref={(el) => { inputRefs.current[i] = el; }}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={1}
+              value={d}
+              onChange={(e) => handleChange(i, e.target.value)}
+              onKeyDown={(e) => handleKeyDown(i, e)}
+              onPaste={i === 0 ? handlePaste : undefined}
+              aria-label={`Digit ${i + 1}`}
+              style={{
+                width: 46, height: 56, textAlign: "center",
+                fontSize: 22, fontWeight: 600,
+                border: "1.5px solid rgba(26,10,20,0.16)",
+                borderRadius: 10,
+                background: "#fff",
+                color: "#1a0a14",
+                outline: "none",
+                fontFamily: "var(--font-nav, 'Montserrat', sans-serif)",
+              }}
+            />
+          ))}
+        </div>
+
+        <div style={{ marginTop: 22 }}>
+          <SubmitBtn disabled={!canSubmit} loading={loading}>
+            Verify &amp; Continue
+          </SubmitBtn>
+        </div>
+
+        <p style={{ fontSize: 13, color: "#78686e", textAlign: "center", marginTop: 18 }}>
+          Didn&apos;t receive it?{" "}
+          <button
+            type="button"
+            onClick={handleResend}
+            disabled={resendCooldown > 0 || resendBusy}
+            style={{
+              background: "none", border: 0, padding: 0,
+              color: resendCooldown > 0 || resendBusy ? "#bba9af" : "#dc1e3c",
+              fontWeight: 600, cursor: resendCooldown > 0 || resendBusy ? "default" : "pointer",
+              fontSize: 13,
+            }}
+          >
+            {resendBusy
+              ? "Sending..."
+              : resendCooldown > 0
+                ? `Resend in ${resendCooldown}s`
+                : "Resend OTP"}
+          </button>
+        </p>
+      </form>
     </motion.div>
   );
 }

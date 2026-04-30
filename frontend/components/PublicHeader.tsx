@@ -121,27 +121,10 @@ export default function PublicHeader({ transparent = false, transparentUntil }: 
       {/* ── Main Nav ── */}
       <nav className={`m4m-nav${transparent ? " m4m-nav--overlay" : ""}${scrolled ? " is-scrolled" : ""}${floating ? " is-floating" : ""}`}>
         <div className="m4m-nav__row max-w-7xl mx-auto px-4 sm:px-6">
-          {/* Logo — JPEG when solid, typographic wordmark when floating */}
+          {/* Logo — single JPEG mark, used on every page (including the
+              cinematic homepage hero). */}
           <Link href="/" className="m4m-nav__logo" aria-label="Match4Marriage home">
             <img className="m4m-nav__logo-img" src="/images/logo.jpeg" alt="Match4Marriage" />
-            <span className="m4m-nav__logo-wordmark font-display" aria-hidden>
-              Match
-              <em
-                className="font-display-alt"
-                style={{
-                  fontStyle: "italic",
-                  fontWeight: 500,
-                  background: "linear-gradient(135deg, #FFE4A8 0%, #FFB347 50%, #FFD87A 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                  margin: "0 2px",
-                }}
-              >
-                4
-              </em>
-              Marriage
-            </span>
           </Link>
 
           {/* Desktop nav (centre column — auto-centred regardless of side widths).

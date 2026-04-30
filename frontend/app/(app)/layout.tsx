@@ -86,12 +86,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarName, setSidebarName] = useState("");
   const [sidebarInitial, setSidebarInitial] = useState("");
   const [sidebarTrustScore, setSidebarTrustScore] = useState<number | null>(null);
+  const [sidebarPlan, setSidebarPlan] = useState<string>("Basic");
   // Same hook PublicHeader uses; keeps the sidebar avatar in lock-step
   // with the top-bar avatar after a primary-photo change.
   const sidebarPhotoUrl = useProfilePhoto();
 
-  // Auth guard: if Firebase says no user, send to onboarding.
-  // If user exists but has no backend profile, also send to onboarding.
+  // Auth + verification gate. Sends the user back to /onboarding if any
+  // of the three required steps is missing:
+  //   1. Backend profile bootstrap (first_name set after step 1)
+  //   2. Phone verified (Firebase user.phoneNumber populated by step 2)
+  //   3. ID uploaded (profile.visa_status === "id_uploaded" after step 3)
+  // Per the product brief: dashboard access is only unlocked once all
+  // three gates are cleared.
   useEffect(() => {
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
       if (!user) { router.replace("/onboarding"); return; }
@@ -101,6 +107,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         const p = (res.data as any)?.data;
         const hasProfile = !!(p && p.first_name && p.first_name.trim());
         if (!hasProfile) { router.replace("/onboarding"); return; }
+
+        const hasPhone = !!(user.phoneNumber && user.phoneNumber.trim());
+        if (!hasPhone) { router.replace("/onboarding"); return; }
+
+        const idUploaded = p?.visa_status === "id_uploaded";
+        if (!idUploaded) { router.replace("/onboarding"); return; }
       } catch {
         // backend unreachable — leave user on page
       }
@@ -130,6 +142,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         if (d?.total !== undefined) setSidebarTrustScore(d.total);
         else if (d?.trust_score !== undefined) setSidebarTrustScore(d.trust_score);
       } catch { /* ignore */ }
+
+      // Resolve current subscription tier — `users.subscription_tier` returns
+      // free/silver/gold/platinum; we map that to the plan label users see in
+      // /pricing (Basic / Premium / Elite / VIP Concierge). Falls back to
+      // "Basic" so the badge isn't blank during the brief load window.
+      try {
+        const res = await profileApi.me();
+        const p = (res.data as any)?.data ?? res.data;
+        const tier = String(p?.subscription_tier || "free").toLowerCase();
+        const tierToLabel: Record<string, string> = {
+          free: "Basic",
+          silver: "Premium",
+          gold: "Elite",
+          platinum: "VIP Concierge",
+        };
+        setSidebarPlan(tierToLabel[tier] || "Basic");
+      } catch { /* leave default */ }
     }
     loadSidebar();
   }, [pathname]);
@@ -235,15 +264,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Gold plan badge */}
+        {/* Current plan badge — reflects the user's actual subscription_tier
+            (Basic, Premium, Elite, VIP). The Basic tier is the default for
+            new accounts (free for the first 3 months per /pricing). */}
         {!collapsed && (
           <div className="px-4 pt-3">
             <div
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
-              style={{ background: "rgba(200,144,32,0.12)", border: "1px solid rgba(200,144,32,0.25)" }}
+              style={{ background: "rgba(220,30,60,0.10)", border: "1px solid rgba(220,30,60,0.25)" }}
             >
-              <StarIcon className="w-3 h-3" style={{ color: "#C89020", fill: "#C89020" }} />
-              <span className="text-xs font-bold" style={{ color: "#C89020" }}>Gold Plan</span>
+              <StarIcon className="w-3 h-3" style={{ color: "#dc1e3c", fill: "#dc1e3c" }} />
+              <span className="text-xs font-bold" style={{ color: "#ffd4dc" }}>{sidebarPlan} Plan</span>
               <span className="ml-auto text-[10px]" style={{ color: "rgba(255,255,255,0.35)" }}>Active</span>
             </div>
           </div>

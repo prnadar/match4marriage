@@ -16,7 +16,6 @@ import { MissingFieldsModal } from "./_components/MissingFieldsModal";
 import { PhotoGrid } from "./_components/PhotoGrid";
 import { SavedPill } from "./_components/SavedPill";
 import { PartnerPrefsVisual } from "./_components/PartnerPrefsVisual";
-import { KundaliCard } from "./_components/KundaliCard";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -63,12 +62,12 @@ const INCOME_OPTIONS = [
 ];
 
 const INTERESTS_CONFIG: Record<string, string[]> = {
-  Music:   ["Film Music","Devotional","Western Music","Hindi Songs","Tamil Songs","Malayalam Songs","Classical"],
+  Music:   ["Film Music","Devotional","Western Music","Classical"],
   Reading: ["Newspapers","Self Help","Management","Classics","Biographies","Romance","Thrillers","Magazines"],
-  Movies:  ["Malayalam","English","Hindi","Tamil","Comedy","Romance","Action","Family Stories","Documentaries"],
+  Movies:  ["English","Tamil/Regional","Comedy","Romance","Action","Family Stories","Documentaries"],
   Sports:  ["Cricket","Football","Tennis","Badminton","Board Games","Basketball","Swimming","Running","Gym"],
-  Foods:   ["Kerala","North Indian","South Indian","Chinese","Continental","Thai","Anything"],
-  Dress:   ["Indian Traditional","Indo Western","Casual","Formal","No Preference"],
+  Foods:   ["North Indian","South Indian","Chinese","Continental","Thai","Anything"],
+  Dress:   ["Indian Traditional","Indo Western","Western Wear","Casual","Formal","No Preference"],
 };
 
 const VERIFICATIONS = [
@@ -966,7 +965,7 @@ function GeneralTab({
 
         <TwoCol style={{ marginTop: 16 }}>
           <Field label="Height" required>
-            <FSelect value={form.height} onChange={(v) => update("height", v)} placeholder="e.g. 5ft 8in">
+            <FSelect value={form.height} onChange={(v) => update("height", v)} placeholder="Select">
               {HEIGHTS.map((h) => <option key={h} value={h}>{h}</option>)}
             </FSelect>
           </Field>
@@ -996,7 +995,7 @@ function GeneralTab({
         </TwoCol>
 
         <div style={{ marginTop: 16 }}>
-          <Field label="About Me">
+          <Field label="About Me" required>
             <FTextarea
               value={form.aboutMe}
               onChange={(v) => update("aboutMe", v)}
@@ -1027,7 +1026,7 @@ function GeneralTab({
             <FInput value={form.subCaste} onChange={(v) => update("subCaste", v)} placeholder="e.g. Kiriyathil Nair" />
           </Field>
           <Field label="Star / Nakshatra">
-            <FSelect value={form.star} onChange={(v) => update("star", v)} placeholder="e.g. Ashwini">
+            <FSelect value={form.star} onChange={(v) => update("star", v)} placeholder="Select">
               {NAKSHATRAS.map((n) => <option key={n} value={n}>{n}</option>)}
             </FSelect>
           </Field>
@@ -1038,15 +1037,6 @@ function GeneralTab({
           </Field>
         </TwoCol>
       </SubSection>
-
-      {/* Kundali / Horoscope display */}
-      <KundaliCard
-        birthDay={form.dobDay}
-        birthMonth={form.dobMonth}
-        birthYear={form.dobYear}
-        nakshatra={form.star}
-        chovvaDosham={form.chovvaDosham}
-      />
 
       {/* Location & Lifestyle */}
       <SubSection title="Location & Lifestyle">

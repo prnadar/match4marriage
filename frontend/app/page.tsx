@@ -346,7 +346,7 @@ export default function HomePage() {
               textTransform: "uppercase",
               fontFamily: "var(--font-body, 'Inter', sans-serif)",
             }}>
-              Founded 2020 · Hand-picked · Family-rated 4.9
+              Founded 2023 · Hand-picked · Family-rated 4.9
             </p>
           </div>
         </div>

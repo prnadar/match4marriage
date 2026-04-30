@@ -40,9 +40,8 @@ _EMAIL_TOKEN_PREFIX  = "email_verify:"
 
 
 def _generate_email_token() -> str:
-    """Generate a 6-character uppercase alphanumeric token."""
-    alphabet = string.ascii_uppercase + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(_EMAIL_TOKEN_LEN))
+    """Generate a 6-digit numeric verification code (e.g. 248913)."""
+    return "".join(secrets.choice(string.digits) for _ in range(_EMAIL_TOKEN_LEN))
 
 
 # ── Existing endpoints ────────────────────────────────────────────────────────
@@ -520,7 +519,7 @@ async def send_verification_email_endpoint(
 
 @router.get("/verify-email", response_model=APIResponse[dict])
 async def verify_email_endpoint(
-    token: str = Query(..., min_length=6, max_length=6, description="6-character verification token"),
+    token: str = Query(..., min_length=6, max_length=6, description="6-digit verification code"),
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
     """

@@ -276,29 +276,19 @@ export default function LoginPage() {
           }}
         >
           <Link href="/" style={{
-            display: "inline-flex", alignItems: "center", gap: 10,
-            padding: "8px 12px 8px 10px",
-            background: "rgba(255,255,255,0.08)",
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 999,
-            backdropFilter: "blur(14px)",
-            WebkitBackdropFilter: "blur(14px)",
+            display: "inline-flex", alignItems: "center",
+            padding: "6px 10px",
+            background: "rgba(255,255,255,0.92)",
+            borderRadius: 12,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.28)",
             textDecoration: "none",
           }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: 8,
-              background: "linear-gradient(135deg, #ff4d79, #a0153c)",
-              display: "grid", placeItems: "center",
-            }}>
-              <Heart style={{ width: 14, height: 14, color: "#fff" }} fill="#fff" />
-            </div>
-            <span style={{
-              fontFamily: "var(--font-playfair, serif)",
-              fontSize: 15, fontWeight: 700, color: "#fff",
-              letterSpacing: "-0.005em",
-            }}>
-              Match<span style={{ color: "#ffb9c8" }}>4</span>Marriage
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/logo.jpeg"
+              alt="Match4Marriage"
+              style={{ height: 34, width: "auto", display: "block" }}
+            />
           </Link>
         </motion.div>
 

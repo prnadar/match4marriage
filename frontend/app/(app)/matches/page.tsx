@@ -53,7 +53,7 @@ const AGE_RANGES: Array<{ label: string; lo: number; hi: number }> = [
   { label: "28–32", lo: 28, hi: 32 },
   { label: "32+",   lo: 32, hi: 99 },
 ];
-const CITIES = ["All", "London", "Birmingham", "Manchester", "Mumbai", "Delhi", "Bangalore", "Chennai"];
+const COUNTRIES = ["All", "United Kingdom", "India", "United States", "Canada", "Australia", "UAE", "Singapore", "New Zealand"];
 
 /* ── Page ───────────────────────────────────────────────────────────── */
 
@@ -61,7 +61,7 @@ export default function MatchesPage() {
   const [search, setSearch] = useState("");
   const [religion, setReligion] = useState("All");
   const [ageLabel, setAgeLabel] = useState("All");
-  const [city, setCity] = useState("All");
+  const [country, setCountry] = useState("All");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
 
@@ -75,7 +75,7 @@ export default function MatchesPage() {
     try {
       const params: Record<string, string> = {};
       if (religion !== "All") params.religion = religion;
-      if (city !== "All") params.city = city;
+      if (country !== "All") params.country = country;
       if (verifiedOnly) params.verified = "true";
 
       const res = await matchApi.browseProfiles(params);
@@ -89,7 +89,7 @@ export default function MatchesPage() {
     } finally {
       setLoading(false);
     }
-  }, [religion, city, verifiedOnly]);
+  }, [religion, country, verifiedOnly]);
 
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
 
@@ -128,7 +128,7 @@ export default function MatchesPage() {
   const activeFilterCount =
     (religion !== "All" ? 1 : 0) +
     (ageLabel !== "All" ? 1 : 0) +
-    (city !== "All" ? 1 : 0) +
+    (country !== "All" ? 1 : 0) +
     (verifiedOnly ? 1 : 0);
 
   return (
@@ -158,7 +158,7 @@ export default function MatchesPage() {
             <Search className="h-4 w-4 text-rose-700/60" />
             <input
               type="text"
-              placeholder="Search by name, city, or profession…"
+              placeholder="Search by name, country, or profession…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-11 flex-1 bg-transparent text-[14px] text-[#1a0a14] outline-none placeholder:text-rose-700/40"
@@ -204,7 +204,7 @@ export default function MatchesPage() {
           <div className="fade-in-up mb-7 space-y-3" style={{ animationDelay: "100ms" }}>
             <ChipRow label="Religion"   options={RELIGIONS}                         value={religion} onChange={setReligion} />
             <ChipRow label="Age"        options={AGE_RANGES.map((r) => r.label)}    value={ageLabel} onChange={setAgeLabel} />
-            <ChipRow label="City"       options={CITIES}                            value={city}     onChange={setCity} />
+            <ChipRow label="Country"    options={COUNTRIES}                         value={country}  onChange={setCountry} />
           </div>
         )}
 
@@ -266,7 +266,7 @@ export default function MatchesPage() {
                     variant="outline"
                     size="md"
                     onClick={() => {
-                      setReligion("All"); setAgeLabel("All"); setCity("All"); setVerifiedOnly(false); setSearch("");
+                      setReligion("All"); setAgeLabel("All"); setCountry("All"); setVerifiedOnly(false); setSearch("");
                     }}
                   >
                     Clear filters
