@@ -16,6 +16,7 @@ from sqlalchemy import func, select, text as sa_text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.database import get_db
 from app.core.logging import get_logger
@@ -536,13 +537,14 @@ async def add_my_photo(
     if not url or not key:
         raise HTTPException(status_code=400, detail="url and key required")
     profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
-    photos = list(profile.photos or [])
+    photos = [dict(p) for p in (profile.photos or [])]
     is_primary = bool(payload.get("is_primary")) or len(photos) == 0
     if is_primary:
         for p in photos:
             p["is_primary"] = False
     photos.append({"url": url, "key": key, "is_primary": is_primary})
     profile.photos = photos
+    flag_modified(profile, "photos")
     profile.completeness_score = compute_profile_completeness(profile)
     await db.flush()
     await db.refresh(profile)
@@ -558,10 +560,11 @@ async def delete_my_photo(
 ):
     from app.services.storage import delete_photo
     profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
-    photos = [p for p in (profile.photos or []) if p.get("key") != key]
+    photos = [dict(p) for p in (profile.photos or []) if p.get("key") != key]
     if photos and not any(p.get("is_primary") for p in photos):
         photos[0]["is_primary"] = True
     profile.photos = photos
+    flag_modified(profile, "photos")
     profile.completeness_score = compute_profile_completeness(profile)
     try:
         delete_photo(key)
@@ -588,7 +591,7 @@ async def reorder_my_photos(
     if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
         raise HTTPException(status_code=400, detail="keys must be a list of strings")
     profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
-    existing = list(profile.photos or [])
+    existing = [dict(p) for p in (profile.photos or [])]
     by_key: dict[str, dict] = {p.get("key"): p for p in existing if p.get("key")}
 
     seen: set[str] = set()
@@ -611,6 +614,7 @@ async def reorder_my_photos(
         p["is_primary"] = (i == 0)
 
     profile.photos = ordered
+    flag_modified(profile, "photos")
     await db.flush()
     await db.refresh(profile)
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
@@ -627,7 +631,12 @@ async def set_primary_photo(
     if not key:
         raise HTTPException(status_code=400, detail="key required")
     profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
-    photos = list(profile.photos or [])
+    # Deep-copy each photo so SQLAlchemy sees the column as a new value.
+    # JSON columns don't track in-place dict mutations; setting
+    # `profile.photos = new_list` where new_list contains the same dict refs
+    # leaves the ORM thinking nothing changed → no UPDATE → set-primary
+    # silently no-ops. Rebuilding the dicts breaks that aliasing.
+    photos = [dict(p) for p in (profile.photos or [])]
     found = False
     for p in photos:
         is_match = p.get("key") == key
@@ -637,6 +646,7 @@ async def set_primary_photo(
     if not found:
         raise HTTPException(status_code=404, detail="Photo not found")
     profile.photos = photos
+    flag_modified(profile, "photos")
     await db.flush()
     await db.refresh(profile)
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
