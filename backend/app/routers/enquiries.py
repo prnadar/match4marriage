@@ -191,8 +191,10 @@ async def admin_list_enquiries(
         ))
 
     if (format or "").lower() == "csv":
+        # Hard cap so a wide query (e.g. q=*) can't load millions of rows
+        # into memory and OOM the worker.
         rows_csv = (await db.execute(
-            base.order_by(Enquiry.created_at.desc())
+            base.order_by(Enquiry.created_at.desc()).limit(50_000)
         )).scalars().all()
         return _stream_csv(
             "enquiries.csv", ENQUIRIES_CSV_COLS,

@@ -157,15 +157,17 @@ export const profileApi = {
     const data = args.length === 2 ? args[1] : args[0];
     return api.patch("/api/v1/profile/me", data);
   },
-  upsertOnboarding: (data: unknown) => api.post("/api/v1/profile/onboarding", data),
   submitForReview: () => api.post("/api/v1/profile/me/submit", {}),
   getTrustScore: () => api.get("/api/v1/profile/trust-score"),
   /** Backend: GET /profile/me/completion → { score, sections: {...}, missing: [...] } */
   getCompletion: () => api.get("/api/v1/profile/me/completion"),
-  /** Photo upload pre-signed URL (S3/Cloudinary direct upload). */
-  getPhotoUploadUrl: (filename: string, contentType: string) =>
-    api.post("/api/v1/profile/photos/upload-url", { filename, content_type: contentType }),
-  attachPhoto: (key: string) => api.post("/api/v1/profile/me/photos", { key }),
+  // Photo upload happens via direct calls to `api.post` in PhotoGrid:
+  //   POST /profile/photos/upload-url?content_type=...   (no body)
+  //   POST /profile/me/photos { url, key }
+  // We deliberately don't expose helpers for those — the misalignment between
+  // the helper signatures and the real endpoints had already produced two
+  // contract-mismatch bugs (helper used `{filename, content_type}` body vs
+  // a query param; another sent `{key}` to an endpoint expecting `{url,key}`).
   removePhoto: (key: string) =>
     api.delete(`/api/v1/profile/me/photos?key=${encodeURIComponent(key)}`),
   reorderPhotos: (keys: string[]) =>

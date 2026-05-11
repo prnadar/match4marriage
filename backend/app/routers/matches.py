@@ -13,6 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.database import get_db
 from app.core.logging import get_logger
@@ -260,6 +261,7 @@ async def submit_quiz(
     payload: QuizSubmitRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
 ):
     """Submit personality quiz. Computes Big Five scores. Upserts PersonalityScore row."""
     user_id = _get_user_uuid(current_user)
@@ -277,8 +279,9 @@ async def submit_quiz(
     ps = result.scalar_one_or_none()
 
     if ps is None:
+        tenant_uuid = await _resolve_tenant(db, tenant_slug)
         ps = PersonalityScore(
-            tenant_id=uuid.uuid4(),  # resolved in Sprint 2
+            tenant_id=tenant_uuid,
             user_id=user_id,
         )
         db.add(ps)
@@ -288,6 +291,9 @@ async def submit_quiz(
 
     ps.quiz_responses = payload.responses
     ps.quiz_version = payload.quiz_version
+    # JSON column doesn't track in-place changes; force-mark dirty so the
+    # updated responses actually persist when the row already exists.
+    flag_modified(ps, "quiz_responses")
     await db.flush()
 
     logger.info("quiz_submitted", user_id=str(user_id))

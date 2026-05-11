@@ -131,9 +131,10 @@ async def list_users(
             func.lower(UserProfile.last_name).like(ql),
         ))
 
-    # CSV streams the *filtered* set, ignoring page/limit.
+    # CSV streams the *filtered* set, ignoring page/limit, with a hard cap
+    # to keep an unbounded export from OOMing the worker.
     if (format or "").lower() == "csv":
-        rows = (await db.execute(base.order_by(User.created_at.desc()))).all()
+        rows = (await db.execute(base.order_by(User.created_at.desc()).limit(50_000))).all()
         return _stream_csv(
             filename="users.csv",
             cols=USER_CSV_COLS,

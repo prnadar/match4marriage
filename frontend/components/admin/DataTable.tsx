@@ -270,6 +270,8 @@ export default function DataTable<T extends Record<string, any>>({
         </div>
         <div className="flex items-center gap-1">
           <button
+            type="button"
+            aria-label="Previous page"
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={page === 0}
             className="p-1.5 rounded-lg hover:bg-blush disabled:opacity-30 transition-colors"
@@ -302,6 +304,8 @@ export default function DataTable<T extends Record<string, any>>({
             );
           })}
           <button
+            type="button"
+            aria-label="Next page"
             onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
             disabled={page >= totalPages - 1}
             className="p-1.5 rounded-lg hover:bg-blush disabled:opacity-30 transition-colors"

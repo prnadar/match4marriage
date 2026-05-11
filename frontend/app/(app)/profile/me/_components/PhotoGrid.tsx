@@ -281,9 +281,22 @@ export function PhotoGrid() {
         )}
       </div>
 
-      {/* Upload zone */}
+      {/* Upload zone — div (rather than button) because it also acts as a
+          drag-drop target. We add role="button" + keyboard handlers so
+          keyboard-only users can still trigger the file picker. */}
       <div
+        role="button"
+        tabIndex={remaining === 0 ? -1 : 0}
+        aria-disabled={remaining === 0}
+        aria-label={remaining === 0 ? "Photo slots full" : `Upload photo (${remaining} slot${remaining === 1 ? "" : "s"} remaining)`}
         onClick={() => remaining > 0 && fileInputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (remaining === 0) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
         onDragOver={(e) => { e.preventDefault(); setZoneActive(true); }}
         onDragLeave={() => setZoneActive(false)}
         onDrop={(e) => { e.preventDefault(); setZoneActive(false); handleFiles(e.dataTransfer.files); }}

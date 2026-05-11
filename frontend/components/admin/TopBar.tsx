@@ -24,10 +24,17 @@ export default function TopBar({ title, subtitle, actions }: TopBarProps) {
       </div>
       <div className="flex items-center gap-3">
         {actions}
-        <button className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition-colors">
+        <button
+          type="button"
+          aria-label="Notifications"
+          className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition-colors"
+        >
           <Bell className="w-4 h-4" />
         </button>
-        <div className="w-8 h-8 rounded-xl bg-rose/20 flex items-center justify-center text-rose">
+        <div
+          className="w-8 h-8 rounded-xl bg-rose/20 flex items-center justify-center text-rose"
+          aria-label="Signed in"
+        >
           <User className="w-4 h-4" />
         </div>
       </div>

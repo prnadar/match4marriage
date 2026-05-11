@@ -1003,8 +1003,8 @@ async def update_profile(
 
 @router.post("/photos/upload-url", response_model=APIResponse[dict])
 async def get_photo_upload_url(
+    current_user: Annotated[dict, Depends(get_current_user)],
     content_type: str = Query(..., pattern=r"^image/(jpeg|jpg|png|webp)$"),
-    current_user: Annotated[dict, Depends(get_current_user)] = None,
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
     ext_map = {"image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp"}

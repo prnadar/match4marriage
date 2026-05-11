@@ -67,10 +67,13 @@ async def file_report(
     db.add(report)
     await db.flush()
 
-    # Check if reported user has 3+ open reports → auto-suspend
+    # Check if reported user has 3+ open reports within this tenant → auto-suspend.
+    # Without the tenant_id filter the count spans all tenants, so reports
+    # in tenant A could trigger a suspension on a same-UUID user in tenant B.
     count_result = await db.execute(
-        select(func.count()).where(
+        select(func.count()).select_from(Report).where(
             Report.reported_user_id == payload.reported_user_id,
+            Report.tenant_id == tenant_uuid,
             Report.status == ReportStatus.OPEN,
             Report.deleted_at.is_(None),
         )

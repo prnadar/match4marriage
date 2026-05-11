@@ -130,8 +130,9 @@ async def list_payments(
         ))
 
     if (format or "").lower() == "csv":
+        # Hard cap on CSV exports to bound worker memory.
         rows = (await db.execute(
-            base.order_by(CreditTransaction.created_at.desc())
+            base.order_by(CreditTransaction.created_at.desc()).limit(50_000)
         )).all()
         def to_dict(tx, u, p):
             return {

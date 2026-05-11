@@ -33,11 +33,23 @@ export default function ConfirmModal({
       : "btn-primary";
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-modal-title"
+      aria-describedby="confirm-modal-message"
+      className="fixed inset-0 z-[90] flex items-center justify-center p-4"
+    >
+      <div
+        className="absolute inset-0 bg-black/40"
+        onClick={onCancel}
+        aria-hidden="true"
+      />
       <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-float-in">
         <button
+          type="button"
           onClick={onCancel}
+          aria-label="Close dialog"
           className="absolute top-4 right-4 text-deep/30 hover:text-deep transition-colors"
         >
           <X className="w-5 h-5" />
@@ -56,8 +68,8 @@ export default function ConfirmModal({
             />
           </div>
           <div className="flex-1">
-            <h3 className="font-display text-lg font-semibold text-deep">{title}</h3>
-            <p className="font-body text-sm text-muted mt-1">{message}</p>
+            <h3 id="confirm-modal-title" className="font-display text-lg font-semibold text-deep">{title}</h3>
+            <p id="confirm-modal-message" className="font-body text-sm text-muted mt-1">{message}</p>
           </div>
         </div>
 
