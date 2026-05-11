@@ -107,8 +107,11 @@ const config: Config = {
         },
       },
       fontFamily: {
-        // Brand stack — Cinzel headings, Montserrat for nav/CTAs, Open Sans body
-        display:     ["Cinzel", "Playfair Display", "Georgia", "serif"],
+        // Brand stack — Playfair Display headings (mixed case), Montserrat
+        // for nav/CTAs, Open Sans body. Cinzel was removed: it's a Roman-
+        // capitals-only typeface so headings forced into ALL CAPS regardless
+        // of the source string.
+        display:     ["Playfair Display", "Fraunces", "Georgia", "serif"],
         nav:         ["Montserrat", "Inter", "system-ui", "sans-serif"],
         editorial:   ["Cormorant", "Playfair Display", "Georgia", "serif"],
         script:      ["Great Vibes", "cursive"],
