@@ -67,7 +67,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
         if header_val := request.headers.get(settings.TENANT_HEADER):
             return header_val.lower()
 
-        # 2. Subdomain: bandhan.in → default, bureau-xyz.bandhan.in → bureau-xyz
+        # 2. Subdomain: match4marriage.com → default, bureau-xyz.match4marriage.com → bureau-xyz
         host = request.headers.get("host", "").split(":")[0]
         parts = host.split(".")
         if len(parts) >= 3:

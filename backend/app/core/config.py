@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     # ── AWS / S3 (legacy) ──────────────────────────────────────────────
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
-    AWS_S3_BUCKET: str = "bandhan-media-dev"
+    AWS_S3_BUCKET: str = "match4marriage-media-dev"
     AWS_REGION: str = "ap-south-1"
     AWS_CLOUDFRONT_DOMAIN: str = ""
 
@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     PINECONE_API_KEY: str = ""
-    PINECONE_INDEX: str = "bandhan-profiles"
+    PINECONE_INDEX: str = "match4marriage-profiles"
 
     # ── VedAstro (Kundali matching) ──────────────────────────────────────
     VEDASTRO_API_KEY: str = "FreeAPIUser"

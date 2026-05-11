@@ -5,8 +5,8 @@ global diaspora. Curated introductions, verified profiles, and a family-first
 workflow — built as a monorepo with a Next.js web app, a FastAPI backend, and
 an Expo React Native mobile app.
 
-> Codename in earlier docs and a handful of database fields: **Bandhan**.
-> Public product name is **Match4Marriage**.
+Both the web frontend and the FastAPI backend deploy to **Vercel**. The
+database lives on **Neon**. No Docker, Railway, or Render involved.
 
 ---
 
@@ -15,10 +15,9 @@ an Expo React Native mobile app.
 ```text
 match4marriage/
 ├── frontend/        Next.js 15 web app (App Router, TypeScript, Tailwind)
-├── backend/         FastAPI service (Python 3.12, SQLAlchemy async, Alembic)
+├── backend/         FastAPI service (Python 3.12) — runs on Vercel Python
 ├── mobile/          Expo / React Native app (EAS build)
-├── infra/           One-shot DB bootstrap SQL (extensions, etc.)
-└── docker-compose.yml
+└── infra/           One-shot DB bootstrap SQL (Postgres extensions)
 ```
 
 | Layer    | Stack                                                          |
@@ -61,11 +60,9 @@ npm install
 npx expo start
 ```
 
-Local infra via Docker:
-
-```bash
-docker compose up -d postgres redis
-```
+For local Postgres, the simplest path is to point `DATABASE_URL` at a free
+Neon branch (matches production exactly). Redis is optional in dev — the
+backend falls back to `fakeredis` when `REDIS_URL` is unset.
 
 ---
 
@@ -98,7 +95,7 @@ the secrets section below.
 | Variable                                  | Purpose                            |
 |-------------------------------------------|------------------------------------|
 | `NEXT_PUBLIC_API_URL`                     | Backend base URL                   |
-| `NEXT_PUBLIC_TENANT_ID`                   | `match4marriage` (or `bandhan`)    |
+| `NEXT_PUBLIC_TENANT_ID`                   | `match4marriage`                   |
 | `NEXT_PUBLIC_FIREBASE_API_KEY`            | Firebase web SDK                   |
 | `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`        | …                                  |
 | `NEXT_PUBLIC_FIREBASE_PROJECT_ID`         | …                                  |
@@ -124,7 +121,7 @@ be committed.
            └───────────────┬───────────┴───────────────────────────┘
                            ▼
                 ┌─────────────────────────┐
-                │  FastAPI (Railway)      │
+                │  FastAPI (Vercel)       │
                 │  /api/v1/*              │
                 │  /api/v1/ws/chat/{id}   │
                 └────────────┬────────────┘
@@ -184,28 +181,43 @@ speculative decoding of multiple candidate keys.
 
 ## Deployment
 
-| Service  | Host                | Trigger              |
-|----------|---------------------|----------------------|
-| Frontend | Vercel              | Push to `main`       |
-| Backend  | Railway (or Render) | Push to `main`       |
-| Mobile   | EAS Build           | `eas build` manually |
-| DB       | Neon                | Managed              |
+| Service  | Host             | Trigger              |
+|----------|------------------|----------------------|
+| Frontend | Vercel           | Push to `main`       |
+| Backend  | Vercel (Python)  | Push to `main`       |
+| Mobile   | EAS Build        | `eas build` manually |
+| DB       | Neon             | Managed              |
 
-### Deploy backend (Railway)
+Both Vercel projects live in the same repo. The frontend project's root
+is `frontend/`; the backend project's root is `backend/` and is configured
+by `backend/vercel.json` to route every request to `backend/api/index.py`
+(an `@vercel/python` lambda that mounts the FastAPI app).
+
+### One-time DB bootstrap (run once against your Neon database)
+
+Open the Neon SQL editor and paste the contents of [`infra/init.sql`](infra/init.sql).
+That installs the Postgres extensions Alembic migrations expect. Then,
+locally:
 
 ```bash
 cd backend
-railway login
-railway init                              # create project: match4marriage-api
-railway add --plugin postgresql           # adds Postgres, sets DATABASE_URL
-railway variables set SECRET_KEY=$(openssl rand -hex 32)
-railway variables set ENVIRONMENT=production
-railway variables set ALLOWED_ORIGINS=https://match4marriage.com,https://<vercel-url>
-railway variables set FIREBASE_PROJECT_ID=…
-railway variables set FIREBASE_CLIENT_EMAIL=…
-railway variables set FIREBASE_PRIVATE_KEY=…     # preserve \n in the PEM
-railway up
-railway run alembic upgrade head
+source .venv/bin/activate
+DATABASE_URL=<your-neon-url> alembic upgrade head
+```
+
+### Deploy backend (Vercel)
+
+```bash
+cd backend
+npx vercel link                                  # create project: match4marriage-api
+npx vercel env add DATABASE_URL production       # paste the Neon connection string
+npx vercel env add SECRET_KEY production         # any 64+ char random string
+npx vercel env add ENVIRONMENT production        # production
+npx vercel env add ALLOWED_ORIGINS production    # https://match4marriage.com,https://<web-url>
+npx vercel env add FIREBASE_PROJECT_ID production
+npx vercel env add FIREBASE_CLIENT_EMAIL production
+npx vercel env add FIREBASE_PRIVATE_KEY production   # the long PEM string, preserve \n
+npx vercel --prod
 ```
 
 Smoke test: `curl https://<api-url>/health` → `{ "status": "ok" }`.
@@ -215,7 +227,8 @@ Smoke test: `curl https://<api-url>/health` → `{ "status": "ok" }`.
 ```bash
 cd frontend
 npx vercel link
-npx vercel env add NEXT_PUBLIC_API_URL production
+npx vercel env add NEXT_PUBLIC_API_URL production         # https://<api-url>
+npx vercel env add NEXT_PUBLIC_TENANT_ID production       # match4marriage
 npx vercel env add NEXT_PUBLIC_FIREBASE_API_KEY production
 # …repeat for every NEXT_PUBLIC_FIREBASE_* var…
 npx vercel --prod

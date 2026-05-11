@@ -235,7 +235,6 @@ def _roles_from_claims(claims: dict[str, Any]) -> list[str]:
     candidates = (
         claims.get("roles"),
         claims.get("role"),
-        claims.get("https://bandhan.in/roles"),
         claims.get("https://match4marriage.com/roles"),
     )
     for c in candidates:

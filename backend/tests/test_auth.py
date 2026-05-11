@@ -13,7 +13,7 @@ async def test_register_valid_phone(client: AsyncClient):
         response = await client.post(
             "/api/v1/auth/register",
             json={"phone": "9876543210", "country_code": "+91"},
-            headers={"X-Tenant-ID": "bandhan"},
+            headers={"X-Tenant-ID": "match4marriage"},
         )
     assert response.status_code == 200
     body = response.json()
@@ -27,7 +27,7 @@ async def test_register_invalid_phone(client: AsyncClient):
     response = await client.post(
         "/api/v1/auth/register",
         json={"phone": "123", "country_code": "+91"},
-        headers={"X-Tenant-ID": "bandhan"},
+        headers={"X-Tenant-ID": "match4marriage"},
     )
     assert response.status_code == 422
 
@@ -39,7 +39,7 @@ async def test_register_otp_send_failure(client: AsyncClient):
         response = await client.post(
             "/api/v1/auth/register",
             json={"phone": "9876543210", "country_code": "+91"},
-            headers={"X-Tenant-ID": "bandhan"},
+            headers={"X-Tenant-ID": "match4marriage"},
         )
     assert response.status_code == 503
 
@@ -51,7 +51,7 @@ async def test_verify_otp_invalid(client: AsyncClient):
         response = await client.post(
             "/api/v1/auth/verify-otp",
             json={"phone": "9876543210", "otp": "000000"},
-            headers={"X-Tenant-ID": "bandhan"},
+            headers={"X-Tenant-ID": "match4marriage"},
         )
     assert response.status_code == 400
     assert "Invalid or expired OTP" in response.json()["detail"]
@@ -63,7 +63,7 @@ async def test_verify_otp_non_digit(client: AsyncClient):
     response = await client.post(
         "/api/v1/auth/verify-otp",
         json={"phone": "9876543210", "otp": "abc123"},
-        headers={"X-Tenant-ID": "bandhan"},
+        headers={"X-Tenant-ID": "match4marriage"},
     )
     assert response.status_code == 422
 

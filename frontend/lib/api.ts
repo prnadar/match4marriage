@@ -6,7 +6,7 @@ const BASE = process.env.NEXT_PUBLIC_API_URL || "";
 // misconfigured to anything else (e.g. "Year") would otherwise
 // cause the backend to crash trying to cast it to UUID.
 const RAW_TENANT = (process.env.NEXT_PUBLIC_TENANT_ID || "").toLowerCase();
-const ALLOWED_TENANTS = new Set(["bandhan", "match4marriage"]);
+const ALLOWED_TENANTS = new Set(["match4marriage"]);
 const TENANT = ALLOWED_TENANTS.has(RAW_TENANT) ? RAW_TENANT : "match4marriage";
 
 // Surface a useful diagnostic if the API URL was never configured. Loud once

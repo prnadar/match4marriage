@@ -129,7 +129,7 @@ class Message(TenantModel):
         Enum(MessageType), nullable=False, default=MessageType.TEXT
     )
 
-    # Encrypted content — Bandhan cannot read this (Signal Protocol)
+    # Encrypted content — the server cannot read this (Signal Protocol)
     encrypted_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     encryption_key_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
