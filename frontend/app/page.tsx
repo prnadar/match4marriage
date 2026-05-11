@@ -241,11 +241,10 @@ export default function HomePage() {
               display: "inline-flex",
               alignItems: "center",
               gap: 14,
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.32em",
-              color: "rgba(255,220,180,0.85)",
-              textTransform: "uppercase",
+              fontSize: 12,
+              fontWeight: 600,
+              letterSpacing: "0.14em",
+              color: "rgba(255,220,180,0.9)",
               marginBottom: 28,
             }}>
               <span style={{ width: 32, height: 1, background: "rgba(255,220,180,0.55)" }} />
@@ -339,11 +338,10 @@ export default function HomePage() {
             {/* Quiet credentials line — matches editorial restraint */}
             <p style={{
               marginTop: 48,
-              fontSize: 11.5,
-              fontWeight: 600,
-              letterSpacing: "0.28em",
-              color: "rgba(253,249,244,0.55)",
-              textTransform: "uppercase",
+              fontSize: 12.5,
+              fontWeight: 500,
+              letterSpacing: "0.12em",
+              color: "rgba(253,249,244,0.6)",
               fontFamily: "var(--font-body, 'Inter', sans-serif)",
             }}>
               Founded 2023 · Hand-picked · Family-rated 4.9
@@ -368,7 +366,7 @@ export default function HomePage() {
           }}
           className="hero-scroll-indicator"
         >
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.32em", textTransform: "uppercase" }}>
+          <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.14em" }}>
             Scroll
           </span>
           <span style={{
@@ -531,7 +529,7 @@ export default function HomePage() {
       <section className="editorial-reveal" id="how-it-works" style={{ padding: "clamp(72px, 9vw, 112px) 24px", background: "#fdf9f4" }}>
         <div className="max-w-7xl mx-auto">
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 48, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+            <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "#a78a8f" }}>
               I — How we work
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)", minWidth: 40 }} />
@@ -573,7 +571,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
           <div className="lg:col-span-5">
             <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+              <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "#a78a8f" }}>
                 II — By invitation
               </span>
               <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
@@ -650,7 +648,7 @@ export default function HomePage() {
       <section className="editorial-reveal" style={{ padding: "clamp(72px, 9vw, 112px) 24px", background: "#1a0a14", color: "#fdf9f4" }}>
         <div className="max-w-7xl mx-auto">
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 48, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "rgba(255,220,180,0.7)", textTransform: "uppercase" }}>
+            <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,220,180,0.75)" }}>
               III — Why this approach
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(255,220,180,0.18)", minWidth: 40 }} />
@@ -687,7 +685,7 @@ export default function HomePage() {
       <section className="editorial-reveal" id="success-stories" style={{ padding: "clamp(72px, 9vw, 112px) 24px", background: "#fdf9f4" }}>
         <div className="max-w-7xl mx-auto">
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 48, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+            <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "#a78a8f" }}>
               IV — Stories so far
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)", minWidth: 40 }} />
@@ -722,7 +720,7 @@ export default function HomePage() {
                     style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }}
                   />
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.22em", color: "#a78a8f", textTransform: "uppercase", marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.12em", color: "#a78a8f", marginBottom: 10 }}>
                   {s.year} · {s.location}
                 </span>
                 <h3 className="font-display" style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.2, color: "#1a0a14", marginBottom: 12, letterSpacing: "-0.01em" }}>
@@ -755,7 +753,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20 items-start">
           <div className="lg:col-span-5">
             <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+              <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "#a78a8f" }}>
                 V — What we offer
               </span>
               <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
@@ -807,7 +805,7 @@ export default function HomePage() {
       <section className="editorial-reveal" id="faq" style={{ padding: "clamp(72px, 9vw, 112px) 24px", background: "#fdf9f4" }}>
         <div className="max-w-3xl mx-auto">
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+            <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "#a78a8f" }}>
               VI — Common questions
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
@@ -883,7 +881,7 @@ export default function HomePage() {
           ════════════════════════════════════════════════════════ */}
       <section className="editorial-reveal" style={{ padding: "clamp(72px, 9vw, 128px) 24px", background: "#faf3eb" }}>
         <div className="max-w-3xl mx-auto" style={{ textAlign: "center" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 10, fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase", marginBottom: 24 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 10, fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "#a78a8f", marginBottom: 24 }}>
             <CountryFlag code="GB" rounded="sm" /> Match4Marriage · United Kingdom
           </span>
           <h2 className="font-display" style={{ fontSize: "clamp(30px, 4.4vw, 56px)", fontWeight: 500, lineHeight: 1.08, letterSpacing: "-0.02em", marginBottom: 20, color: "#1a0a14" }}>

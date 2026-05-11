@@ -46,7 +46,7 @@ const wordmark = {
   after:  "Marriage",
 };
 
-const TAGLINE = "ELITE INDIAN MATRIMONY · UNITED KINGDOM";
+const TAGLINE = "Elite Indian Matrimony · United Kingdom";
 
 export default function Preloader() {
   const reduced = useReducedMotion();
@@ -608,10 +608,10 @@ export default function Preloader() {
             className="mt-4 select-none"
             style={{
               fontFamily: "var(--font-body, 'Inter', sans-serif)",
-              fontSize: 11,
-              fontWeight: 600,
-              color: "rgba(255, 220, 180, 0.78)",
-              letterSpacing: "0.32em",
+              fontSize: 12.5,
+              fontWeight: 500,
+              color: "rgba(255, 220, 180, 0.82)",
+              letterSpacing: "0.14em",
               display: "flex",
               gap: 0.5,
             }}

@@ -136,8 +136,7 @@ function DetailRow({ label, value, accent }: { label: string; value: string; acc
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
       <span style={{
-        fontSize: 11, fontWeight: 600, color: "#777",
-        textTransform: "uppercase", letterSpacing: "0.06em",
+        fontSize: 11, fontWeight: 600, color: "#777", letterSpacing: "0.06em",
       }}>{label}</span>
       <span style={{
         fontSize: 13, fontWeight: accent ? 700 : 500,

@@ -20,7 +20,7 @@
          Montserrat (nav)     — navigation, buttons, sub-headings
          Open Sans (body)     — descriptive copy, success-stories, body text
        The legacy variable aliases stay so existing pages keep working. */
-    --font-display:    'Cinzel', 'Playfair Display', Georgia, serif;
+    --font-display:    'Playfair Display', 'Fraunces', Georgia, serif;
     --font-display-alt:'Cormorant', 'Playfair Display', Georgia, serif;
     --font-nav:        'Montserrat', 'Inter', system-ui, -apple-system, sans-serif;
     --font-body:       'Open Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;

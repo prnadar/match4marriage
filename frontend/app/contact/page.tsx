@@ -70,9 +70,8 @@ export default function ContactPage() {
   const labelStyle: React.CSSProperties = {
     fontSize: 11,
     fontWeight: 700,
-    letterSpacing: "0.22em",
+    letterSpacing: "0.1em",
     color: "#a78a8f",
-    textTransform: "uppercase",
     display: "block",
     marginBottom: 6,
   };
@@ -84,7 +83,7 @@ export default function ContactPage() {
       {/* ── Editorial hero ───────────────────────────────────── */}
       <section style={{ padding: "clamp(64px, 9vw, 120px) 24px clamp(48px, 6vw, 80px)", background: "linear-gradient(180deg, #fdf9f4 0%, #faf3eb 100%)" }}>
         <div className="max-w-4xl mx-auto" style={{ textAlign: "center" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase", marginBottom: 24 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f", marginBottom: 24 }}>
             <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
             Get in touch
             <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
@@ -119,7 +118,7 @@ export default function ContactPage() {
           {/* Left — channels and hours */}
           <aside className="lg:col-span-5">
             <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f" }}>
                 I — Reach us directly
               </span>
               <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
@@ -143,7 +142,7 @@ export default function ContactPage() {
                   >
                     <c.Icon size={18} strokeWidth={1.4} style={{ color: "#dc1e3c", opacity: 0.85 }} />
                     <div>
-                      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.22em", color: "#a78a8f", textTransform: "uppercase", margin: "0 0 4px" }}>
+                      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", color: "#a78a8f", margin: "0 0 4px" }}>
                         {c.label}
                       </p>
                       <p className="font-display" style={{ fontSize: 17, fontWeight: 500, color: "#1a0a14", margin: 0, letterSpacing: "-0.005em" }}>
@@ -158,7 +157,7 @@ export default function ContactPage() {
 
             {/* Office */}
             <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 24 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f" }}>
                 Office hours
               </span>
               <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
@@ -189,7 +188,7 @@ export default function ContactPage() {
           {/* Right — enquiry form */}
           <div className="lg:col-span-7">
             <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f" }}>
                 II — Send an enquiry
               </span>
               <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />

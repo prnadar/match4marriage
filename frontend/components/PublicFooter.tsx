@@ -26,7 +26,7 @@ export default function PublicFooter() {
 
           {/* Company */}
           <div>
-            <p style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "12px" }}>Company</p>
+            <p style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.55)", letterSpacing: "0.06em", marginBottom: "12px" }}>Company</p>
             {[{ label: "Home", href: "/" }, { label: "Browse Profiles", href: "/profiles" }, { label: "Success Stories", href: "/success-stories" }, { label: "About Us", href: "/about" }, { label: "Pricing", href: "/pricing" }].map(({ label, href }) => (
               <Link key={href} href={href} style={{ display: "block", fontSize: "13px", color: "rgba(255,255,255,0.45)", textDecoration: "none", marginBottom: "8px", minHeight: "auto" }}>
                 {label}
@@ -36,7 +36,7 @@ export default function PublicFooter() {
 
           {/* Account */}
           <div>
-            <p style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "12px" }}>Account</p>
+            <p style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.55)", letterSpacing: "0.06em", marginBottom: "12px" }}>Account</p>
             {[{ label: "Register", href: "/auth/register" }, { label: "Log In", href: "/auth/login" }, { label: "Dashboard", href: "/dashboard" }, { label: "My Profile", href: "/profile/me" }].map(({ label, href }) => (
               <Link key={href} href={href} style={{ display: "block", fontSize: "13px", color: "rgba(255,255,255,0.45)", textDecoration: "none", marginBottom: "8px", minHeight: "auto" }}>
                 {label}
@@ -46,7 +46,7 @@ export default function PublicFooter() {
 
           {/* Legal */}
           <div>
-            <p style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "12px" }}>Legal</p>
+            <p style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.55)", letterSpacing: "0.06em", marginBottom: "12px" }}>Legal</p>
             {[{ label: "Privacy Policy", href: "/privacy" }, { label: "Terms of Service", href: "/terms" }, { label: "FAQ", href: "/faq" }, { label: "Contact Us", href: "/contact" }].map(({ label, href }) => (
               <Link key={href} href={href} style={{ display: "block", fontSize: "13px", color: "rgba(255,255,255,0.45)", textDecoration: "none", marginBottom: "8px", minHeight: "auto" }}>
                 {label}

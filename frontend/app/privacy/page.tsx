@@ -128,7 +128,7 @@ export default function PrivacyPage() {
       {/* Hero */}
       <div style={{ background: "linear-gradient(135deg, #1a0a14 0%, #2d0f20 100%)", padding: "72px 24px 56px" }}>
         <div style={{ maxWidth: "800px", margin: "0 auto", textAlign: "center" }}>
-          <span style={{ fontSize: "11px", fontWeight: 700, color: "#dc1e3c", textTransform: "uppercase", letterSpacing: "0.2em", display: "block", marginBottom: "16px" }}>
+          <span style={{ fontSize: "11px", fontWeight: 700, color: "#dc1e3c", letterSpacing: "0.1em", display: "block", marginBottom: "16px" }}>
             Legal
           </span>
           <h1 style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "clamp(32px, 4vw, 52px)", fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>
@@ -145,7 +145,7 @@ export default function PrivacyPage() {
 
         {/* Sticky sidebar TOC */}
         <aside style={{ position: "sticky", top: "88px" }} className="hidden lg:block">
-          <p style={{ fontSize: "11px", fontWeight: 700, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "16px" }}>
+          <p style={{ fontSize: "11px", fontWeight: 700, color: "#bbb", letterSpacing: "0.15em", marginBottom: "16px" }}>
             Contents
           </p>
           <nav style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
@@ -221,7 +221,7 @@ export default function PrivacyPage() {
                             <item.Icon className="h-4 w-4" strokeWidth={1.6} />
                           </span>
                           <div>
-                            <p style={{ fontSize: "11px", fontWeight: 700, color: "#bbb", textTransform: "uppercase", letterSpacing: "0.1em", margin: "0 0 2px" }}>{item.label}</p>
+                            <p style={{ fontSize: "11px", fontWeight: 700, color: "#bbb", letterSpacing: "0.1em", margin: "0 0 2px" }}>{item.label}</p>
                             {item.href ? (
                               <a href={item.href} target="_blank" rel="noopener noreferrer" style={{ fontSize: "14px", color: "#dc1e3c", fontWeight: 600, textDecoration: "none" }}>{item.value}</a>
                             ) : (

@@ -167,8 +167,7 @@ export default function AboutPage() {
                 gap: 10,
                 fontSize: 11,
                 fontWeight: 700,
-                letterSpacing: "0.28em",
-                textTransform: "uppercase",
+                letterSpacing: "0.12em",
                 color: "#a78a8f",
               }}
             >
@@ -301,7 +300,7 @@ export default function AboutPage() {
       <section className="about-reveal" style={{ padding: "clamp(72px, 9vw, 112px) 24px", background: "#fdf9f4" }}>
         <div className="max-w-4xl mx-auto">
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 36 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f" }}>
               I — Why we exist
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
@@ -363,7 +362,7 @@ export default function AboutPage() {
       <section className="about-reveal" style={{ padding: "clamp(72px, 9vw, 112px) 24px", background: "#faf3eb" }}>
         <div className="max-w-7xl mx-auto">
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 64, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f" }}>
               II — How we work
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)", minWidth: 40 }} />
@@ -399,7 +398,7 @@ export default function AboutPage() {
                     paddingRight: 12,
                     fontSize: 13,
                     fontWeight: 700,
-                    letterSpacing: "0.18em",
+                    letterSpacing: "0.08em",
                     color: "#dc1e3c",
                   }}
                 >
@@ -425,7 +424,7 @@ export default function AboutPage() {
       <section className="about-reveal" style={{ padding: "clamp(72px, 9vw, 112px) 24px", background: "#1a0a14", color: "#fdf9f4" }}>
         <div className="max-w-6xl mx-auto">
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 56, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "rgba(255,220,180,0.7)", textTransform: "uppercase" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "rgba(255,220,180,0.7)" }}>
               III — How we differ
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(255,220,180,0.18)", minWidth: 40 }} />
@@ -450,12 +449,12 @@ export default function AboutPage() {
           <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: 0 }}>
             {/* Header row */}
             <div style={{ padding: "16px 0", borderBottom: "1px solid rgba(255,220,180,0.18)", borderRight: "1px solid rgba(255,220,180,0.10)", paddingRight: 24 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.24em", textTransform: "uppercase", color: "rgba(255,220,180,0.55)" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(255,220,180,0.55)" }}>
                 Elsewhere
               </span>
             </div>
             <div style={{ padding: "16px 0 16px 24px", borderBottom: "1px solid rgba(255,220,180,0.18)" }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.24em", textTransform: "uppercase", color: "#ffd87a" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "#ffd87a" }}>
                 With Match4Marriage
               </span>
             </div>

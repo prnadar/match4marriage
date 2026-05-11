@@ -116,7 +116,6 @@ const LABEL_STYLE: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
   color: "#555",
-  textTransform: "uppercase",
   letterSpacing: "0.08em",
   display: "block",
   marginBottom: 6,

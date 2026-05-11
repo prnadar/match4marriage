@@ -146,8 +146,7 @@ export function CompletionStrip({ fallbackScore = 0, onJumpToTab, refreshKey }: 
               {score}<span style={{ fontSize: 12, marginLeft: 1 }}>%</span>
             </div>
             <div style={{
-              fontSize: 9, fontWeight: 700, color: "#888",
-              textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 2,
+              fontSize: 9, fontWeight: 700, color: "#888", letterSpacing: "0.08em", marginTop: 2,
             }}>
               Complete
             </div>

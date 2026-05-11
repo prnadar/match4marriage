@@ -358,7 +358,7 @@ export function PhotoGrid() {
         <div>
           <p style={{
             fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.75rem", fontWeight: 700,
-            color: "#777", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.08em",
+            color: "#777", margin: "0 0 12px", letterSpacing: "0.08em",
           }}>
             Your Photos ({photos.length}/{MAX_PHOTOS})
           </p>
@@ -474,7 +474,6 @@ function PhotoTile({
           fontSize: 10, fontWeight: 700, letterSpacing: "0.04em",
           display: "inline-flex", alignItems: "center", gap: 4,
           boxShadow: "0 4px 12px rgba(201,149,74,0.42)",
-          textTransform: "uppercase",
         }}>
           <Crown style={{ width: 11, height: 11 }} fill="#fff" />
           Primary

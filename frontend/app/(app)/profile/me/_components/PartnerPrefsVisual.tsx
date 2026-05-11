@@ -296,7 +296,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
       boxShadow: "0 2px 14px rgba(220,30,60,0.04)",
     }}>
       <div style={{
-        fontSize: 11, fontWeight: 700, textTransform: "uppercase",
+        fontSize: 11, fontWeight: 700,
         letterSpacing: "0.08em", color: "#777", marginBottom: 14,
       }}>{title}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -325,8 +325,7 @@ function SimpleField({ label, children }: { label: string; children: React.React
   return (
     <label style={{ display: "block" }}>
       <div style={{
-        fontSize: 11, fontWeight: 600, color: "#555",
-        textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4,
+        fontSize: 11, fontWeight: 600, color: "#555", letterSpacing: "0.06em", marginBottom: 4,
       }}>{label}</div>
       {children}
     </label>
@@ -354,8 +353,7 @@ function PillGroup({
   return (
     <div>
       <div style={{
-        fontSize: 11, fontWeight: 600, color: "#555",
-        textTransform: "uppercase", letterSpacing: "0.06em",
+        fontSize: 11, fontWeight: 600, color: "#555", letterSpacing: "0.06em",
         display: "flex", alignItems: "center", gap: 6, marginBottom: 8,
       }}>
         <span>{label}</span>
@@ -648,7 +646,7 @@ function MatchPreview({
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Heart style={{ width: 14, height: 14, color: "#dc1e3c" }} fill="#dc1e3c" />
           <span style={{
-            fontSize: 11, fontWeight: 700, textTransform: "uppercase",
+            fontSize: 11, fontWeight: 700,
             letterSpacing: "0.08em", color: "#777",
           }}>Sample matches</span>
         </div>

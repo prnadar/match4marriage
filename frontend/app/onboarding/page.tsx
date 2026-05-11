@@ -401,7 +401,7 @@ export default function OnboardingPage() {
           <div style={{
             fontSize: 10, fontWeight: 700,
             color: "rgba(255,255,255,0.55)",
-            letterSpacing: "0.22em", textTransform: "uppercase",
+            letterSpacing: "0.1em",
             marginBottom: 14,
             display: "flex", alignItems: "center", gap: 12,
           }}>
@@ -1210,7 +1210,7 @@ function Step3IdVerify({
 function UploadBox({ label, file, onChange }: { label: string; file: File | null; onChange: (f: File | null) => void }) {
   return (
     <div>
-      <div style={{ fontSize: 10.5, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7 }}>{label}</div>
+      <div style={{ fontSize: 10.5, fontWeight: 700, color: "#555", letterSpacing: "0.1em", marginBottom: 7 }}>{label}</div>
       <label style={{
         display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
         padding: "20px 16px",
@@ -1257,7 +1257,7 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
       <Heart style={{ width: 10, height: 10, color: "#dc1e3c" }} fill="#dc1e3c" />
       <span style={{
         fontSize: 9.5, fontWeight: 700, color: "#a0153c",
-        letterSpacing: "0.14em", textTransform: "uppercase",
+        letterSpacing: "0.14em",
       }}>{children}</span>
     </div>
   );
@@ -1288,8 +1288,7 @@ function Field({ icon: Icon, label, children }: {
   return (
     <label style={{ display: "block", position: "relative", flex: 1 }}>
       <div style={{
-        fontSize: 10.5, fontWeight: 700, color: "#555",
-        textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 7,
+        fontSize: 10.5, fontWeight: 700, color: "#555", letterSpacing: "0.12em", marginBottom: 7,
       }}>{label}</div>
       <div style={{ position: "relative" }}>
         {Icon && (

@@ -445,7 +445,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </p>
               </div>
               <div>
-                <p style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px" }}>Quick Links</p>
+                <p style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: "0.1em", marginBottom: "10px" }}>Quick Links</p>
                 {[
                   { label: "My Profile", href: "/profile/me" },
                   { label: "Browse Matches", href: "/matches" },
@@ -459,7 +459,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 ))}
               </div>
               <div>
-                <p style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px" }}>Support</p>
+                <p style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: "0.1em", marginBottom: "10px" }}>Support</p>
                 {[
                   { label: "Privacy Policy", href: "/privacy" },
                   { label: "Terms of Service", href: "/terms" },

@@ -93,7 +93,6 @@ function SectionLabel({ text }: { text: string }) {
         fontSize: 11,
         fontWeight: 600,
         color: "rgba(26,10,20,0.35)",
-        textTransform: "uppercase",
         letterSpacing: "0.08em",
         padding: "14px 0 0",
         margin: 0,

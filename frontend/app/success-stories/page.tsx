@@ -68,7 +68,7 @@ export default function SuccessStoriesPage() {
       {/* ── Editorial hero ───────────────────────────────────── */}
       <section style={{ padding: "clamp(64px, 9vw, 120px) 24px clamp(48px, 6vw, 72px)", background: "linear-gradient(180deg, #fdf9f4 0%, #faf3eb 100%)" }}>
         <div className="max-w-4xl mx-auto" style={{ textAlign: "center" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase", marginBottom: 24 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f", marginBottom: 24 }}>
             <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
             Real love stories
             <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
@@ -208,7 +208,7 @@ export default function SuccessStoriesPage() {
                     </div>
                   )}
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.22em", color: "#a78a8f", textTransform: "uppercase", marginBottom: 10 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", color: "#a78a8f", marginBottom: 10 }}>
                   Married {s.year_married}{s.location ? ` · ${s.location}` : ""}
                 </span>
                 <h3 className="font-display" style={{ fontSize: 24, fontWeight: 600, lineHeight: 1.2, letterSpacing: "-0.01em", color: "#1a0a14", marginBottom: 14 }}>

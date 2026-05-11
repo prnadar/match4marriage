@@ -312,7 +312,7 @@ export default function LoginPage() {
         >
           <span style={{
             fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.6)",
-            letterSpacing: "0.18em", textTransform: "uppercase",
+            letterSpacing: "0.08em",
           }}>
             {String(storyIdx + 1).padStart(2, "0")} / {String(STORIES.length).padStart(2, "0")}
           </span>
@@ -370,7 +370,7 @@ export default function LoginPage() {
               <span style={{
                 fontSize: 11, fontWeight: 700,
                 color: "rgba(255,255,255,0.85)",
-                letterSpacing: "0.14em", textTransform: "uppercase",
+                letterSpacing: "0.14em",
               }}>
                 {currentStory.couple} &nbsp;·&nbsp; {currentStory.location} &nbsp;·&nbsp; {currentStory.year}
               </span>
@@ -409,7 +409,7 @@ export default function LoginPage() {
               <Heart style={{ width: 10, height: 10, color: "#dc1e3c" }} fill="#dc1e3c" />
               <span style={{
                 fontSize: 9.5, fontWeight: 700, color: "#a0153c",
-                letterSpacing: "0.14em", textTransform: "uppercase",
+                letterSpacing: "0.14em",
               }}>
                 Sign in
               </span>
@@ -612,8 +612,7 @@ export default function LoginPage() {
 
                 <div>
                   <div style={{
-                    fontSize: 11, fontWeight: 700, color: "#555",
-                    textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8,
+                    fontSize: 11, fontWeight: 700, color: "#555", letterSpacing: "0.1em", marginBottom: 8,
                   }}>
                     6-digit code
                   </div>
@@ -688,8 +687,7 @@ function Field({ icon: Icon, label, right, children }: {
         marginBottom: 7,
       }}>
         <span style={{
-          fontSize: 10.5, fontWeight: 700, color: "#555",
-          textTransform: "uppercase", letterSpacing: "0.12em",
+          fontSize: 10.5, fontWeight: 700, color: "#555", letterSpacing: "0.12em",
         }}>{label}</span>
         {right}
       </div>

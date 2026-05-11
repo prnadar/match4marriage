@@ -100,7 +100,7 @@ export default function PricingPage() {
       {/* ── Editorial hero ───────────────────────────────────── */}
       <section style={{ padding: "clamp(64px, 9vw, 120px) 24px clamp(48px, 6vw, 72px)", background: "linear-gradient(180deg, #fdf9f4 0%, #faf3eb 100%)" }}>
         <div className="max-w-4xl mx-auto" style={{ textAlign: "center" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, letterSpacing: "0.32em", color: "#a78a8f", textTransform: "uppercase", marginBottom: 24 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f", marginBottom: 24 }}>
             <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
             Membership
             <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
@@ -159,8 +159,7 @@ export default function PricingPage() {
                       color: "#fdf9f4",
                       fontSize: 10,
                       fontWeight: 700,
-                      letterSpacing: "0.22em",
-                      textTransform: "uppercase",
+                      letterSpacing: "0.1em",
                       padding: "6px 14px",
                     }}
                   >
@@ -168,7 +167,7 @@ export default function PricingPage() {
                   </span>
                 )}
 
-                <span className="font-display" style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.22em", color: accent, marginBottom: 18 }}>
+                <span className="font-display" style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.1em", color: accent, marginBottom: 18 }}>
                   {plan.n}
                 </span>
 
@@ -197,7 +196,7 @@ export default function PricingPage() {
                 <p style={{ fontSize: 12, color: isDark ? "rgba(253,249,244,0.55)" : "#88787f", margin: "0 0 6px", letterSpacing: "0.02em" }}>
                   {plan.period}
                 </p>
-                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.18em", color: isDark ? "rgba(255,220,180,0.65)" : "#a78a8f", textTransform: "uppercase", margin: "12px 0 28px" }}>
+                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: isDark ? "rgba(255,220,180,0.65)" : "#a78a8f", margin: "12px 0 28px" }}>
                   Best for · {plan.bestFor}
                 </p>
 
