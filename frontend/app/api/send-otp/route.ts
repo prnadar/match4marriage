@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       try {
         const checkRes = await fetch(`${backendUrl}/api/v1/auth/check-email`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-Tenant-ID": "bandhan" },
+          headers: { "Content-Type": "application/json", "X-Tenant-ID": "match4marriage" },
           body: JSON.stringify({ email }),
         });
         if (checkRes.ok) {

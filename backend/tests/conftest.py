@@ -1,6 +1,11 @@
 """
 Pytest fixtures — async test DB, test client, factories.
-Uses a real PostgreSQL test database (not mocks).
+
+Defaults to an in-memory SQLite database via `aiosqlite` so the suite runs
+in CI and on a fresh laptop without a live Postgres. Set TEST_DATABASE_URL
+to point at a real Postgres test DB when running schema-sensitive tests
+(e.g. anything that exercises Postgres-only features like JSONB operators
+or array containment).
 """
 import asyncio
 import os
@@ -18,9 +23,12 @@ from app.core.database import Base, get_db
 from app.main import app
 
 # ── Test database ─────────────────────────────────────────────────────────────
+# In-memory SQLite by default. The `?cache=shared` query string keeps the
+# same DB visible across multiple connections in the same process, which the
+# transactional fixture below relies on.
 TEST_DB_URL = os.getenv(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://bandhan:bandhan_dev_secret@localhost:5432/bandhan_test",
+    "sqlite+aiosqlite:///:memory:?cache=shared",
 )
 
 test_engine = create_async_engine(TEST_DB_URL, echo=False)

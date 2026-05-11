@@ -27,11 +27,11 @@ class Tenant(Base):
         JSON,
         nullable=False,
         default=lambda: {
-            "primary_color": "#8B1A1A",
-            "accent_color": "#C9952A",
+            "primary_color": "#dc1e3c",
+            "accent_color": "#c9952a",
             "logo_url": None,
-            "app_name": "Bandhan",
-            "tagline": "The Sacred Bond",
+            "app_name": "Match4Marriage",
+            "tagline": "Where two families become one",
         },
     )
 

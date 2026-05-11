@@ -1,5 +1,5 @@
 """
-Bandhan API — FastAPI entrypoint.
+Match4Marriage API — FastAPI entrypoint.
 All router registration, middleware, and lifespan events here.
 """
 from contextlib import asynccontextmanager

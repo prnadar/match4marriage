@@ -12,13 +12,12 @@ an Expo React Native mobile app.
 
 ## Repository layout
 
-```
+```text
 match4marriage/
 ├── frontend/        Next.js 15 web app (App Router, TypeScript, Tailwind)
 ├── backend/         FastAPI service (Python 3.12, SQLAlchemy async, Alembic)
 ├── mobile/          Expo / React Native app (EAS build)
-├── design-system/   Shared design tokens and brand spec
-├── infra/           Deployment helpers
+├── infra/           One-shot DB bootstrap SQL (extensions, etc.)
 └── docker-compose.yml
 ```
 
@@ -115,7 +114,7 @@ be committed.
 
 ## Architecture
 
-```
+```text
 ┌──────────────────────┐    ┌──────────────────────┐    ┌──────────────────────┐
 │  Web (Vercel)        │    │  Mobile (Expo)       │    │  Admin (web /admin)  │
 │  Next.js 15          │    │  Expo Router         │    │  Same web bundle     │
@@ -294,12 +293,12 @@ What **is** sensitive and must never leak:
 
 ### In progress / honest stubs
 
-| Page          | State          | What's missing                                |
-|---------------|----------------|-----------------------------------------------|
-| `/subscription` | Read-only    | Razorpay + Stripe hosted-checkout flow        |
-| `/family`     | Stub          | Invitations, shared shortlists, private notes |
-| `/nri-hub`    | Stub          | NRI filter + public stats endpoint            |
-| `/success-stories` | Stub     | Admin CMS for stories + public list endpoint  |
+| Page               | State     | What's missing                                |
+|--------------------|-----------|-----------------------------------------------|
+| `/subscription`    | Read-only | Razorpay + Stripe hosted-checkout flow        |
+| `/family`          | Stub      | Invitations, shared shortlists, private notes |
+| `/nri-hub`         | Stub      | NRI filter + public stats endpoint            |
+| `/success-stories` | Stub      | Admin CMS for stories + public list endpoint  |
 
 ### Near-term priorities
 

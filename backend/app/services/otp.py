@@ -75,7 +75,7 @@ def _send_sms(phone: str, otp: str) -> None:
 
     client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
     client.messages.create(
-        body=f"Your Bandhan OTP is {otp}. Valid for {settings.OTP_EXPIRY_SECONDS // 60} minutes.",
+        body=f"Your Match4Marriage verification code is {otp}. Valid for {settings.OTP_EXPIRY_SECONDS // 60} minutes.",
         from_=settings.TWILIO_PHONE_NUMBER,
         to=phone,
     )

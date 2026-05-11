@@ -1,5 +1,10 @@
 "use client";
 
+// Internal design-team theme gallery. Hidden in production: this route is
+// only useful during a brand exploration sprint and shouldn't be reachable
+// to end users. The notFound() call inside the page component runs on every
+// render in prod and short-circuits to a 404.
+import { notFound } from "next/navigation";
 import { useState } from "react";
 import { Heart, Shield, Brain, ArrowRight, Check } from "lucide-react";
 
@@ -169,6 +174,8 @@ const themes = [
 ];
 
 export default function ThemesPage() {
+  if (process.env.NODE_ENV === "production") notFound();
+
   const [selected, setSelected] = useState("crimson-gold");
   const active = themes.find((t) => t.id === selected)!;
 
