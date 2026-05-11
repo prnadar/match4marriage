@@ -3,13 +3,31 @@ import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth, signOut, type Auth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
+
+// Surface a clear diagnostic if Firebase env vars weren't injected at build
+// time (commonly: forgot to set them on Vercel). The Firebase SDK will still
+// throw, but a console error pointing at the real cause helps oncall a lot
+// more than the SDK's generic "Invalid API key" message.
+const REQUIRED_FIREBASE_KEYS = ["apiKey", "authDomain", "projectId", "appId"] as const;
+if (typeof window !== "undefined") {
+  const missing = REQUIRED_FIREBASE_KEYS.filter((k) => !firebaseConfig[k]);
+  if (missing.length) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[firebase] Missing required env vars: ${missing
+        .map((k) => `NEXT_PUBLIC_FIREBASE_${k.replace(/[A-Z]/g, (c) => "_" + c).toUpperCase()}`)
+        .join(", ")}. ` +
+        "Set them in your hosting provider's env config and redeploy.",
+    );
+  }
+}
 
 export const firebaseApp: FirebaseApp =
   getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);

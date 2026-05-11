@@ -285,7 +285,7 @@ export default function InterestsPage() {
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
                       {isAccepted ? (
                         <Link
-                          href="/messages/1"
+                          href="/messages"
                           style={{
                             display: "flex", alignItems: "center", gap: "6px",
                             padding: "8px 16px", borderRadius: "10px",
@@ -510,7 +510,7 @@ export default function InterestsPage() {
                   </div>
 
                   <Link
-                    href="/messages/1"
+                    href="/messages"
                     style={{
                       display: "flex", alignItems: "center", gap: "6px",
                       padding: "10px 18px", borderRadius: "10px",
