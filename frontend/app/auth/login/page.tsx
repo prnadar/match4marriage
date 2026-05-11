@@ -106,26 +106,34 @@ export default function LoginPage() {
     );
   }, []);
 
-  useEffect(() => {
-    const unsub = firebaseAuth.onAuthStateChanged((user) => {
-      if (user) {
-        rememberSessionUid(user.uid);
-        router.replace("/dashboard");
-      }
-    });
-    return unsub;
-  }, [router]);
-
-  const clearMsgs = () => { setError(""); setInfo(""); };
-
+  // If the user is already signed in when they land on /auth/login, send
+  // them to the right destination based on profile completeness — same
+  // logic the explicit sign-in handlers use, so there's no race between
+  // this listener and `routeAfterAuth`.
+  const routingRef = useRef(false);
   const routeAfterAuth = async () => {
+    if (routingRef.current) return;
+    routingRef.current = true;
     try {
       const res = await profileApi.me();
       const p = (res.data as any)?.data;
       if (p?.first_name?.trim()) { router.replace("/dashboard"); return; }
-    } catch { /* new user */ }
+    } catch { /* new user or backend down */ }
     router.replace("/onboarding");
   };
+
+  useEffect(() => {
+    const unsub = firebaseAuth.onAuthStateChanged((user) => {
+      if (user) {
+        rememberSessionUid(user.uid);
+        void routeAfterAuth();
+      }
+    });
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
+
+  const clearMsgs = () => { setError(""); setInfo(""); };
 
   const handleEmailLogin = async () => {
     clearMsgs();

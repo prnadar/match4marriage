@@ -91,28 +91,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // with the top-bar avatar after a primary-photo change.
   const sidebarPhotoUrl = useProfilePhoto();
 
-  // Auth + verification gate. Sends the user back to /onboarding if any
-  // of the three required steps is missing:
-  //   1. Backend profile bootstrap (first_name set after step 1)
-  //   2. Phone verified (Firebase user.phoneNumber populated by step 2)
-  //   3. ID uploaded (profile.visa_status === "id_uploaded" after step 3)
-  // Per the product brief: dashboard access is only unlocked once all
-  // three gates are cleared.
+  // Auth gate. Only the profile bootstrap (first_name) hard-blocks the
+  // dashboard — a signed-in user with a profile is allowed in. Missing
+  // phone verification or ID upload are surfaced via VerificationBanner
+  // below; bouncing those users back to /onboarding on every sign-in is
+  // hostile and was causing a redirect loop after login.
   useEffect(() => {
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
-      if (!user) { router.replace("/onboarding"); return; }
+      if (!user) { router.replace("/auth/login"); return; }
       rememberSessionUid(user.uid);
       try {
         const res = await profileApi.me();
         const p = (res.data as any)?.data;
         const hasProfile = !!(p && p.first_name && p.first_name.trim());
         if (!hasProfile) { router.replace("/onboarding"); return; }
-
-        const hasPhone = !!(user.phoneNumber && user.phoneNumber.trim());
-        if (!hasPhone) { router.replace("/onboarding"); return; }
-
-        const idUploaded = p?.visa_status === "id_uploaded";
-        if (!idUploaded) { router.replace("/onboarding"); return; }
       } catch {
         // backend unreachable — leave user on page
       }
