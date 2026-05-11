@@ -29,9 +29,7 @@ import {
   createUserWithEmailAndPassword,
   fetchSignInMethodsForEmail,
   RecaptchaVerifier,
-  signInWithPhoneNumber,
-  linkWithCredential,
-  PhoneAuthProvider,
+  linkWithPhoneNumber,
   updateProfile as updateFirebaseProfile,
   type ConfirmationResult,
 } from "firebase/auth";
@@ -269,7 +267,10 @@ export default function OnboardingPage() {
   const handleLinkPhoneAndSaveProfile = useCallback(async (payload: {
     dob: string; gender: string; religion: string; caste: string;
     country: string; motherTongue: string; education: string; profession: string;
-    verificationId: string; otp: string;
+    /** Caller in Step 2 owns the ConfirmationResult from linkWithPhoneNumber.
+     *  It invokes this to actually link the phone (using confirm.confirm(otp))
+     *  and returns true on success — see Step2Profile's submit handler. */
+    confirmPhone: () => Promise<boolean>;
   }) => {
     setLoading(true);
     setError("");
@@ -281,31 +282,18 @@ export default function OnboardingPage() {
         return false;
       }
 
-      // 1. Link phone credential to the existing Firebase user
-      const phoneCred = PhoneAuthProvider.credential(payload.verificationId, payload.otp.trim());
-      try {
-        await linkWithCredential(user, phoneCred);
-      } catch (e: any) {
-        const code = e?.code || "";
-        if (code.includes("provider-already-linked")) {
-          // Already linked — fine, continue
-        } else if (code.includes("invalid-verification-code")) {
-          setError("Incorrect code. Please try again.");
-          setLoading(false);
-          return false;
-        } else if (code.includes("credential-already-in-use")) {
-          setError("This phone number is already linked to another account.");
-          setLoading(false);
-          return false;
-        } else {
-          throw e;
-        }
+      // 1. Link the phone via the caller's confirmation result.
+      const linked = await payload.confirmPhone();
+      if (!linked) {
+        // confirmPhone already set the error message on the child component.
+        setLoading(false);
+        return false;
       }
 
-      // 2. Refresh the token so the backend sees the new phone claim
-      await user.getIdToken(true);
+      // 2. Refresh the token so the backend sees the new phone claim.
+      try { await user.getIdToken(true); } catch { /* non-fatal */ }
 
-      // 3. Save profile basics
+      // 3. Save profile basics.
       await api.patch("/api/v1/profile/me", {
         date_of_birth: payload.dob || undefined,
         gender: payload.gender ? payload.gender.toLowerCase() : undefined,
@@ -935,7 +923,7 @@ function Step2Profile({
   onSubmit: (p: {
     dob: string; gender: string; religion: string; caste: string;
     country: string; motherTongue: string; education: string; profession: string;
-    verificationId: string; otp: string;
+    confirmPhone: () => Promise<boolean>;
   }) => Promise<boolean>;
   onBack: () => void;
   setError: (s: string) => void;
@@ -953,7 +941,7 @@ function Step2Profile({
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [otpState, setOtpState] = useState<OtpState>("idle");
-  const verificationIdRef = useRef<string | null>(null);
+  const confirmationRef = useRef<ConfirmationResult | null>(null);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
 
   const ensureRecaptcha = useCallback(() => {
@@ -975,17 +963,32 @@ function Step2Profile({
     setError("");
     setOtpState("sending");
     try {
-      const full = `${countryCode}${phone.replace(/\D/g, "")}`;
-      const confirm: ConfirmationResult = await signInWithPhoneNumber(firebaseAuth, full, ensureRecaptcha());
-      verificationIdRef.current = confirm.verificationId;
+      const user = firebaseAuth.currentUser;
+      if (!user) {
+        setError("Your session expired between steps. Please go back to step 1.");
+        setOtpState("idle");
+        return;
+      }
+      const digits = phone.replace(/\D/g, "");
+      const full = `${countryCode}${digits}`;
+      // linkWithPhoneNumber is the right primitive when the user is already
+      // signed in (via email/password from step 1) and we want to attach a
+      // phone credential to *that* same account. signInWithPhoneNumber would
+      // start a separate sign-in session that then has to be grafted on via
+      // linkWithCredential — same result, more failure modes, and Firebase
+      // can silently no-op the SMS when the SDK isn't sure which account to
+      // route the verification to.
+      const confirm = await linkWithPhoneNumber(user, full, ensureRecaptcha());
+      confirmationRef.current = confirm;
       setOtpState("sent");
     } catch (e: any) {
+      // Keep the raw error in the console for diagnosis — the user-facing
+      // copy below is intentionally short.
+      // eslint-disable-next-line no-console
+      console.error("[onboarding] linkWithPhoneNumber failed:", e?.code, e?.message, e);
       resetRecaptcha();
       const code: string = e?.code || "";
       const raw: string  = e?.message || "";
-      // See login page for full context — the most common cause of this error
-      // is the current hostname not being on the Firebase Auth authorised-
-      // domains list (Firebase Console → Authentication → Settings).
       if (code.includes("captcha-check-failed") || raw.includes("Hostname match not found")) {
         setError(
           `${typeof window !== "undefined" ? window.location.host : "This host"} is not authorised by your Firebase project. ` +
@@ -993,11 +996,20 @@ function Step2Profile({
           `and (if reCAPTCHA Enterprise is enabled) under Google Cloud → reCAPTCHA Enterprise → key → Allowed domains.`
         );
       } else if (code.includes("invalid-phone-number")) {
-        setError("That phone number doesn't look right.");
+        setError("That phone number doesn't look right. Check the country code and digits.");
       } else if (code.includes("too-many-requests")) {
-        setError("Too many attempts. Try again in a few minutes.");
+        setError("Too many attempts from this device. Try again in a few minutes.");
       } else if (code.includes("quota-exceeded")) {
-        setError("SMS quota exhausted. Please try again later.");
+        setError("SMS quota exhausted for today. Please try again tomorrow or contact support.");
+      } else if (code.includes("provider-already-linked")) {
+        // A phone is already attached to this account — they must have done
+        // step 2 already. Just advance.
+        setOtpState("sent");
+        setError("");
+      } else if (code.includes("credential-already-in-use")) {
+        setError("This phone number is already registered to another account.");
+      } else if (code.includes("operation-not-allowed")) {
+        setError("Phone sign-in is disabled for this project. Enable it in Firebase Console → Authentication → Sign-in method → Phone.");
       } else {
         setError(raw || "Could not send code. Please try again.");
       }
@@ -1005,7 +1017,7 @@ function Step2Profile({
     }
   };
 
-  const canSubmit = otpState === "sent" && verificationIdRef.current && otp.replace(/\D/g, "").length === 6 && !loading;
+  const canSubmit = otpState === "sent" && confirmationRef.current && otp.replace(/\D/g, "").length === 6 && !loading;
 
   return (
     <motion.div
@@ -1023,12 +1035,44 @@ function Step2Profile({
       <form
         onSubmit={async (e) => {
           e.preventDefault();
-          if (!canSubmit || !verificationIdRef.current) return;
+          if (!canSubmit || !confirmationRef.current) return;
           setOtpState("verifying");
+          // The phone link happens inside confirmPhone (called by the parent
+          // before it PATCHes the profile). We surface code-mismatch errors
+          // here so the user stays on the OTP entry with a friendly message
+          // instead of bouncing back to "send code".
+          const confirmPhone = async (): Promise<boolean> => {
+            const cr = confirmationRef.current;
+            if (!cr) {
+              setError("Please request a new code.");
+              return false;
+            }
+            try {
+              await cr.confirm(otp.trim());
+              return true;
+            } catch (err: any) {
+              // eslint-disable-next-line no-console
+              console.error("[onboarding] confirm failed:", err?.code, err?.message, err);
+              const code = err?.code || "";
+              if (code.includes("invalid-verification-code")) {
+                setError("Incorrect code. Please try again.");
+              } else if (code.includes("code-expired")) {
+                setError("That code expired. Tap Resend to get a new one.");
+              } else if (code.includes("provider-already-linked")) {
+                // A phone is already linked to this account — treat as success.
+                return true;
+              } else if (code.includes("credential-already-in-use")) {
+                setError("This phone number is already linked to another account.");
+              } else {
+                setError(err?.message || "Could not verify the code.");
+              }
+              return false;
+            }
+          };
           const ok = await onSubmit({
             dob, gender, religion, caste, country,
             motherTongue, education, profession,
-            verificationId: verificationIdRef.current, otp,
+            confirmPhone,
           });
           if (!ok) setOtpState("sent");
         }}
@@ -1152,7 +1196,7 @@ function Step2Profile({
               </Field>
               <button
                 type="button"
-                onClick={() => { setOtpState("idle"); setOtp(""); verificationIdRef.current = null; }}
+                onClick={() => { setOtpState("idle"); setOtp(""); confirmationRef.current = null; }}
                 style={resendBtnStyle}
               >
                 Resend to a different number
