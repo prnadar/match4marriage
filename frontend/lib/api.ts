@@ -32,6 +32,38 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Fetch with a single transparent retry on cold-start network failures.
+ *
+ * Vercel's Python lambdas take 5-15s on a cold boot (import FastAPI +
+ * SQLAlchemy + Firebase Admin + open the Neon pool). The browser's first
+ * request after the deploy has been idle often dies with Safari's "Load
+ * failed" TypeError or Chrome's "Failed to fetch" before the lambda
+ * finishes booting. A single retry after a short backoff is enough to
+ * land the next request on the now-warm lambda.
+ *
+ * We only retry idempotent calls (default GET, or callers who opt in via
+ * `init.method`). POST/PUT/PATCH/DELETE go through once so we don't
+ * accidentally double-write.
+ */
+async function _fetchWithRetry(url: string, init: RequestInit, retries = 1): Promise<Response> {
+  const method = (init.method || "GET").toUpperCase();
+  const safeToRetry = method === "GET" || method === "HEAD" || method === "OPTIONS";
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fetch(url, init);
+    } catch (err) {
+      lastErr = err;
+      if (!safeToRetry || attempt === retries) break;
+      // Backoff: 600ms → 1.4s. Just long enough for a Vercel cold boot to
+      // finish; short enough that the user doesn't notice.
+      await new Promise((r) => setTimeout(r, 600 + attempt * 800));
+    }
+  }
+  throw lastErr;
+}
+
 async function request<T = any>(path: string, init: RequestInit = {}): Promise<ApiResponse<T>> {
   const token = await getIdToken();
   const headers: Record<string, string> = {
@@ -43,21 +75,27 @@ async function request<T = any>(path: string, init: RequestInit = {}): Promise<A
 
   let res: Response;
   try {
-    res = await fetch(`${BASE}${path}`, { ...init, headers });
+    res = await _fetchWithRetry(`${BASE}${path}`, { ...init, headers });
   } catch (err: any) {
-    // Translate the browser's generic "Failed to fetch" into something the
-    // user (and oncall) can act on. Three things commonly cause this:
+    // Translate the browser's generic "Failed to fetch" / "Load failed" into
+    // something the user (and oncall) can act on. The most common causes:
     //   1. NEXT_PUBLIC_API_URL is empty → the request goes to `/api/...`
     //      relative, which Vercel can't serve.
-    //   2. The configured URL is unreachable (backend down, wrong host).
-    //   3. The configured URL is HTTP while the page is HTTPS (mixed content).
+    //   2. The serverless lambda is cold-starting and the browser gave up
+    //      before it finished booting (retry already attempted above for
+    //      idempotent calls).
+    //   3. The configured URL is HTTP while the page is HTTPS (mixed
+    //      content), or DNS / connectivity is genuinely broken.
     if (!BASE) {
       throw new ApiError(
         0,
         "API URL is not configured. Set NEXT_PUBLIC_API_URL on the host (Vercel) and redeploy.",
       );
     }
-    throw new ApiError(0, `Cannot reach the server at ${BASE}. ${err?.message || err}`);
+    throw new ApiError(
+      0,
+      "Couldn't reach the server. Please check your connection and try again — the API may be warming up.",
+    );
   }
 
   if (res.status === 401) {
