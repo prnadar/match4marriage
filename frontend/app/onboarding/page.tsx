@@ -32,7 +32,6 @@ import {
   signInWithPhoneNumber,
   linkWithCredential,
   PhoneAuthProvider,
-  signInWithEmailAndPassword,
   updateProfile as updateFirebaseProfile,
   type ConfirmationResult,
 } from "firebase/auth";
@@ -91,18 +90,28 @@ export default function OnboardingPage() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  // Auth-aware step picker. Resumes the user at the first incomplete step:
-  //   profile + phone + id   → /dashboard
-  //   profile + phone, no id → step 3
-  //   profile, no phone      → step 2
-  //   no profile             → step 2 (email exists, profile next)
-  //   not signed in          → step 1
+  // Auto-resume to a later step if the user was already signed in when
+  // the page first loaded (returning visitor with a partially finished
+  // onboarding). We listen for the *first* auth-state emission only —
+  // that's Firebase reporting the initial hydrated state — and then
+  // unsubscribe. Later emissions (e.g. createUserWithEmailAndPassword
+  // in step 1 signing the user in) MUST NOT trigger another setStep,
+  // otherwise the page yanks the user out of the email-verify substep
+  // the moment they hit "Create account".
   useEffect(() => {
+    let resolved = false;
+    let cancelled = false;
+
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
-      if (!user) return;
+      if (resolved) return;
+      resolved = true;
+      unsub();
+      if (!user || cancelled) return;
       rememberSessionUid(user.uid);
+
       try {
         const res = await api.get("/api/v1/profile/me");
+        if (cancelled) return;
         const p = (res.data as any)?.data;
         const hasProfile = !!(p && p.first_name && String(p.first_name).trim());
         const hasPhone   = !!(user.phoneNumber && user.phoneNumber.trim());
@@ -113,13 +122,13 @@ export default function OnboardingPage() {
           return;
         }
         if (hasProfile && hasPhone) { setStep(3); return; }
-        // has email account but neither phone nor full profile yet
-        setStep(2);
+        if (hasProfile)             { setStep(2); return; }
+        // Signed in but profile bootstrap never finished — back to step 1.
       } catch {
-        // backend unreachable — stay on step 1 to retry
+        // Backend unreachable — leave the user on step 1 to retry.
       }
     });
-    return unsub;
+    return () => { cancelled = true; unsub(); };
   }, [router]);
 
   // Shared state passed down to each step
@@ -330,12 +339,19 @@ export default function OnboardingPage() {
     setError("");
     try {
       await api.patch("/api/v1/profile/me", { visa_status: "id_uploaded" });
-    } catch (e) {
-      console.warn("ID verify persist failed:", e);
-    } finally {
-      localStorage.setItem("onboarding_completed", "true");
-      localStorage.removeItem("onboarding_step");
+      // Only mark complete + advance after the patch lands. Previously this
+      // was in `finally`, so a failed save still navigated to /dashboard
+      // and left visa_status unset — the layout banner then nagged the
+      // user forever about ID verification they thought they'd completed.
+      try {
+        localStorage.setItem("onboarding_completed", "true");
+        localStorage.removeItem("onboarding_step");
+      } catch { /* private mode / quota — non-fatal */ }
       router.push("/dashboard");
+    } catch (e: any) {
+      setError(e?.message || "Could not save your verification. Please try again.");
+    } finally {
+      setLoading(false);
     }
   }, [router]);
 
