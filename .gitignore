@@ -43,13 +43,10 @@ next-env.d.ts
 dist/
 web-build/
 
-# Environment variables
+# Environment variables — never commit. Keep .env.example tracked.
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-*.env
+.env.*
+!.env.example
 
 # IDE
 .vscode/
@@ -72,4 +69,3 @@ coverage/
 .cache/
 .git_bak/
 .claude/
-.env.vercel
