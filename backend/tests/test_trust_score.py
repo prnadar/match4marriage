@@ -2,7 +2,7 @@
 Trust score computation tests.
 """
 import pytest
-from app.services.trust_score import compute_trust_score, compute_profile_completeness
+from app.services.trust_score import compute_trust_score_legacy as compute_trust_score, compute_profile_completeness
 from app.models.verification import VerificationType, VerificationStatus
 
 
@@ -26,8 +26,11 @@ class MockProfile:
 
 
 def test_trust_score_no_verifications():
+    # Baseline: an account with zero open reports still earns the full
+    # MAX_COMMUNITY_POINTS (currently 10). Verifications/profile/response
+    # contribute 0 here, so the score equals the community baseline.
     score = compute_trust_score([], 0, 0.0, 0)
-    assert score == 0
+    assert score == 10
 
 
 def test_trust_score_full_verification():

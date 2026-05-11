@@ -172,7 +172,12 @@ def compute_profile_completeness(profile) -> int:
         profile.education_level,
         profile.occupation,
         profile.bio,
-        bool(profile.photos),
+        # `photos` is a list — pass it through directly so the empty-check
+        # below treats an empty list as "not filled". Previously this was
+        # `bool(profile.photos)`, which produced `False` for an empty list;
+        # `False is not None and != "" and != []` is True, so empty profiles
+        # were getting +1 (7% completeness instead of 0%).
+        profile.photos,
     ]
     filled = sum(1 for f in fields if f is not None and f != "" and f != [])
     return int((filled / len(fields)) * 100)

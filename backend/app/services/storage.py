@@ -59,10 +59,16 @@ def generate_photo_upload_signature(
     tenant_slug: str,
     user_id: str,
     file_extension: str,
+    category: str = "photos",
 ) -> dict[str, str | int]:
     """
     Generate signed upload parameters for direct client -> Cloudinary photo upload.
     Returns the data the client needs to POST multipart/form-data to Cloudinary.
+
+    `category` controls the folder suffix and lets callers segregate uploads
+    by purpose — "photos" for profile photos, "verifications" for ID
+    documents (front, back, selfie), etc. Only a small allow-list is
+    accepted so a misbehaving client can't write into an arbitrary path.
 
     Cloudinary's signature covers every custom parameter present in the
     upload request (excluding `file`, `api_key`, `signature`, `resource_type`,
@@ -70,6 +76,8 @@ def generate_photo_upload_signature(
     form POST — and nothing extra.
     """
     _configure_cloudinary()
+    if category not in {"photos", "verifications"}:
+        raise ValueError(f"Unsupported upload category: {category}")
 
     timestamp = int(time.time())
     file_id = uuid.uuid4().hex
@@ -77,7 +85,7 @@ def generate_photo_upload_signature(
     # is also passed — Cloudinary concatenates them itself. Bug if you send
     # both "folder=foo/bar" and "public_id=foo/bar/id": signature mismatch
     # plus a duplicated folder in the stored path.
-    folder = f"{settings.CLOUDINARY_UPLOAD_FOLDER}/{tenant_slug}/{user_id}/photos"
+    folder = f"{settings.CLOUDINARY_UPLOAD_FOLDER}/{tenant_slug}/{user_id}/{category}"
     public_id = file_id  # just the filename portion; Cloudinary prepends folder/
     full_public_id = f"{folder}/{public_id}"
 

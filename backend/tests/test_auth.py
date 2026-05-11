@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 @pytest.mark.asyncio
 async def test_register_valid_phone(client: AsyncClient):
     """POST /api/v1/auth/register with valid phone returns 200."""
-    with patch("app.services.otp.send_otp", new_callable=AsyncMock, return_value=True):
+    with patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=True):
         response = await client.post(
             "/api/v1/auth/register",
             json={"phone": "9876543210", "country_code": "+91"},
@@ -35,7 +35,7 @@ async def test_register_invalid_phone(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_register_otp_send_failure(client: AsyncClient):
     """If OTP service fails, return 503."""
-    with patch("app.services.otp.send_otp", new_callable=AsyncMock, return_value=False):
+    with patch("app.routers.auth.send_otp", new_callable=AsyncMock, return_value=False):
         response = await client.post(
             "/api/v1/auth/register",
             json={"phone": "9876543210", "country_code": "+91"},
@@ -47,7 +47,7 @@ async def test_register_otp_send_failure(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_verify_otp_invalid(client: AsyncClient):
     """Wrong OTP returns 400."""
-    with patch("app.services.otp.verify_otp", new_callable=AsyncMock, return_value=False):
+    with patch("app.routers.auth.verify_otp", new_callable=AsyncMock, return_value=False):
         response = await client.post(
             "/api/v1/auth/verify-otp",
             json={"phone": "9876543210", "otp": "000000"},

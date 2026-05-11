@@ -334,26 +334,79 @@ export default function OnboardingPage() {
 
   // ─── Step 3 → finish ────────────────────────────────────────────────────
 
-  const handleFinish = useCallback(async () => {
+  // Upload one file to Cloudinary via a signed URL. Used by step 3 to
+  // attach the ID front, back (if needed), and the selfie to the
+  // Verification record on the backend. Mirrors the photo upload flow
+  // in PhotoGrid.tsx; the only difference is category=verifications so
+  // the files land in a separate folder than profile photos.
+  const uploadVerificationFile = useCallback(async (file: File): Promise<{ url: string; key: string }> => {
+    const sig = await api.post<{ data: any }>(
+      `/api/v1/profile/photos/upload-url?content_type=${encodeURIComponent(file.type)}&category=verifications`
+    );
+    const params = (sig.data as any)?.data;
+    if (!params?.upload_url) throw new Error("Could not get upload URL");
+    const form = new FormData();
+    form.append("file", file);
+    form.append("api_key", params.api_key);
+    form.append("timestamp", String(params.timestamp));
+    form.append("signature", params.signature);
+    form.append("folder", params.folder);
+    form.append("public_id", params.public_id);
+    const cldRes = await fetch(params.upload_url, { method: "POST", body: form });
+    if (!cldRes.ok) {
+      const txt = await cldRes.text();
+      let msg = `Upload failed (${cldRes.status})`;
+      try { msg = JSON.parse(txt)?.error?.message || msg; } catch {}
+      throw new Error(msg);
+    }
+    const cld = await cldRes.json() as { secure_url: string; public_id: string };
+    return { url: cld.secure_url, key: cld.public_id };
+  }, []);
+
+  const handleFinish = useCallback(async (payload: {
+    docCountry: string;
+    docType: string;
+    docNumber: string;
+    frontFile: File;
+    backFile: File | null;
+    selfieFile: File;
+  }) => {
     setLoading(true);
     setError("");
     try {
-      await api.patch("/api/v1/profile/me", { visa_status: "id_uploaded" });
-      // Only mark complete + advance after the patch lands. Previously this
-      // was in `finally`, so a failed save still navigated to /dashboard
-      // and left visa_status unset — the layout banner then nagged the
-      // user forever about ID verification they thought they'd completed.
+      // 1. Upload each file to Cloudinary (front, optional back, selfie).
+      const [front, selfie, back] = await Promise.all([
+        uploadVerificationFile(payload.frontFile),
+        uploadVerificationFile(payload.selfieFile),
+        payload.backFile ? uploadVerificationFile(payload.backFile) : Promise.resolve(null),
+      ]);
+
+      // 2. Persist a Verification record. The backend also flips
+      //    visa_status to "id_uploaded" so we don't need a separate PATCH.
+      await api.post("/api/v1/profile/me/verifications/submit", {
+        doc_type:    payload.docType,
+        doc_country: payload.docCountry,
+        doc_number:  payload.docNumber.trim(),
+        front_url:   front.url,
+        front_key:   front.key,
+        back_url:    back?.url,
+        back_key:    back?.key,
+        selfie_url:  selfie.url,
+        selfie_key:  selfie.key,
+      });
+
+      // 3. Done — mark onboarding complete and go to the dashboard.
       try {
         localStorage.setItem("onboarding_completed", "true");
         localStorage.removeItem("onboarding_step");
       } catch { /* private mode / quota — non-fatal */ }
       router.push("/dashboard");
     } catch (e: any) {
-      setError(e?.message || "Could not save your verification. Please try again.");
+      setError(e?.message || "Could not submit your verification. Please try again.");
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, uploadVerificationFile]);
 
   const currentStep = STEPS[step - 1];
 
@@ -1134,10 +1187,19 @@ const DOCUMENTS_BY_COUNTRY: Record<string, string[]> = {
   "Other":           ["Passport", "National ID", "Driving Licence"],
 };
 
+type Step3Payload = {
+  docCountry: string;
+  docType: string;
+  docNumber: string;
+  frontFile: File;
+  backFile: File | null;
+  selfieFile: File;
+};
+
 function Step3IdVerify({
   loading, onSubmit, onBack,
 }: {
-  loading: boolean; onSubmit: () => void; onBack: () => void;
+  loading: boolean; onSubmit: (payload: Step3Payload) => void; onBack: () => void;
 }) {
   const [docCountry, setDocCountry] = useState("United Kingdom");
   const [docType, setDocType] = useState("");
@@ -1145,11 +1207,11 @@ function Step3IdVerify({
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [selfieFile, setSelfieFile] = useState<File | null>(null);
 
-  const needsBack = docType && docType !== "Passport";
+  const needsBack = !!docType && docType !== "Passport";
   const [backFile, setBackFile] = useState<File | null>(null);
 
   const available = DOCUMENTS_BY_COUNTRY[docCountry] || DOCUMENTS_BY_COUNTRY["Other"];
-  const canSubmit = docCountry && docType && docNumber.trim() && frontFile && selfieFile && (!needsBack || backFile) && !loading;
+  const canSubmit = !!(docCountry && docType && docNumber.trim() && frontFile && selfieFile && (!needsBack || backFile) && !loading);
 
   return (
     <motion.div
@@ -1182,7 +1244,18 @@ function Step3IdVerify({
       </div>
 
       <form
-        onSubmit={(e) => { e.preventDefault(); if (canSubmit) onSubmit(); }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!canSubmit || !frontFile || !selfieFile) return;
+          onSubmit({
+            docCountry,
+            docType,
+            docNumber,
+            frontFile,
+            backFile: needsBack ? backFile : null,
+            selfieFile,
+          });
+        }}
         style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 24 }}
       >
         <Row>

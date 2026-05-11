@@ -1005,6 +1005,7 @@ async def update_profile(
 async def get_photo_upload_url(
     current_user: Annotated[dict, Depends(get_current_user)],
     content_type: str = Query(..., pattern=r"^image/(jpeg|jpg|png|webp)$"),
+    category: str = Query("photos", pattern=r"^(photos|verifications)$"),
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
     ext_map = {"image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp"}
@@ -1015,6 +1016,7 @@ async def get_photo_upload_url(
             tenant_slug=tenant_slug,
             user_id=user_id,
             file_extension=ext,
+            category=category,
         )
     except RuntimeError as exc:
         # Cloudinary not configured (or transient auth failure). Return a
@@ -1025,6 +1027,132 @@ async def get_photo_upload_url(
             detail="Photo uploads are temporarily unavailable. Please try again later or contact support.",
         )
     return APIResponse(success=True, data=result)
+
+
+# ─── ID verification submit ────────────────────────────────────────────────
+
+_DOC_TO_VERIFICATION_TYPE = {
+    # India
+    "aadhaar":  "aadhaar",
+    "pan":      "pan",
+    # Anywhere else maps onto the AADHAAR slot for now — the admin review
+    # queue treats every doc the same; the verification_type enum just needs
+    # to be one of its members for the row to validate.
+    "passport":          "aadhaar",
+    "driving licence":   "aadhaar",
+    "driver license":    "aadhaar",
+    "driving license":   "aadhaar",
+    "national id":       "aadhaar",
+    "residence permit":  "aadhaar",
+    "voter id":          "aadhaar",
+}
+
+
+@router.post("/me/verifications/submit", response_model=APIResponse[dict])
+async def submit_verification(
+    payload: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    """
+    Submit a government-ID verification with documents already uploaded to
+    Cloudinary via /photos/upload-url?category=verifications.
+
+    Body shape:
+      {
+        "doc_type":   str  (e.g. "Passport", "Aadhaar", "Driving Licence"),
+        "doc_country": str (informational; e.g. "United Kingdom"),
+        "doc_number": str,
+        "front_url":  str  (Cloudinary secure_url of the front-of-document image),
+        "front_key":  str  (Cloudinary public_id),
+        "back_url":   str | None,
+        "back_key":   str | None,
+        "selfie_url": str,
+        "selfie_key": str,
+      }
+
+    Creates (or updates) a Verification row in IN_REVIEW status, then flips
+    the profile's visa_status to "id_uploaded" so the dashboard banner
+    knows the user has done their part. An admin still has to approve via
+    /profile/admin/verifications/{user_id}/approve before trust points are
+    awarded.
+    """
+    from app.models.verification import Verification, VerificationStatus, VerificationType
+
+    user_id = _get_user_uuid(current_user) if "_get_user_uuid" in globals() else None
+    if user_id is None:
+        try:
+            user_id = uuid.UUID(current_user.get("sub", ""))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=401, detail="Invalid user session")
+
+    required = ("doc_type", "doc_number", "front_url", "front_key", "selfie_url", "selfie_key")
+    missing = [k for k in required if not payload.get(k)]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing: {', '.join(missing)}")
+
+    doc_type_norm = str(payload["doc_type"]).strip().lower()
+    verification_type_str = _DOC_TO_VERIFICATION_TYPE.get(doc_type_norm, "aadhaar")
+    try:
+        verification_type = VerificationType(verification_type_str)
+    except ValueError:
+        verification_type = VerificationType.AADHAAR
+
+    tenant_uuid = await _resolve_tenant_uuid(db, tenant_slug)
+    profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+
+    # Upsert the verification row (uq_verification_user_type covers the conflict).
+    existing = (await db.execute(
+        select(Verification).where(
+            Verification.user_id == user_id,
+            Verification.verification_type == verification_type,
+            Verification.deleted_at.is_(None),
+        )
+    )).scalar_one_or_none()
+
+    provider_response = {
+        "doc_type":    payload["doc_type"],
+        "doc_country": payload.get("doc_country"),
+        "doc_number":  payload["doc_number"],
+        "front":       {"url": payload["front_url"],  "key": payload["front_key"]},
+        "back":        {"url": payload.get("back_url"), "key": payload.get("back_key")} if payload.get("back_url") else None,
+        "selfie":      {"url": payload["selfie_url"], "key": payload["selfie_key"]},
+    }
+
+    if existing:
+        existing.status = VerificationStatus.IN_REVIEW
+        existing.provider_response = provider_response
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(existing, "provider_response")
+        verification_id = existing.id
+    else:
+        new_verif = Verification(
+            tenant_id=tenant_uuid,
+            user_id=user_id,
+            verification_type=verification_type,
+            status=VerificationStatus.IN_REVIEW,
+            provider_response=provider_response,
+        )
+        db.add(new_verif)
+        await db.flush()
+        verification_id = new_verif.id
+
+    profile.visa_status = "id_uploaded"
+    profile.completeness_score = compute_profile_completeness(profile)
+    await db.flush()
+
+    logger.info(
+        "verification_submitted",
+        user_id=str(user_id),
+        verification_type=verification_type.value,
+        verification_id=str(verification_id),
+    )
+    return APIResponse(
+        success=True,
+        data={"verification_id": str(verification_id), "status": "in_review"},
+        message="Verification submitted. Our review team will get back to you shortly.",
+    )
 
 
 @router.post("/voice-note/upload-url", response_model=APIResponse[dict])
