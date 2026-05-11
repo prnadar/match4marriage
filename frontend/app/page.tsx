@@ -129,7 +129,7 @@ export default function HomePage() {
         <video
           className="hero-video"
           src="/hero.mp4"
-          poster="/images/Gemini_Generated_Image_xaa8o9xaa8o9xaa8.png"
+          poster="/hero-poster.jpg"
           autoPlay
           muted
           loop
