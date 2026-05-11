@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, Shield, Eye, Globe, Smartphone, CreditCard, LogOut, ChevronRight, Trash2, Download, Lock, CheckCircle } from "lucide-react";
+import { Bell, Shield, Eye, Globe, Smartphone, CreditCard, LogOut, ChevronRight, Trash2, Download, Lock, CheckCircle, Mail, AlertCircle, Loader2 } from "lucide-react";
 import { firebaseAuth } from "@/lib/firebase";
+import { api } from "@/lib/api";
 
 type Section = "notifications" | "privacy" | "account" | "preferences" | "data";
 
@@ -156,6 +157,79 @@ export default function SettingsPage() {
     });
     return () => unsub();
   }, []);
+
+  // ── Email verification status ────────────────────────────────────────────
+  //
+  // Pulled from /auth/me (server-side truth). If is_email_verified is false
+  // we show a "Verify now" card that POSTs /auth/send-verification-email,
+  // then takes the 6-digit code via /auth/verify-email?token=... which on
+  // success sets is_email_verified=true and bumps the user's trust score
+  // (+20 in compute_trust_score for the email signal).
+  const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
+  const [emailVerifyStage, setEmailVerifyStage] = useState<"idle" | "sending" | "code" | "verifying">("idle");
+  const [emailVerifyMsg, setEmailVerifyMsg] = useState<{ tone: "info" | "error" | "success"; text: string } | null>(null);
+  const [emailCode, setEmailCode] = useState("");
+
+  const refreshAuthStatus = async () => {
+    try {
+      const res = await api.get<any>("/api/v1/auth/me");
+      const d = (res.data as any)?.data;
+      if (typeof d?.is_email_verified === "boolean") setEmailVerified(d.is_email_verified);
+    } catch { /* leave as null */ }
+  };
+  useEffect(() => { refreshAuthStatus(); }, []);
+
+  const handleSendVerificationEmail = async () => {
+    setEmailVerifyMsg(null);
+    setEmailVerifyStage("sending");
+    try {
+      const res = await api.post<any>("/api/v1/auth/send-verification-email");
+      const d = (res.data as any)?.data;
+      if (d?.email_verified) {
+        setEmailVerified(true);
+        setEmailVerifyStage("idle");
+        setEmailVerifyMsg({ tone: "success", text: "Your email is already verified." });
+        return;
+      }
+      setEmailVerifyStage("code");
+      setEmailVerifyMsg({
+        tone: "info",
+        text: `Verification code sent to ${d?.email ?? "your inbox"}. It expires in 10 minutes.`,
+      });
+    } catch (e: any) {
+      setEmailVerifyStage("idle");
+      setEmailVerifyMsg({ tone: "error", text: e?.message || "Could not send the email. Try again." });
+    }
+  };
+
+  const handleVerifyEmailCode = async () => {
+    const code = emailCode.replace(/\D/g, "").slice(0, 6);
+    if (code.length !== 6) {
+      setEmailVerifyMsg({ tone: "error", text: "Please enter the 6-digit code we emailed." });
+      return;
+    }
+    setEmailVerifyStage("verifying");
+    try {
+      await api.get(`/api/v1/auth/verify-email?token=${code}`);
+      // Refresh the Firebase ID token so any backend claim caches pick up
+      // the updated verification state.
+      try { await firebaseAuth.currentUser?.getIdToken(true); } catch {}
+      setEmailVerified(true);
+      setEmailVerifyStage("idle");
+      setEmailVerifyMsg({
+        tone: "success",
+        text: "Email verified — your Trust Score has been boosted.",
+      });
+      setEmailCode("");
+    } catch (e: any) {
+      setEmailVerifyStage("code");
+      const detail = (e?.detail as any)?.detail || e?.message || "Could not verify the code.";
+      setEmailVerifyMsg({
+        tone: "error",
+        text: /expired|invalid/i.test(detail) ? "That code is invalid or expired. Send a new one." : detail,
+      });
+    }
+  };
 
   const toggleNotif   = (key: keyof typeof notifs)  => setNotifs((p)  => ({ ...p, [key]: !p[key] }));
   const togglePrivacy = (key: keyof typeof privacy)  => setPrivacy((p) => ({ ...p, [key]: !p[key] }));
@@ -407,6 +481,163 @@ export default function SettingsPage() {
             {/* ── Account ── */}
             {section === "account" && (
               <>
+                {/* Email verification card. Hidden while the verified flag
+                    is loading (null) so the UI doesn't flash 'Not verified'
+                    for a verified user. Boosts trust score on success. */}
+                {emailVerified !== null && (
+                  <div
+                    style={{
+                      borderRadius: 16,
+                      padding: 20,
+                      background: emailVerified
+                        ? "rgba(92,122,82,0.05)"
+                        : "rgba(220,30,60,0.04)",
+                      border: `1px solid ${emailVerified ? "rgba(92,122,82,0.2)" : "rgba(220,30,60,0.18)"}`,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: emailVerified ? 0 : 12 }}>
+                      <div
+                        style={{
+                          flexShrink: 0,
+                          width: 32, height: 32, borderRadius: 999,
+                          background: emailVerified ? "rgba(92,122,82,0.15)" : "rgba(220,30,60,0.12)",
+                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        }}
+                      >
+                        {emailVerified
+                          ? <CheckCircle style={{ width: 16, height: 16, color: "#5C7A52" }} />
+                          : <Mail style={{ width: 16, height: 16, color: "#dc1e3c" }} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, fontWeight: 600, color: "#1a0a14" }}>
+                          {emailVerified ? "Email verified" : "Verify your email"}
+                        </p>
+                        <p style={{ margin: "4px 0 0", fontFamily: "var(--font-poppins, sans-serif)", fontSize: 12, color: "rgba(26,10,20,0.6)", lineHeight: 1.5 }}>
+                          {emailVerified
+                            ? `${account.email} is confirmed. Your Trust Score includes the email signal.`
+                            : `We'll send a 6-digit code to ${account.email}. Verifying boosts your Trust Score by 20 points.`}
+                        </p>
+                      </div>
+                    </div>
+
+                    {!emailVerified && (
+                      <div style={{ marginTop: 12 }}>
+                        {emailVerifyStage === "code" || emailVerifyStage === "verifying" ? (
+                          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="\d*"
+                              maxLength={6}
+                              value={emailCode}
+                              onChange={(e) => setEmailCode(e.target.value.replace(/\D/g, ""))}
+                              onKeyDown={(e) => { if (e.key === "Enter" && emailVerifyStage === "code") handleVerifyEmailCode(); }}
+                              placeholder="6-digit code"
+                              autoComplete="one-time-code"
+                              style={{
+                                flex: "1 0 140px",
+                                padding: "10px 12px",
+                                borderRadius: 10,
+                                border: "1px solid rgba(26,10,20,0.15)",
+                                fontFamily: "ui-monospace, 'SF Mono', monospace",
+                                fontSize: 16,
+                                letterSpacing: "0.25em",
+                                background: "#fff",
+                                outline: "none",
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={handleVerifyEmailCode}
+                              disabled={emailVerifyStage === "verifying"}
+                              style={{
+                                padding: "10px 16px",
+                                borderRadius: 10,
+                                border: "none",
+                                background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
+                                color: "#fff",
+                                fontFamily: "var(--font-poppins, sans-serif)",
+                                fontSize: 13, fontWeight: 600,
+                                cursor: emailVerifyStage === "verifying" ? "wait" : "pointer",
+                                display: "inline-flex", alignItems: "center", gap: 6,
+                              }}
+                            >
+                              {emailVerifyStage === "verifying" && <Loader2 style={{ width: 13, height: 13, animation: "spin 0.7s linear infinite" }} />}
+                              Verify
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSendVerificationEmail}
+                              disabled={emailVerifyStage === "verifying"}
+                              style={{
+                                padding: "10px 12px",
+                                borderRadius: 10,
+                                border: "1px solid rgba(26,10,20,0.12)",
+                                background: "#fff",
+                                color: "rgba(26,10,20,0.7)",
+                                fontFamily: "var(--font-poppins, sans-serif)",
+                                fontSize: 13, fontWeight: 500,
+                                cursor: "pointer",
+                              }}
+                            >
+                              Resend
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleSendVerificationEmail}
+                            disabled={emailVerifyStage === "sending"}
+                            style={{
+                              padding: "10px 18px",
+                              borderRadius: 10,
+                              border: "none",
+                              background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
+                              color: "#fff",
+                              fontFamily: "var(--font-poppins, sans-serif)",
+                              fontSize: 13, fontWeight: 600,
+                              cursor: emailVerifyStage === "sending" ? "wait" : "pointer",
+                              display: "inline-flex", alignItems: "center", gap: 8,
+                            }}
+                          >
+                            {emailVerifyStage === "sending"
+                              ? <><Loader2 style={{ width: 13, height: 13, animation: "spin 0.7s linear infinite" }} /> Sending…</>
+                              : <>Send verification code</>}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {emailVerifyMsg && (
+                      <div
+                        style={{
+                          marginTop: 12,
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          fontFamily: "var(--font-poppins, sans-serif)",
+                          fontSize: 12,
+                          lineHeight: 1.5,
+                          display: "inline-flex", alignItems: "center", gap: 6,
+                          background:
+                            emailVerifyMsg.tone === "error" ? "rgba(220,30,60,0.08)"
+                            : emailVerifyMsg.tone === "success" ? "rgba(92,122,82,0.1)"
+                            : "rgba(26,10,20,0.05)",
+                          color:
+                            emailVerifyMsg.tone === "error" ? "#a0153c"
+                            : emailVerifyMsg.tone === "success" ? "#3F5937"
+                            : "rgba(26,10,20,0.7)",
+                        }}
+                      >
+                        {emailVerifyMsg.tone === "error" && <AlertCircle style={{ width: 12, height: 12 }} />}
+                        {emailVerifyMsg.tone === "success" && <CheckCircle style={{ width: 12, height: 12 }} />}
+                        <span>{emailVerifyMsg.text}</span>
+                      </div>
+                    )}
+
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                  </div>
+                )}
+
                 <Card>
                   {[
                     { label: "Change Phone Number",      desc: account.phone                        },

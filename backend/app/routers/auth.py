@@ -261,6 +261,8 @@ async def auth_me(
     # didn't include them (e.g. phone-only sign-ins).
     email = current_user.get("email")
     phone = current_user.get("phone")
+    is_email_verified = False
+    is_phone_verified = False
     try:
         import uuid as _uuid
         db_user = (await db.execute(
@@ -269,6 +271,8 @@ async def auth_me(
         if db_user:
             email = email or db_user.email
             phone = phone or db_user.phone
+            is_email_verified = bool(db_user.is_email_verified)
+            is_phone_verified = bool(db_user.is_phone_verified)
     except Exception:
         pass
 
@@ -278,6 +282,8 @@ async def auth_me(
             "user_id": str(user_id) if user_id else None,
             "email": email,
             "phone": phone,
+            "is_email_verified": is_email_verified,
+            "is_phone_verified": is_phone_verified,
             "roles": roles,
             "is_admin": "admin" in roles or "super_admin" in roles,
             "is_super_admin": "super_admin" in roles,
