@@ -5,7 +5,7 @@ import {
   Search, Shield, X, Loader2, AlertCircle, Heart, SlidersHorizontal,
 } from "lucide-react";
 import Link from "next/link";
-import { matchApi } from "@/lib/api";
+import { matchApi, ApiError } from "@/lib/api";
 import { ProfileCard, type ProfileCardData } from "@/components/ui/profile-card";
 import { LuxeButton } from "@/components/ui/luxe-button";
 import { RevealText } from "@/components/ui/reveal-text";
@@ -99,9 +99,15 @@ export default function MatchesPage() {
       return s;
     });
     if (!wasLiked) {
-      try { await matchApi.sendInterest(id); }
-      catch {
+      try {
+        await matchApi.sendInterest(id);
+      } catch (err) {
+        // 409 means an interest already exists between these users — treat
+        // the heart as already-sent rather than yanking it back. Anything
+        // else: revert the optimistic like and surface the error.
+        if (err instanceof ApiError && err.status === 409) return;
         setLiked((prev) => { const s = new Set(prev); s.delete(id); return s; });
+        setError(err instanceof Error ? err.message : "Could not send interest");
       }
     }
   };

@@ -220,11 +220,21 @@ export default function MyProfilePage() {
   const [loadStatus, setLoadStatus] = useState<"loading" | "ok" | "error">("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Tracks mount state so an in-flight profile fetch that resolves after
+  // the user has navigated away doesn't call setState on an unmounted
+  // component (React warns, and stale state writes can leak).
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
+
   const loadProfile = useCallback(async () => {
     setLoadStatus("loading");
     setLoadError(null);
     try {
       const res = await profileApi.me();
+      if (!isMountedRef.current) return;
       const p = (res.data as any)?.data ?? res.data;
 
       if (p) {
@@ -313,6 +323,7 @@ export default function MyProfilePage() {
       loadedRef.current = true;
       setLoadStatus("ok");
     } catch (err: any) {
+      if (!isMountedRef.current) return;
       console.error("Failed to load profile:", err);
       setLoadError(err?.message || "Could not load your profile. Please try again.");
       setLoadStatus("error");

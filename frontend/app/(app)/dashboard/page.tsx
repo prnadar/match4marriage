@@ -6,7 +6,7 @@ import {
   Shield, Heart, Clock, Sparkles, Search, ArrowRight, AlertCircle,
   Check, Plus,
 } from "lucide-react";
-import { matchApi, profileApi } from "@/lib/api";
+import { matchApi, profileApi, ApiError } from "@/lib/api";
 import { ProfileCard, type ProfileCardData } from "@/components/ui/profile-card";
 import { LuxeButton } from "@/components/ui/luxe-button";
 import { RevealText } from "@/components/ui/reveal-text";
@@ -140,8 +140,13 @@ export default function DashboardPage() {
 
   const sendInterest = async (id: string) => {
     setInterests((p) => ({ ...p, [id]: "sent" }));
-    try { await matchApi.sendInterest(id); }
-    catch {
+    try {
+      await matchApi.sendInterest(id);
+    } catch (err) {
+      // 409: already sent. Leave the optimistic "sent" badge in place
+      // because that's the truthful state on the backend. Any other
+      // failure rolls back so the user can retry.
+      if (err instanceof ApiError && err.status === 409) return;
       setInterests((p) => { const n = { ...p }; delete n[id]; return n; });
     }
   };
