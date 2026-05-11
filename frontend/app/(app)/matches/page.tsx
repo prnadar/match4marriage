@@ -79,10 +79,8 @@ export default function MatchesPage() {
       if (verifiedOnly) params.verified = "true";
 
       const res = await matchApi.browseProfiles(params);
-      const data = res.data as any;
-      const list =
-        Array.isArray(data) ? data
-        : data?.results ?? data?.profiles ?? data?.data ?? [];
+      // PaginatedResponse[ProfileCard] — items live at `.data.data`.
+      const list: any[] = (res.data as any)?.data ?? [];
       setProfiles(list.map(mapApiProfile));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load profiles");

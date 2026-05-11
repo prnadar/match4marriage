@@ -189,8 +189,7 @@ async def get_received_interests(
     offset = (page - 1) * limit
 
     if not user_id:
-        from app.schemas.common import PaginatedResponse as PR
-        return PR(items=[], total=0, page=page, pages=0)
+        return PaginatedResponse.create([], 0, page, limit)
 
     count_result = await db.execute(
         select(func.count()).where(
@@ -226,7 +225,7 @@ async def get_sent_interests(
     offset = (page - 1) * limit
 
     if not user_id:
-        return PaginatedResponse(items=[], total=0, page=page, pages=0)
+        return PaginatedResponse.create([], 0, page, limit)
 
     count_result = await db.execute(
         select(func.count()).where(

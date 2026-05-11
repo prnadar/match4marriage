@@ -49,8 +49,7 @@ export default function MessagesPage() {
     setLoading(true); setError(null);
     try {
       const res = await chatApi.listThreads(1, 50);
-      const data = res.data as any;
-      const items = data?.items ?? data?.results ?? data?.data?.items ?? [];
+      const items: any[] = (res.data as any)?.data ?? [];
       setThreads(items as ChatThread[]);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not load conversations");

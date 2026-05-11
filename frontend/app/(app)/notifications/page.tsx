@@ -83,9 +83,8 @@ export default function NotificationsPage() {
     setLoading(true); setError(null);
     try {
       const res = await notificationsApi.list(1, 50);
-      const data = res.data as any;
-      const list = data?.items ?? data?.results ?? data?.data?.items ?? data?.data ?? [];
-      setNotifs((Array.isArray(list) ? list : []).map(mapNotif));
+      const list: any[] = (res.data as any)?.data ?? [];
+      setNotifs(list.map(mapNotif));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not load notifications");
       setNotifs([]);

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db, AsyncSessionLocal
@@ -163,24 +163,28 @@ async def list_threads(
     try:
         user_id = uuid.UUID(current_user["sub"])
     except (ValueError, AttributeError):
-        from app.schemas.common import PaginatedResponse as PR
-        return PR(items=[], total=0, page=page, pages=0)
+        return PaginatedResponse.create([], 0, page, limit)
     offset = (page - 1) * limit
+
+    thread_filter = (
+        or_(ChatThread.user_a_id == user_id, ChatThread.user_b_id == user_id),
+        ChatThread.is_active.is_(True),
+        ChatThread.deleted_at.is_(None),
+    )
+
+    total_result = await db.execute(select(func.count()).select_from(ChatThread).where(*thread_filter))
+    total = total_result.scalar() or 0
 
     result = await db.execute(
         select(ChatThread)
-        .where(
-            or_(ChatThread.user_a_id == user_id, ChatThread.user_b_id == user_id),
-            ChatThread.is_active.is_(True),
-            ChatThread.deleted_at.is_(None),
-        )
+        .where(*thread_filter)
         .order_by(ChatThread.last_message_at.desc().nullslast())
         .offset(offset)
         .limit(limit)
     )
     threads = result.scalars().all()
     return PaginatedResponse.create(
-        [ChatThreadRead.model_validate(t) for t in threads], len(threads), page, limit
+        [ChatThreadRead.model_validate(t) for t in threads], total, page, limit
     )
 
 
@@ -193,14 +197,19 @@ async def get_messages(
     current_user: Annotated[dict, Depends(get_current_user)] = None,
 ):
     offset = (page - 1) * limit
+    msg_filter = (Message.thread_id == thread_id, Message.deleted_at.is_(None))
+
+    total_result = await db.execute(select(func.count()).select_from(Message).where(*msg_filter))
+    total = total_result.scalar() or 0
+
     result = await db.execute(
         select(Message)
-        .where(Message.thread_id == thread_id, Message.deleted_at.is_(None))
+        .where(*msg_filter)
         .order_by(Message.created_at.desc())
         .offset(offset)
         .limit(limit)
     )
     messages = result.scalars().all()
     return PaginatedResponse.create(
-        [MessageRead.model_validate(m) for m in messages], len(messages), page, limit
+        [MessageRead.model_validate(m) for m in messages], total, page, limit
     )

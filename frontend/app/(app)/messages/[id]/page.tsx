@@ -72,19 +72,15 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     try {
       // Pull all threads to find the matching one (cheap, list page just did this).
       // If you have a getThread(id) endpoint later, swap this for that.
+      // Backend returns PaginatedResponse{success, data: T[], total, page, limit, has_next}
+      // — `res.data` here is the whole envelope, so the items live at `res.data.data`.
       const threadsRes = await chatApi.listThreads(1, 50);
-      const allThreads = (threadsRes.data as any)?.items
-        ?? (threadsRes.data as any)?.results
-        ?? (threadsRes.data as any)?.data?.items
-        ?? [];
+      const allThreads: any[] = (threadsRes.data as any)?.data ?? [];
       const matched = allThreads.find((t: any) => String(t.id) === params.id);
       if (matched?.other_profile) setOther(matched.other_profile);
 
       const msgRes = await chatApi.getMessages(params.id, 1, 100);
-      const items = (msgRes.data as any)?.items
-        ?? (msgRes.data as any)?.results
-        ?? (msgRes.data as any)?.data?.items
-        ?? [];
+      const items: any[] = (msgRes.data as any)?.data ?? [];
       // Backend returns newest first; reverse for chronological display.
       setMessages([...items].reverse());
     } catch (err: unknown) {

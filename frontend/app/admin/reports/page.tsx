@@ -57,7 +57,7 @@ export default function AdminReportsPage() {
         limit: 200,
       });
       const payload = res.data as any;
-      setItems(Array.isArray(payload?.items) ? payload.items : []);
+      setItems(Array.isArray(payload?.data) ? payload.data : []);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to load");
     } finally {

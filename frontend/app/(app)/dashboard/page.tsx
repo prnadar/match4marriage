@@ -111,18 +111,17 @@ export default function DashboardPage() {
           profileApi.getCompletion(),
         ]);
 
+        // Backend envelope: APIResponse{success, data: T} for singular,
+        // PaginatedResponse{success, data: T[], ...} for paginated.
+        // `*.value.data` is the whole envelope, so the payload is at `.data.data`.
         if (matchRes.status === "fulfilled") {
-          const data = matchRes.value.data as any;
-          const candidates = [
-            data, data?.data, data?.results, data?.matches, data?.items,
-            data?.data?.results, data?.data?.matches, data?.data?.items,
-          ];
-          const list = candidates.find((c) => Array.isArray(c)) ?? [];
+          const payload = (matchRes.value.data as any)?.data;
+          const list: any[] = payload?.matches ?? (Array.isArray(payload) ? payload : []);
           setMatches(list.map(mapMatch));
         }
 
         if (trustRes.status === "fulfilled") {
-          const d = trustRes.value.data as any;
+          const d = (trustRes.value.data as any)?.data ?? trustRes.value.data;
           setTrustScore(d?.total ?? d?.trust_score ?? d?.trustScore ?? d?.score ?? null);
         }
 

@@ -104,15 +104,14 @@ export default function InterestsPage() {
           matchApi.getSentInterests(),
         ]);
 
+        // PaginatedResponse envelope: items live at `.data.data`.
         if (recRes.status === "fulfilled") {
-          const data = recRes.value.data;
-          const list = Array.isArray(data) ? data : data?.results ?? data?.interests ?? data?.data ?? [];
+          const list: any[] = (recRes.value.data as any)?.data ?? [];
           setReceivedList(list.map(mapInterest));
         }
 
         if (sentRes.status === "fulfilled") {
-          const data = sentRes.value.data;
-          const list = Array.isArray(data) ? data : data?.results ?? data?.interests ?? data?.data ?? [];
+          const list: any[] = (sentRes.value.data as any)?.data ?? [];
           setSentList(list.map(mapInterest));
         }
       } catch (err: unknown) {

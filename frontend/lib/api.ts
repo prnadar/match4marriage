@@ -215,9 +215,12 @@ export const successStoriesApi = {
 export async function openChatSocket(threadId: string): Promise<WebSocket> {
   const token = await getIdToken();
   if (!token) throw new ApiError(401, "Not signed in");
-  // Convert http(s) → ws(s) for the same host as BASE.
+  // Convert http(s) → ws(s) for the same host as BASE. The chat router is
+  // mounted under the same `/api/v1` prefix as the REST API, so the WS path
+  // includes it too (backend: app.include_router(chat.router, prefix="/api/v1")
+  // and chat.router defines @router.websocket("/ws/chat/{thread_id}")).
   const wsBase = BASE.replace(/^http/, "ws");
-  const url = `${wsBase}/ws/chat/${threadId}?token=${encodeURIComponent(token)}`;
+  const url = `${wsBase}/api/v1/ws/chat/${threadId}?token=${encodeURIComponent(token)}`;
   return new WebSocket(url);
 }
 
