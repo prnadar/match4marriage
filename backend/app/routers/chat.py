@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db, AsyncSessionLocal
 from app.core.logging import get_logger
 from app.core.security import get_current_user, _decode_token
+from app.core.tenancy import get_current_tenant_slug
 from app.models.match import ChatThread, Message, MessageType
 from app.schemas.common import APIResponse, PaginatedResponse
 from app.schemas.match import ChatThreadRead, MessageRead, SendMessageRequest
@@ -70,6 +71,32 @@ async def websocket_chat(
         return
 
     sender_id = claims.get("sub")
+
+    # Verify the caller is actually a participant of this thread. Without
+    # this gate any authenticated user can connect to any thread_id they
+    # know (or guess) and post messages into a conversation that isn't
+    # theirs. Look the thread up once on connect — cheap, and we already
+    # need it later for tenant scoping.
+    try:
+        thread_uuid = uuid.UUID(thread_id)
+        user_uuid = uuid.UUID(sender_id) if sender_id else None
+    except (TypeError, ValueError):
+        await websocket.close(code=4001)
+        return
+    if user_uuid is None:
+        await websocket.close(code=4001)
+        return
+    async with AsyncSessionLocal() as db:
+        thread = (await db.execute(
+            select(ChatThread).where(
+                ChatThread.id == thread_uuid,
+                ChatThread.deleted_at.is_(None),
+            )
+        )).scalar_one_or_none()
+    if thread is None or user_uuid not in (thread.user_a_id, thread.user_b_id):
+        await websocket.close(code=4003)
+        return
+
     await websocket.accept()
     manager.add(thread_id, websocket)
     logger.info("ws_connected", user=sender_id, thread=thread_id)
@@ -91,6 +118,10 @@ async def websocket_chat(
                     sender_id=sender_id,
                     payload=data,
                 )
+                if saved is None:
+                    # Thread vanished or membership revoked mid-session.
+                    await websocket.send_json({"type": "error", "detail": "Not allowed"})
+                    continue
                 await manager.broadcast(
                     thread_id,
                     {
@@ -105,7 +136,7 @@ async def websocket_chat(
                 )
 
             elif msg_type == "read":
-                await _mark_read(data.get("message_id"), sender_id)
+                await _mark_read(data.get("message_id"), sender_id, thread_id)
                 await manager.broadcast(
                     thread_id,
                     {"type": "read", "message_id": data.get("message_id"), "reader_id": sender_id},
@@ -124,33 +155,61 @@ async def websocket_chat(
         logger.info("ws_disconnected", user=sender_id, thread=thread_id)
 
 
-async def _persist_message(thread_id: str, sender_id: str, payload: dict) -> Message:
+async def _persist_message(thread_id: str, sender_id: str, payload: dict) -> Message | None:
+    """Persist a chat message scoped to the thread's tenant. Returns None
+    if the thread doesn't exist or the sender isn't a member — callers
+    should bail out and not broadcast in that case."""
     async with AsyncSessionLocal() as db:
+        thread_uuid = uuid.UUID(thread_id)
+        sender_uuid = uuid.UUID(sender_id)
+        thread = (await db.execute(
+            select(ChatThread).where(
+                ChatThread.id == thread_uuid,
+                ChatThread.deleted_at.is_(None),
+            )
+        )).scalar_one_or_none()
+        if thread is None or sender_uuid not in (thread.user_a_id, thread.user_b_id):
+            return None
         msg = Message(
-            tenant_id=uuid.uuid4(),  # resolved in Sprint 2
-            thread_id=uuid.UUID(thread_id),
-            sender_id=uuid.UUID(sender_id),
+            tenant_id=thread.tenant_id,
+            thread_id=thread_uuid,
+            sender_id=sender_uuid,
             message_type=MessageType(payload.get("message_type", "text")),
             encrypted_content=payload.get("content"),
             encryption_key_id=payload.get("encryption_key_id"),
         )
         db.add(msg)
+        # Bump the thread's last_message_at so list_threads orders correctly.
+        thread.last_message_at = datetime.now(timezone.utc)
         await db.commit()
         await db.refresh(msg)
         return msg
 
 
-async def _mark_read(message_id: str | None, reader_id: str) -> None:
+async def _mark_read(message_id: str | None, reader_id: str, thread_id: str) -> None:
+    """Flip a message's read_at if the reader is the other participant of
+    the message's thread. Scoped to thread_id so a malicious WS payload
+    can't poke unrelated messages."""
     if not message_id:
         return
+    try:
+        msg_uuid = uuid.UUID(message_id)
+        thread_uuid = uuid.UUID(thread_id)
+        reader_uuid = uuid.UUID(reader_id)
+    except (TypeError, ValueError):
+        return
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Message).where(Message.id == uuid.UUID(message_id))
-        )
-        msg = result.scalar_one_or_none()
-        if msg and str(msg.sender_id) != reader_id:
-            msg.read_at = datetime.now(timezone.utc)
-            await db.commit()
+        msg = (await db.execute(
+            select(Message).where(
+                Message.id == msg_uuid,
+                Message.thread_id == thread_uuid,
+                Message.deleted_at.is_(None),
+            )
+        )).scalar_one_or_none()
+        if msg is None or msg.sender_id == reader_uuid:
+            return
+        msg.read_at = datetime.now(timezone.utc)
+        await db.commit()
 
 
 @router.get("/chats", response_model=PaginatedResponse[ChatThreadRead])
@@ -159,6 +218,7 @@ async def list_threads(
     limit: int = 20,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
     current_user: Annotated[dict, Depends(get_current_user)] = None,
+    tenant_slug: str = Depends(get_current_tenant_slug),
 ):
     try:
         user_id = uuid.UUID(current_user["sub"])
@@ -166,7 +226,12 @@ async def list_threads(
         return PaginatedResponse.create([], 0, page, limit)
     offset = (page - 1) * limit
 
+    # Resolve the active tenant so thread listings stay isolated per tenant.
+    from app.routers.profile import _resolve_tenant_uuid
+    tenant_uuid = await _resolve_tenant_uuid(db, tenant_slug)
+
     thread_filter = (
+        ChatThread.tenant_id == tenant_uuid,
         or_(ChatThread.user_a_id == user_id, ChatThread.user_b_id == user_id),
         ChatThread.is_active.is_(True),
         ChatThread.deleted_at.is_(None),
@@ -196,6 +261,22 @@ async def get_messages(
     db: Annotated[AsyncSession, Depends(get_db)] = None,
     current_user: Annotated[dict, Depends(get_current_user)] = None,
 ):
+    # Verify the caller is a participant of the thread. Without this,
+    # any authenticated user can fetch any thread's history by guessing
+    # or harvesting a thread_id.
+    try:
+        user_uuid = uuid.UUID(current_user["sub"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid user session")
+    thread = (await db.execute(
+        select(ChatThread).where(
+            ChatThread.id == thread_id,
+            ChatThread.deleted_at.is_(None),
+        )
+    )).scalar_one_or_none()
+    if thread is None or user_uuid not in (thread.user_a_id, thread.user_b_id):
+        raise HTTPException(status_code=404, detail="Thread not found")
+
     offset = (page - 1) * limit
     msg_filter = (Message.thread_id == thread_id, Message.deleted_at.is_(None))
 

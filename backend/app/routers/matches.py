@@ -184,6 +184,7 @@ async def get_received_interests(
     limit: int = 20,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
     current_user: Annotated[dict, Depends(get_current_user)] = None,
+    tenant_slug: str = Depends(get_current_tenant_slug),
 ):
     user_id = _get_user_uuid(current_user)
     offset = (page - 1) * limit
@@ -191,17 +192,19 @@ async def get_received_interests(
     if not user_id:
         return PaginatedResponse.create([], 0, page, limit)
 
-    count_result = await db.execute(
-        select(func.count()).where(
-            Interest.receiver_id == user_id,
-            Interest.deleted_at.is_(None),
-        )
+    tenant_uuid = await _resolve_tenant(db, tenant_slug)
+    base_filter = (
+        Interest.receiver_id == user_id,
+        Interest.tenant_id == tenant_uuid,
+        Interest.deleted_at.is_(None),
     )
-    total = count_result.scalar()
+
+    count_result = await db.execute(select(func.count()).select_from(Interest).where(*base_filter))
+    total = count_result.scalar() or 0
 
     result = await db.execute(
         select(Interest)
-        .where(Interest.receiver_id == user_id, Interest.deleted_at.is_(None))
+        .where(*base_filter)
         .order_by(Interest.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -219,6 +222,7 @@ async def get_sent_interests(
     limit: int = 20,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
     current_user: Annotated[dict, Depends(get_current_user)] = None,
+    tenant_slug: str = Depends(get_current_tenant_slug),
 ):
     """Returns paginated list of interests the current user has sent, with status."""
     user_id = _get_user_uuid(current_user)
@@ -227,17 +231,19 @@ async def get_sent_interests(
     if not user_id:
         return PaginatedResponse.create([], 0, page, limit)
 
-    count_result = await db.execute(
-        select(func.count()).where(
-            Interest.sender_id == user_id,
-            Interest.deleted_at.is_(None),
-        )
+    tenant_uuid = await _resolve_tenant(db, tenant_slug)
+    base_filter = (
+        Interest.sender_id == user_id,
+        Interest.tenant_id == tenant_uuid,
+        Interest.deleted_at.is_(None),
     )
-    total = count_result.scalar()
+
+    count_result = await db.execute(select(func.count()).select_from(Interest).where(*base_filter))
+    total = count_result.scalar() or 0
 
     result = await db.execute(
         select(Interest)
-        .where(Interest.sender_id == user_id, Interest.deleted_at.is_(None))
+        .where(*base_filter)
         .order_by(Interest.created_at.desc())
         .offset(offset)
         .limit(limit)
