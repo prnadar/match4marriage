@@ -1,6 +1,6 @@
 "use client";
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { getAuth, signOut, type Auth } from "firebase/auth";
+import { getAuth, signOut, onAuthStateChanged, type Auth, type User as FirebaseUser } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -34,8 +34,35 @@ export const firebaseApp: FirebaseApp =
 
 export const firebaseAuth: Auth = getAuth(firebaseApp);
 
+/**
+ * Resolves to the current Firebase user once auth state has hydrated.
+ *
+ * `firebaseAuth.currentUser` is synchronously null on every fresh page load
+ * until Firebase rehydrates the session from IndexedDB (one event-loop tick).
+ * Callers that fire during that window (e.g. a profile fetch in a page's
+ * useEffect) used to send a request with no Authorization header and got a
+ * 403 from the backend even though the user was signed in. We now wait for
+ * the first onAuthStateChanged emission — that IS the hydrated state, even
+ * when it's null (genuinely signed-out).
+ */
+let _authReadyPromise: Promise<FirebaseUser | null> | null = null;
+function _whenAuthReady(): Promise<FirebaseUser | null> {
+  if (firebaseAuth.currentUser) return Promise.resolve(firebaseAuth.currentUser);
+  if (_authReadyPromise) return _authReadyPromise;
+  _authReadyPromise = new Promise<FirebaseUser | null>((resolve) => {
+    const unsub = onAuthStateChanged(firebaseAuth, (user) => {
+      unsub();
+      resolve(user);
+    });
+    // Belt-and-braces timeout so a broken Firebase init can't hang every
+    // request forever. 4s is well past any healthy hydration time.
+    setTimeout(() => resolve(firebaseAuth.currentUser), 4000);
+  });
+  return _authReadyPromise;
+}
+
 export async function getIdToken(forceRefresh = false): Promise<string | null> {
-  const user = firebaseAuth.currentUser;
+  const user = firebaseAuth.currentUser ?? await _whenAuthReady();
   if (!user) return null;
   try {
     return await user.getIdToken(forceRefresh);
