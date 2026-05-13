@@ -387,7 +387,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             onClick={async () => {
               try { await signOut(firebaseAuth); } catch {}
               clearClientState();
-              window.location.href = "/auth/login";
+              // Send people to the marketing landing page after sign-out
+              // rather than the login form — most users want to leave
+              // entirely, not switch accounts.
+              window.location.href = "/";
             }}
             title={collapsed ? "Sign Out" : undefined}
             className="w-full flex items-center rounded-xl text-sm transition-colors"
