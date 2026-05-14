@@ -5,7 +5,8 @@ import Link from "next/link";
 import {
   ArrowRight, MapPin, AlertCircle, Loader2, Quote,
 } from "lucide-react";
-import { successStoriesApi, ApiError } from "@/lib/api";
+import { successStoriesApi } from "@/lib/api";
+import { featuredStories, monogramFor } from "@/lib/featured-stories";
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
 
@@ -21,6 +22,21 @@ interface RemoteStory {
   sort_order: number;
 }
 
+// Convert the shared featured list into the RemoteStory shape so the same
+// card markup renders both. Featured ones get negative sort_order so they
+// always appear first.
+const FEATURED_AS_REMOTE: RemoteStory[] = featuredStories.map((s, i) => ({
+  id: `featured-${i}`,
+  couple_names: s.names,
+  location: s.location,
+  year_married: s.yearNumber,
+  headline: "",
+  body: "",
+  quote: s.quote,
+  photo_url: s.img,
+  sort_order: -1000 + i,
+}));
+
 export default function SuccessStoriesPage() {
   const [stories, setStories] = useState<RemoteStory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,10 +47,15 @@ export default function SuccessStoriesPage() {
     try {
       const res = await successStoriesApi.listPublic(24);
       const list = ((res.data as any)?.data ?? res.data ?? []) as RemoteStory[];
-      setStories(list);
-    } catch (err: unknown) {
-      if (err instanceof ApiError) setError(err.message);
-      else setError(err instanceof Error ? err.message : "Could not load stories");
+      // Skip backend entries that duplicate a featured couple's name.
+      const featuredNames = new Set(FEATURED_AS_REMOTE.map((s) => s.couple_names));
+      const remoteOnly = list.filter((s) => !featuredNames.has(s.couple_names));
+      setStories([...FEATURED_AS_REMOTE, ...remoteOnly]);
+    } catch {
+      // API unavailable — still show the featured stories so the page is
+      // never empty.
+      setStories(FEATURED_AS_REMOTE);
+      setError(null);
     } finally {
       setLoading(false);
     }
@@ -193,19 +214,26 @@ export default function SuccessStoriesPage() {
           <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" style={{ gap: 48 }}>
             {stories.map((s) => (
               <article key={s.id} className="editorial-reveal" style={{ display: "flex", flexDirection: "column" }}>
-                <div style={{ aspectRatio: "4 / 5", overflow: "hidden", borderRadius: 4, marginBottom: 20, background: "#faf3eb", position: "relative" }}>
-                  {s.photo_url ? (
+                <div style={{ aspectRatio: "4 / 5", overflow: "hidden", borderRadius: 4, marginBottom: 20, background: "linear-gradient(135deg, #faf3eb 0%, #f4e0e6 100%)", position: "relative" }}>
+                  {/* Monogram tile shows through if photo is missing or fails to load. */}
+                  <div aria-hidden style={{
+                    position: "absolute", inset: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontFamily: "var(--font-display-alt, 'Cormorant', serif)",
+                    fontStyle: "italic", fontSize: 72, fontWeight: 500,
+                    color: "rgba(220,30,60,0.30)", letterSpacing: "0.04em",
+                  }}>
+                    {monogramFor(s.couple_names)}
+                  </div>
+                  {s.photo_url && (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={s.photo_url}
                       alt={s.couple_names}
                       loading="lazy"
-                      style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 25%" }}
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 25%" }}
                     />
-                  ) : (
-                    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Quote size={40} strokeWidth={1} style={{ color: "#dc1e3c", opacity: 0.25 }} />
-                    </div>
                   )}
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", color: "#a78a8f", marginBottom: 10 }}>

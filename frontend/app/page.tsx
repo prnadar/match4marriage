@@ -16,22 +16,7 @@ import PublicFooter from "@/components/PublicFooter";
 
 /* ── Marketing content (curated testimonials, not user data) ──────────── */
 
-const stories = [
-  {
-    img: "/couples/alex-nisha.jpg",
-    names: "Alex & Nisha",
-    location: "Nottingham & Mumbai",
-    year: "Married 2026",
-    quote: "Match4Marriage took the time to understand both our families before introducing us. From the first conversation to the wedding, every step felt considered and personal. We are so grateful for the way they brought us together.",
-  },
-  {
-    img: "/couples/ashwini-rahul.jpg",
-    names: "Ashwini & Rahul",
-    location: "Birmingham & Kerala",
-    year: "Married 2024",
-    quote: "We come from different parts of the country but our families shared the same values, and Match4Marriage saw that straight away. The advisors guided us with care through every conversation, and our wedding in Kerala was everything we hoped for.",
-  },
-];
+import { featuredStories as stories, monogramFor } from "@/lib/featured-stories";
 
 const features = [
   { title: "Hand-Picked Profiles Only", desc: "Every profile is personally reviewed and approved, not just registered" },
@@ -666,12 +651,24 @@ export default function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" style={{ gap: 32 }}>
             {stories.map((s) => (
               <article key={s.names} style={{ display: "flex", flexDirection: "column" }}>
-                <div style={{ aspectRatio: "4 / 5", overflow: "hidden", borderRadius: 4, marginBottom: 20, background: "#faf3eb" }}>
+                <div style={{ aspectRatio: "4 / 5", overflow: "hidden", borderRadius: 4, marginBottom: 20, background: "linear-gradient(135deg, #faf3eb 0%, #f4e0e6 100%)", position: "relative" }}>
+                  {/* Monogram fallback — sits underneath the photo so if the
+                      image fails to load the card still looks intentional. */}
+                  <div aria-hidden style={{
+                    position: "absolute", inset: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontFamily: "var(--font-display-alt, 'Cormorant', serif)",
+                    fontStyle: "italic", fontSize: 64, fontWeight: 500,
+                    color: "rgba(220,30,60,0.30)", letterSpacing: "0.04em",
+                  }}>
+                    {monogramFor(s.names)}
+                  </div>
                   <img
                     src={s.img}
                     alt={s.names}
                     loading="lazy"
-                    style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }}
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }}
                   />
                 </div>
                 <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.12em", color: "#a78a8f", marginBottom: 10 }}>
