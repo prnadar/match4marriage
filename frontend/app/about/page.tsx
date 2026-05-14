@@ -177,7 +177,7 @@ export default function AboutPage() {
             <h1
               className="font-display"
               style={{
-                fontSize: "clamp(40px, 6vw, 84px)",
+                fontSize: "clamp(28px, 4vw, 52px)",
                 fontWeight: 500,
                 lineHeight: 1.02,
                 letterSpacing: "-0.025em",

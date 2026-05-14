@@ -3,30 +3,26 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Mail, Phone, MessageCircle, MapPin, Clock, ArrowRight, Check,
+  Mail, MapPin, MessageCircle, ArrowRight, Check,
 } from "lucide-react";
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
 
 /* ────────────────────────────────────────────────────────────────
-   Contact — editorial layout. Two columns: left for the prose
-   greeting + contact details, right for a quiet enquiry form.
+   Contact — modern card layout. Left column carries the prose
+   greeting and quick contact cards; right column is an elevated
+   burgundy form card with rounded inputs and red accent submit.
    ──────────────────────────────────────────────────────────────── */
 
-const contactChannels = [
-  { Icon: Mail,          label: "Email",   value: "enquiry@match4marriage.com",        href: "mailto:enquiry@match4marriage.com",  external: false },
-  { Icon: Phone,         label: "Phone",   value: "+44 7476 212655",                    href: "tel:+447476212655",                  external: false },
-  { Icon: MessageCircle, label: "WhatsApp", value: "Message us on WhatsApp",           href: "https://wa.me/447476212655",         external: true  },
-] as const;
-
-const officeHours = [
-  { day: "Monday — Friday", hours: "9:00 AM — 6:00 PM BST" },
-  { day: "Saturday",         hours: "10:00 AM — 4:00 PM BST" },
-  { day: "Sunday",           hours: "Closed" },
-];
-
 export default function ContactPage() {
-  const [form, setForm] = useState({ name: "", email: "", phone: "", subject: "", message: "" });
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    subject: "",
+    message: "",
+  });
   const [sent, setSent] = useState(false);
 
   useEffect(() => {
@@ -52,274 +48,331 @@ export default function ContactPage() {
     setSent(true);
   };
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "12px 0",
-    border: 0,
-    borderBottom: "1px solid rgba(26,10,20,0.18)",
-    borderRadius: 0,
-    fontSize: 15,
-    color: "#1a0a14",
-    background: "transparent",
-    outline: "none",
-    boxSizing: "border-box",
-    fontFamily: "inherit",
-    transition: "border-color 0.25s ease",
+  const labelStyle: React.CSSProperties = {
+    fontSize: 13,
+    fontWeight: 500,
+    color: "#d4a2a8",
+    display: "block",
+    marginBottom: 8,
+    letterSpacing: "0.01em",
   };
 
-  const labelStyle: React.CSSProperties = {
-    fontSize: 11,
-    fontWeight: 700,
-    letterSpacing: "0.1em",
-    color: "#a78a8f",
-    display: "block",
-    marginBottom: 6,
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "14px 16px",
+    border: "1px solid rgba(253,249,244,0.10)",
+    borderRadius: 10,
+    background: "rgba(253,249,244,0.04)",
+    color: "#fdf9f4",
+    fontSize: 15,
+    outline: "none",
+    fontFamily: "inherit",
+    boxSizing: "border-box",
+    transition: "border-color 0.2s ease, background 0.2s ease",
   };
 
   return (
     <div style={{ minHeight: "100vh", background: "#fdf9f4", color: "#1a0a14" }}>
+      {/* Placeholder + focus styling for the dark form card */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .m4m-contact-input::placeholder,
+        .m4m-contact-input::-webkit-input-placeholder { color: rgba(253,249,244,0.35); }
+        .m4m-contact-input:focus {
+          border-color: rgba(220,30,60,0.55) !important;
+          background: rgba(253,249,244,0.07) !important;
+        }
+        .m4m-contact-input:hover:not(:focus) {
+          border-color: rgba(253,249,244,0.20) !important;
+        }
+        .m4m-contact-submit:hover {
+          background: #c4172f !important;
+          transform: translateY(-1px);
+        }
+      `}} />
+
       <PublicHeader />
 
-      {/* ── Editorial hero ───────────────────────────────────── */}
-      <section style={{ padding: "clamp(64px, 9vw, 120px) 24px clamp(48px, 6vw, 80px)", background: "linear-gradient(180deg, #fdf9f4 0%, #faf3eb 100%)" }}>
-        <div className="max-w-4xl mx-auto" style={{ textAlign: "center" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f", marginBottom: 24 }}>
-            <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
-            Get in touch
-            <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
-          </span>
-          <h1
-            className="font-display"
-            style={{
-              fontSize: "clamp(40px, 6vw, 80px)",
-              fontWeight: 500,
-              lineHeight: 1.04,
-              letterSpacing: "-0.025em",
-              marginBottom: 20,
-            }}
-          >
-            Speak to{" "}
-            <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#dc1e3c" }}>
-              an advisor.
-            </span>
-          </h1>
-          <p style={{ fontSize: "clamp(15px, 1.4vw, 18px)", lineHeight: 1.7, color: "#4a3a40", maxWidth: 580, margin: "0 auto" }}>
-            No commitment, no pressure — just a friendly conversation about
-            what you and your family are looking for. We typically respond
-            within a few hours.
-          </p>
-        </div>
-      </section>
-
-      {/* ── Channels + form ──────────────────────────────────── */}
-      <section className="editorial-reveal" style={{ padding: "clamp(48px, 7vw, 96px) 24px", background: "#fdf9f4" }}>
+      <section className="editorial-reveal" style={{ padding: "clamp(72px, 9vw, 120px) 24px clamp(64px, 8vw, 112px)" }}>
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20 items-start">
 
-          {/* Left — channels and hours */}
-          <aside className="lg:col-span-5">
-            <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f" }}>
-                I — Reach us directly
+          {/* ── Left column — heading, intro, contact cards ── */}
+          <div className="lg:col-span-5">
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f", marginBottom: 20 }}>
+              <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
+              Get in touch
+            </span>
+
+            <h1
+              className="font-display"
+              style={{
+                fontSize: "clamp(28px, 4vw, 52px)",
+                fontWeight: 500,
+                lineHeight: 1.04,
+                letterSpacing: "-0.025em",
+                marginBottom: 24,
+                color: "#1a0a14",
+              }}
+            >
+              Speak to{" "}
+              <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#dc1e3c" }}>
+                an advisor.
               </span>
-              <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
+            </h1>
+
+            <p style={{ fontSize: 16, lineHeight: 1.7, color: "#4a3a40", marginBottom: 48, maxWidth: 460 }}>
+              Whether you have a question about our service, want to book a
+              private call, or simply want to begin — we are here to help.
+              We typically respond within a few hours.
+            </p>
+
+            {/* Email card */}
+            <div style={{ display: "flex", gap: 20, marginBottom: 28 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 9999,
+                background: "rgba(220,30,60,0.10)",
+                display: "grid", placeItems: "center",
+                flexShrink: 0,
+              }}>
+                <Mail size={20} strokeWidth={1.6} style={{ color: "#dc1e3c" }} />
+              </div>
+              <div>
+                <h3 className="font-display" style={{ fontSize: 18, fontWeight: 600, color: "#1a0a14", margin: "0 0 4px", letterSpacing: "-0.01em" }}>
+                  Email Us
+                </h3>
+                <p style={{ fontSize: 14, color: "#88787f", margin: "0 0 6px" }}>
+                  For general enquiries and support
+                </p>
+                <a href="mailto:enquiry@match4marriage.com" style={{ color: "#dc1e3c", fontSize: 15, fontWeight: 600, textDecoration: "none" }}>
+                  enquiry@match4marriage.com
+                </a>
+              </div>
             </div>
 
-            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 48px" }}>
-              {contactChannels.map((c, i) => (
-                <li key={c.label} style={{ borderTop: i === 0 ? "1px solid rgba(26,10,20,0.10)" : "none", borderBottom: "1px solid rgba(26,10,20,0.10)", padding: "20px 0" }}>
-                  <a
-                    href={c.href}
-                    target={c.external ? "_blank" : undefined}
-                    rel={c.external ? "noopener noreferrer" : undefined}
+            {/* WhatsApp card */}
+            <div style={{ display: "flex", gap: 20, marginBottom: 28 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 9999,
+                background: "rgba(220,30,60,0.10)",
+                display: "grid", placeItems: "center",
+                flexShrink: 0,
+              }}>
+                <MessageCircle size={20} strokeWidth={1.6} style={{ color: "#dc1e3c" }} />
+              </div>
+              <div>
+                <h3 className="font-display" style={{ fontSize: 18, fontWeight: 600, color: "#1a0a14", margin: "0 0 4px", letterSpacing: "-0.01em" }}>
+                  WhatsApp
+                </h3>
+                <p style={{ fontSize: 14, color: "#88787f", margin: "0 0 6px" }}>
+                  Mon — Sat, 9:00 AM — 6:00 PM BST
+                </p>
+                <a href="https://wa.me/447476212655" target="_blank" rel="noopener noreferrer" style={{ color: "#dc1e3c", fontSize: 15, fontWeight: 600, textDecoration: "none" }}>
+                  +44 7476 212655
+                </a>
+              </div>
+            </div>
+
+            {/* Visit Us card */}
+            <div style={{ display: "flex", gap: 20 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 9999,
+                background: "rgba(220,30,60,0.10)",
+                display: "grid", placeItems: "center",
+                flexShrink: 0,
+              }}>
+                <MapPin size={20} strokeWidth={1.6} style={{ color: "#dc1e3c" }} />
+              </div>
+              <div>
+                <h3 className="font-display" style={{ fontSize: 18, fontWeight: 600, color: "#1a0a14", margin: "0 0 4px", letterSpacing: "-0.01em" }}>
+                  Visit Us
+                </h3>
+                <p style={{ fontSize: 14, color: "#88787f", margin: "0 0 6px" }}>
+                  Our UK office
+                </p>
+                <p style={{ fontSize: 15, color: "#1a0a14", margin: 0, lineHeight: 1.55, fontWeight: 500 }}>
+                  282 Warwick Road<br />
+                  Solihull, England, B92 7AF
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Right column — elevated form card ── */}
+          <div className="lg:col-span-7">
+            <div style={{
+              background: "#1a0a14",
+              borderRadius: 20,
+              padding: "clamp(28px, 4vw, 48px)",
+              boxShadow: "0 30px 80px -20px rgba(26,10,20,0.30), 0 8px 24px -12px rgba(26,10,20,0.20)",
+              border: "1px solid rgba(220,30,60,0.18)",
+              position: "relative",
+              overflow: "hidden",
+            }}>
+              {/* subtle radial accent in the corner */}
+              <div aria-hidden="true" style={{
+                position: "absolute",
+                top: -120, right: -120,
+                width: 320, height: 320,
+                background: "radial-gradient(circle, rgba(220,30,60,0.18) 0%, rgba(220,30,60,0) 70%)",
+                pointerEvents: "none",
+              }} />
+
+              {sent ? (
+                <div style={{ position: "relative", textAlign: "center", padding: "32px 8px" }}>
+                  <div style={{
+                    width: 64, height: 64, borderRadius: 9999,
+                    background: "rgba(220,30,60,0.15)",
+                    display: "grid", placeItems: "center",
+                    margin: "0 auto 20px",
+                  }}>
+                    <Check size={28} strokeWidth={2} style={{ color: "#dc1e3c" }} />
+                  </div>
+                  <h3 className="font-display" style={{ fontSize: 26, fontWeight: 500, letterSpacing: "-0.015em", marginBottom: 12, color: "#fdf9f4" }}>
+                    Message received.
+                  </h3>
+                  <p style={{ fontSize: 15, color: "rgba(253,249,244,0.70)", lineHeight: 1.65, marginBottom: 28, maxWidth: 360, marginLeft: "auto", marginRight: "auto" }}>
+                    Thank you. One of our advisors will be in touch within
+                    twenty-four hours.
+                  </p>
+                  <button
+                    onClick={() => setSent(false)}
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "auto 1fr auto",
-                      gap: 20,
-                      alignItems: "center",
-                      textDecoration: "none",
-                      color: "#1a0a14",
+                      background: "transparent",
+                      border: "1px solid rgba(253,249,244,0.25)",
+                      padding: "12px 24px",
+                      borderRadius: 9999,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      color: "#fdf9f4",
                     }}
                   >
-                    <c.Icon size={18} strokeWidth={1.4} style={{ color: "#dc1e3c", opacity: 0.85 }} />
+                    Send another
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmit} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 22 }}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 18 }}>
                     <div>
-                      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", color: "#a78a8f", margin: "0 0 4px" }}>
-                        {c.label}
-                      </p>
-                      <p className="font-display" style={{ fontSize: 17, fontWeight: 500, color: "#1a0a14", margin: 0, letterSpacing: "-0.005em" }}>
-                        {c.value}
-                      </p>
+                      <label htmlFor="cf-firstname" style={labelStyle}>First Name</label>
+                      <input
+                        id="cf-firstname"
+                        type="text"
+                        placeholder="John"
+                        required
+                        className="m4m-contact-input"
+                        value={form.firstName}
+                        onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                        style={inputStyle}
+                      />
                     </div>
-                    <ArrowRight size={14} strokeWidth={1.6} style={{ color: "#a78a8f" }} />
-                  </a>
-                </li>
-              ))}
-            </ul>
-
-            {/* Office */}
-            <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 24 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f" }}>
-                Office hours
-              </span>
-              <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
-            </div>
-            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 32px" }}>
-              {officeHours.map((h) => (
-                <li key={h.day} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(26,10,20,0.06)", fontSize: 14 }}>
-                  <span style={{ color: "#4a3a40" }}>{h.day}</span>
-                  <span style={{ color: "#1a0a14", fontWeight: 600 }}>{h.hours}</span>
-                </li>
-              ))}
-            </ul>
-
-            <div style={{ display: "inline-flex", alignItems: "flex-start", gap: 12, fontSize: 13, color: "#88787f", lineHeight: 1.55, marginTop: 12 }}>
-              <MapPin size={15} strokeWidth={1.5} style={{ marginTop: 2, flexShrink: 0 }} />
-              <span>282 Warwick Road, Solihull, England, B92 7AF</span>
-            </div>
-            <div style={{ display: "inline-flex", alignItems: "flex-start", gap: 12, fontSize: 13, color: "#88787f", lineHeight: 1.55, marginTop: 12 }}>
-              <Clock size={15} strokeWidth={1.5} style={{ marginTop: 2, flexShrink: 0 }} />
-              <span>
-                Have a general question? See our{" "}
-                <Link href="/faq" style={{ color: "#1a0a14", textDecoration: "none", fontWeight: 600, borderBottom: "1px solid rgba(26,10,20,0.2)" }}>FAQ</Link>{" "}
-                first.
-              </span>
-            </div>
-          </aside>
-
-          {/* Right — enquiry form */}
-          <div className="lg:col-span-7">
-            <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f" }}>
-                II — Send an enquiry
-              </span>
-              <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
-            </div>
-
-            {sent ? (
-              <div style={{ padding: "48px 32px", border: "1px solid rgba(26,10,20,0.10)", borderRadius: 4, textAlign: "center", background: "#faf3eb" }}>
-                <Check size={36} strokeWidth={1.4} style={{ color: "#dc1e3c", margin: "0 auto 16px" }} />
-                <h3 className="font-display" style={{ fontSize: 28, fontWeight: 500, letterSpacing: "-0.015em", marginBottom: 12 }}>
-                  Message received.
-                </h3>
-                <p style={{ fontSize: 15, color: "#4a3a40", lineHeight: 1.65, marginBottom: 24 }}>
-                  Thank you. One of our advisors will be in touch within
-                  twenty-four hours.
-                </p>
-                <button
-                  onClick={() => setSent(false)}
-                  style={{
-                    background: "transparent",
-                    border: "1px solid rgba(26,10,20,0.20)",
-                    padding: "10px 22px",
-                    borderRadius: 9999,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    color: "#1a0a14",
-                  }}
-                >
-                  Send another
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-                <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 28 }}>
-                  <div>
-                    <label htmlFor="cf-name" style={labelStyle}>Your name</label>
-                    <input
-                      id="cf-name"
-                      type="text"
-                      placeholder="—"
-                      required
-                      value={form.name}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <div>
+                      <label htmlFor="cf-lastname" style={labelStyle}>Last Name</label>
+                      <input
+                        id="cf-lastname"
+                        type="text"
+                        placeholder="Doe"
+                        required
+                        className="m4m-contact-input"
+                        value={form.lastName}
+                        onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                        style={inputStyle}
+                      />
+                    </div>
                   </div>
+
                   <div>
-                    <label htmlFor="cf-email" style={labelStyle}>Email</label>
+                    <label htmlFor="cf-email" style={labelStyle}>Email Address</label>
                     <input
                       id="cf-email"
                       type="email"
-                      placeholder="—"
+                      placeholder="you@example.com"
                       required
+                      className="m4m-contact-input"
                       value={form.email}
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
                       style={inputStyle}
                     />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 28 }}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 18 }}>
+                    <div>
+                      <label htmlFor="cf-phone" style={labelStyle}>Phone (optional)</label>
+                      <input
+                        id="cf-phone"
+                        type="tel"
+                        placeholder="+44 7000 000000"
+                        className="m4m-contact-input"
+                        value={form.phone}
+                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="cf-subject" style={labelStyle}>Subject</label>
+                      <select
+                        id="cf-subject"
+                        className="m4m-contact-input"
+                        value={form.subject}
+                        onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                        style={{ ...inputStyle, appearance: "none", cursor: "pointer", paddingRight: 36, color: form.subject ? "#fdf9f4" : "rgba(253,249,244,0.50)" }}
+                      >
+                        <option value="" style={{ color: "#1a0a14" }}>Select a subject</option>
+                        <option style={{ color: "#1a0a14" }}>General enquiry</option>
+                        <option style={{ color: "#1a0a14" }}>Registration help</option>
+                        <option style={{ color: "#1a0a14" }}>Subscription &amp; billing</option>
+                        <option style={{ color: "#1a0a14" }}>Profile verification</option>
+                        <option style={{ color: "#1a0a14" }}>Report an issue</option>
+                        <option style={{ color: "#1a0a14" }}>Other</option>
+                      </select>
+                    </div>
+                  </div>
+
                   <div>
-                    <label htmlFor="cf-phone" style={labelStyle}>Phone (optional)</label>
-                    <input
-                      id="cf-phone"
-                      type="tel"
-                      placeholder="—"
-                      value={form.phone}
-                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                      style={inputStyle}
+                    <label htmlFor="cf-message" style={labelStyle}>Message</label>
+                    <textarea
+                      id="cf-message"
+                      rows={5}
+                      placeholder="How can we help you?"
+                      required
+                      className="m4m-contact-input"
+                      value={form.message}
+                      onChange={(e) => setForm({ ...form, message: e.target.value })}
+                      style={{ ...inputStyle, resize: "vertical", minHeight: 120, lineHeight: 1.55 }}
                     />
                   </div>
-                  <div>
-                    <label htmlFor="cf-subject" style={labelStyle}>Subject</label>
-                    <select
-                      id="cf-subject"
-                      value={form.subject}
-                      onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                      style={{ ...inputStyle, color: form.subject ? "#1a0a14" : "#a78a8f", appearance: "none", cursor: "pointer", paddingRight: 28 }}
-                    >
-                      <option value="">Select a subject</option>
-                      <option>General enquiry</option>
-                      <option>Registration help</option>
-                      <option>Subscription &amp; billing</option>
-                      <option>Profile verification</option>
-                      <option>Report an issue</option>
-                      <option>Other</option>
-                    </select>
-                  </div>
-                </div>
 
-                <div>
-                  <label htmlFor="cf-message" style={labelStyle}>Message</label>
-                  <textarea
-                    id="cf-message"
-                    rows={5}
-                    placeholder="Tell us a little about what you and your family are looking for…"
-                    value={form.message}
-                    onChange={(e) => setForm({ ...form, message: e.target.value })}
-                    style={{ ...inputStyle, resize: "none", padding: "12px 0", lineHeight: 1.6 }}
-                  />
-                </div>
+                  <button
+                    type="submit"
+                    className="m4m-contact-submit"
+                    style={{
+                      width: "100%",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 10,
+                      background: "#dc1e3c",
+                      color: "#fdf9f4",
+                      padding: "16px 28px",
+                      borderRadius: 12,
+                      fontSize: 15,
+                      fontWeight: 600,
+                      border: 0,
+                      cursor: "pointer",
+                      letterSpacing: "0.01em",
+                      marginTop: 6,
+                      transition: "background 0.2s ease, transform 0.2s ease",
+                    }}
+                  >
+                    Send Message <ArrowRight size={16} strokeWidth={2} />
+                  </button>
 
-                <button
-                  type="submit"
-                  style={{
-                    alignSelf: "flex-start",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    background: "#1a0a14",
-                    color: "#fdf9f4",
-                    padding: "14px 28px",
-                    borderRadius: 9999,
-                    fontSize: 14,
-                    fontWeight: 600,
-                    border: 0,
-                    cursor: "pointer",
-                    letterSpacing: "0.02em",
-                  }}
-                >
-                  Send enquiry <ArrowRight size={15} strokeWidth={2} />
-                </button>
-
-                <p style={{ fontSize: 12, color: "#88787f", margin: 0, letterSpacing: "0.02em" }}>
-                  By sending an enquiry you agree to our{" "}
-                  <Link href="/privacy" style={{ color: "#1a0a14", textDecoration: "none", fontWeight: 600, borderBottom: "1px solid rgba(26,10,20,0.20)" }}>privacy policy</Link>.
-                  Your details are never shared.
-                </p>
-              </form>
-            )}
+                  <p style={{ fontSize: 12, color: "rgba(253,249,244,0.55)", margin: 0, letterSpacing: "0.02em", textAlign: "center" }}>
+                    By sending an enquiry you agree to our{" "}
+                    <Link href="/privacy" style={{ color: "#fdf9f4", textDecoration: "none", fontWeight: 600, borderBottom: "1px solid rgba(253,249,244,0.30)" }}>privacy policy</Link>.
+                  </p>
+                </form>
+              )}
+            </div>
           </div>
         </div>
       </section>

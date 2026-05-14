@@ -108,7 +108,7 @@ export default function PricingPage() {
           <h1
             className="font-display"
             style={{
-              fontSize: "clamp(40px, 6vw, 80px)",
+              fontSize: "clamp(28px, 4vw, 52px)",
               fontWeight: 500,
               lineHeight: 1.04,
               letterSpacing: "-0.025em",

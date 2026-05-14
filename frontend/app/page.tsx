@@ -128,7 +128,7 @@ export default function HomePage() {
         {/* Background hero video (decorative, muted, autoplays inline on mobile) */}
         <video
           className="hero-video"
-          src="/hero.mp4"
+          src="/ALEX%20NISHA%20HINDU%20HIGHLIGHTS%20LQ-001%20(online-video-cutter.com)%20(1).mp4"
           poster="/hero-poster.jpg"
           autoPlay
           muted
@@ -257,7 +257,7 @@ export default function HomePage() {
               className="font-display"
               style={{
                 color: "#fdf9f4",
-                fontSize: "clamp(48px, 7vw, 110px)",
+                fontSize: "clamp(28px, 4vw, 52px)",
                 fontWeight: 500,
                 lineHeight: 1.0,
                 letterSpacing: "-0.025em",
@@ -530,7 +530,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 48, flexWrap: "wrap" }}>
             <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "#a78a8f" }}>
-              I — How we work
+              How we work
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)", minWidth: 40 }} />
           </div>
@@ -548,10 +548,7 @@ export default function HomePage() {
               { n: "03", title: "Connect in private", body: "Express interest discreetly. Your contact details are shared only when both sides have indicated mutual interest." },
               { n: "04", title: "Begin forever", body: "Meet families and take the next step. Our advisors stay alongside you — through the introductions, the meetings, and the wedding." },
             ].map((step) => (
-              <article key={step.n} style={{ position: "relative", paddingTop: 24, borderTop: "1px solid rgba(26,10,20,0.16)" }}>
-                <span className="font-display" style={{ position: "absolute", top: -14, left: 0, background: "#fdf9f4", paddingRight: 12, fontSize: 13, fontWeight: 700, letterSpacing: "0.18em", color: "#dc1e3c" }}>
-                  {step.n}
-                </span>
+              <article key={step.n} style={{ paddingTop: 24, borderTop: "1px solid rgba(26,10,20,0.16)" }}>
                 <h3 className="font-display" style={{ fontSize: 20, fontWeight: 600, lineHeight: 1.25, marginBottom: 12, letterSpacing: "-0.01em", color: "#1a0a14" }}>
                   {step.title}
                 </h3>
@@ -572,7 +569,7 @@ export default function HomePage() {
           <div className="lg:col-span-5">
             <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32 }}>
               <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "#a78a8f" }}>
-                II — By invitation
+                By invitation
               </span>
               <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
             </div>
@@ -620,14 +617,7 @@ export default function HomePage() {
                 border: "1px solid rgba(26,10,20,0.08)",
                 borderRadius: 4,
                 padding: "26px 28px",
-                display: "grid",
-                gridTemplateColumns: "auto 1fr",
-                gap: 24,
-                alignItems: "start",
               }}>
-                <span className="font-display" style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.22em", color: "#dc1e3c", paddingTop: 4 }}>
-                  {step.kicker}
-                </span>
                 <div>
                   <h3 className="font-display" style={{ fontSize: 18, fontWeight: 600, color: "#1a0a14", margin: "0 0 6px", letterSpacing: "-0.01em" }}>
                     {step.title}
@@ -649,7 +639,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 48, flexWrap: "wrap" }}>
             <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,220,180,0.75)" }}>
-              III — Why this approach
+              Why this approach
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(255,220,180,0.18)", minWidth: 40 }} />
           </div>
@@ -686,7 +676,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 48, flexWrap: "wrap" }}>
             <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "#a78a8f" }}>
-              IV — Stories so far
+              Stories so far
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)", minWidth: 40 }} />
           </div>
@@ -754,7 +744,7 @@ export default function HomePage() {
           <div className="lg:col-span-5">
             <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32 }}>
               <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "#a78a8f" }}>
-                V — What we offer
+                What we offer
               </span>
               <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
             </div>
@@ -776,14 +766,7 @@ export default function HomePage() {
                   padding: "20px 0",
                   borderTop: i === 0 ? "1px solid rgba(26,10,20,0.16)" : "none",
                   borderBottom: "1px solid rgba(26,10,20,0.10)",
-                  display: "grid",
-                  gridTemplateColumns: "auto 1fr",
-                  gap: 24,
-                  alignItems: "baseline",
                 }}>
-                  <span className="font-display" style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.18em", color: "#dc1e3c", minWidth: 32 }}>
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
                   <div>
                     <p className="font-display" style={{ fontSize: 17, fontWeight: 600, color: "#1a0a14", margin: "0 0 4px", letterSpacing: "-0.01em" }}>
                       {f.title}
@@ -806,7 +789,7 @@ export default function HomePage() {
         <div className="max-w-3xl mx-auto">
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32 }}>
             <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "#a78a8f" }}>
-              VI — Common questions
+              Common questions
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
           </div>
