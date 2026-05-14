@@ -18,25 +18,18 @@ import PublicFooter from "@/components/PublicFooter";
 
 const stories = [
   {
-    img: "/couples/couple-hero.jpg",
-    names: "Priya & Karthik",
-    location: "London & Chennai",
-    year: "Married 2024",
-    quote: "We had both given up on online matchmaking until Match4Marriage. Within weeks, we were introduced to each other, and within months, our families had met. We married in Chennai in December 2024.",
+    img: "/couples/alex-nisha.jpg",
+    names: "Alex & Nisha",
+    location: "Nottingham & Mumbai",
+    year: "Married 2026",
+    quote: "Match4Marriage took the time to understand both our families before introducing us. From the first conversation to the wedding, every step felt considered and personal. We are so grateful for the way they brought us together.",
   },
   {
-    img: "/couples/mandapam.jpg",
-    names: "Anitha & Vijay",
-    location: "Birmingham & Coimbatore",
+    img: "/couples/ashwini-rahul.jpg",
+    names: "Ashwini & Rahul",
+    location: "Birmingham & Kerala",
     year: "Married 2024",
-    quote: "What set Match4Marriage apart was the personal touch. They didn't just send us a profile. They took time to understand what we were both looking for. We are so grateful for the care they showed.",
-  },
-  {
-    img: "/couples/wedding-swing.jpg",
-    names: "Deepa & Suresh",
-    location: "Manchester & Madurai",
-    year: "Married 2023",
-    quote: "Our families were in different cities and countries. Match4Marriage bridged that gap beautifully. The process was discreet, respectful, and exactly what we needed.",
+    quote: "We come from different parts of the country but our families shared the same values, and Match4Marriage saw that straight away. The advisors guided us with care through every conversation, and our wedding in Kerala was everything we hoped for.",
   },
 ];
 
@@ -191,36 +184,7 @@ export default function HomePage() {
           />
         ))}
 
-        {/* Animated unity rings (SVG, top-right corner of hero) */}
-        <svg
-          aria-hidden
-          width="180" height="180" viewBox="0 0 180 180"
-          style={{ position: "absolute", top: "10%", right: "6%", zIndex: 4, opacity: 0.55, mixBlendMode: "screen" }}
-          className="hidden md:block drift"
-        >
-          <defs>
-            <linearGradient id="unityRingGradLeft" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#ffd87a" stopOpacity="0.0" />
-              <stop offset="50%" stopColor="#ffd87a" stopOpacity="0.9" />
-              <stop offset="100%" stopColor="#ffd87a" stopOpacity="0.0" />
-            </linearGradient>
-            <linearGradient id="unityRingGradRight" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#ffb5c5" stopOpacity="0.0" />
-              <stop offset="50%" stopColor="#ffb5c5" stopOpacity="0.85" />
-              <stop offset="100%" stopColor="#ffb5c5" stopOpacity="0.0" />
-            </linearGradient>
-          </defs>
-          <circle cx="70" cy="90" r="44" fill="none" stroke="url(#unityRingGradLeft)" strokeWidth="2" />
-          <circle cx="110" cy="90" r="44" fill="none" stroke="url(#unityRingGradRight)" strokeWidth="2" />
-          <circle cx="70"  cy="90" r="44" fill="none" stroke="rgba(255,216,122,0.25)" strokeWidth="0.7" strokeDasharray="2 4">
-            <animateTransform attributeName="transform" type="rotate" from="0 70 90" to="360 70 90" dur="40s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="110" cy="90" r="44" fill="none" stroke="rgba(255,181,197,0.25)" strokeWidth="0.7" strokeDasharray="2 4">
-            <animateTransform attributeName="transform" type="rotate" from="360 110 90" to="0 110 90" dur="48s" repeatCount="indefinite" />
-          </circle>
-        </svg>
-
-        {/* Editorial content overlay — left-aligned column. Asymmetric
+{/* Editorial content overlay — left-aligned column. Asymmetric
             vertical padding (large at top, smaller at bottom) ensures the
             kicker has breathing room below the floating header instead of
             crowding against the nav. */}

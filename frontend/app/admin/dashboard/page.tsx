@@ -1,19 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   Users, UserCheck, Clock, ShieldCheck, AlertTriangle,
   CheckCircle2, XCircle, RefreshCw, ChevronRight, ArrowUpRight, ArrowDownRight,
-  Wallet, CreditCard, CalendarClock, Crown, TrendingUp,
+  Wallet, CreditCard, CalendarClock, Crown, TrendingUp, Heart,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
-import { PageHeader } from "@/components/admin/PageHeader";
 import { adminApi, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -29,11 +27,13 @@ interface Stats {
   recent_activity: Array<{ user_id: string; name: string; status: string; submitted_at: string | null; reviewed_at: string | null }>;
 }
 
+// Brand-aware plan meta. Each tier gets a distinct hue from the existing
+// rose/gold palette so plan distribution reads at a glance.
 const PLAN_META: Record<string, { label: string; color: string; bg: string }> = {
-  free:     { label: "Free",     color: "#7d8a93", bg: "bg-slate-100" },
-  silver:   { label: "Silver",   color: "#7d8a93", bg: "bg-slate-200" },
-  gold:     { label: "Gold",     color: "#c9954a", bg: "bg-gold-100" },
-  platinum: { label: "Platinum", color: "#5d4b8a", bg: "bg-purple-100" },
+  free:     { label: "Free",     color: "#A78A8F", bg: "bg-[#F4ECEC]" },
+  silver:   { label: "Silver",   color: "#7D8A93", bg: "bg-[#EDEFF1]" },
+  gold:     { label: "Gold",     color: "#C9954A", bg: "bg-gold-100" },
+  platinum: { label: "Platinum", color: "#7D0A35", bg: "bg-rose-100" },
 };
 
 function formatRupees(paise: number): string {
@@ -74,6 +74,15 @@ function formatRel(iso: string | null): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function greetingFor(now = new Date()): string {
+  const h = now.getHours();
+  if (h < 5)  return "Working late";
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  if (h < 21) return "Good evening";
+  return "Good evening";
+}
+
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -96,13 +105,15 @@ export default function AdminDashboardPage() {
   useEffect(() => { load(); }, []);
   const refresh = () => { setRefreshing(true); load(); };
 
+  const greeting = useMemo(() => greetingFor(), []);
+
   if (loading) return <DashboardSkeleton />;
 
   if (error || !stats) {
     return (
       <>
-        <PageHeader title="Dashboard" description="What's happening on your platform right now." />
-        <Card>
+        <DashboardHero greeting={greeting} refresh={refresh} refreshing={refreshing} />
+        <Card className="border-destructive/30">
           <CardContent className="flex items-start gap-3 text-destructive py-8">
             <AlertTriangle className="w-4 h-4 mt-0.5" />
             <span className="text-sm">{error || "No data"}</span>
@@ -121,29 +132,27 @@ export default function AdminDashboardPage() {
   const maxDay = Math.max(1, ...stats.registration_trend.map((d) => d.count));
   const totalRelig = stats.religion_distribution.reduce((s, x) => s + x.count, 0);
 
-  // Compute deltas for KPIs
   const todayVs7d = stats.users.new_7d > 0 ? (stats.users.new_today * 7 / stats.users.new_7d - 1) * 100 : 0;
 
   return (
     <>
-      <PageHeader
-        title="Dashboard"
-        description="What's happening on your platform right now."
-        actions={
-          <Button variant="secondary" size="sm" onClick={refresh} disabled={refreshing}>
-            <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
-            Refresh
-          </Button>
-        }
+      <DashboardHero
+        greeting={greeting}
+        refresh={refresh}
+        refreshing={refreshing}
+        totalUsers={stats.users.total}
+        newToday={stats.users.new_today}
+        pending={stats.profiles.pending}
       />
 
-      {/* KPI grid — 4 across on desktop, 2 on tablet */}
+      {/* KPI grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <KpiCard
-          label="Total users"
+          label="Total members"
           value={stats.users.total.toLocaleString()}
           hint={`${stats.users.active.toLocaleString()} active`}
           icon={Users}
+          href="/admin/users"
         />
         <KpiCard
           label="New today"
@@ -151,6 +160,7 @@ export default function AdminDashboardPage() {
           hint={`${stats.users.new_7d} this week`}
           icon={TrendingUp}
           trend={todayVs7d}
+          tone="good"
         />
         <KpiCard
           label="Pending verifications"
@@ -174,16 +184,16 @@ export default function AdminDashboardPage() {
       {earnings && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
           <KpiCard label="Lifetime earnings" value={formatRupees(earnings.total_paise)} hint="All paid plans" icon={Wallet} tone="good" />
-          <KpiCard label="This month" value={formatRupees(earnings.this_month_paise)} hint={`${earningsSeries.length} months tracked`} icon={CalendarClock} />
+          <KpiCard label="This month" value={formatRupees(earnings.this_month_paise)} hint={`${earningsSeries.length} months tracked`} icon={CalendarClock} tone="gold" />
           <KpiCard label="Renewals · 14d" value={renewals.length.toLocaleString()} hint={renewals.length > 0 ? "Send reminders" : "All clear"} icon={CreditCard} tone={renewals.length > 0 ? "warn" : "neutral"} />
         </div>
       )}
 
-      {/* Two-column area: left = charts, right = side data */}
+      {/* Earnings + plan distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        {/* Earnings chart */}
         {earnings && (
-          <Card className="lg:col-span-2">
+          <Card className="lg:col-span-2 overflow-hidden">
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/40 to-transparent pointer-events-none" />
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -212,7 +222,7 @@ export default function AdminDashboardPage() {
                             initial={{ height: 0 }}
                             animate={{ height: `${Math.max(pct, 1.5)}%` }}
                             transition={{ delay: 0.15 + i * 0.04, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                            className="w-full rounded-t-sm bg-gradient-to-t from-gold to-gold-300 group-hover:from-gold-dark group-hover:to-gold transition-colors"
+                            className="w-full rounded-t-sm bg-gradient-to-t from-gold-dark via-gold to-gold-200 group-hover:from-gold-dark group-hover:via-gold-dark group-hover:to-gold transition-colors"
                           />
                         </div>
                         <span className="text-[10px] text-muted2-foreground tabular-nums">{shortMonth(d.month)}</span>
@@ -225,18 +235,17 @@ export default function AdminDashboardPage() {
           </Card>
         )}
 
-        {/* Plan distribution */}
         <Card>
           <CardHeader>
             <CardTitle>Plan distribution</CardTitle>
-            <CardDescription>Users by tier</CardDescription>
+            <CardDescription>Members by tier</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {planDist.length === 0 || totalPlan === 0 ? (
-              <EmptyState icon={Crown} text="No users yet" />
+              <EmptyState icon={Crown} text="No members yet" />
             ) : (
               planDist.map((r, i) => {
-                const meta = PLAN_META[r.plan] || { label: r.plan, color: "#999", bg: "bg-slate-100" };
+                const meta = PLAN_META[r.plan] || { label: r.plan, color: "#A78A8F", bg: "bg-secondary" };
                 const pct = totalPlan > 0 ? (r.count / totalPlan) * 100 : 0;
                 return (
                   <div key={r.plan}>
@@ -264,9 +273,8 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Renewals + Recent activity */}
+      {/* Renewals + recent activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* Renewals due */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -283,7 +291,7 @@ export default function AdminDashboardPage() {
             ) : (
               <ul className="-mx-2">
                 {renewals.map((r, i) => {
-                  const meta = PLAN_META[r.plan] || { label: r.plan, color: "#999", bg: "bg-slate-100" };
+                  const meta = PLAN_META[r.plan] || { label: r.plan, color: "#A78A8F", bg: "bg-secondary" };
                   return (
                     <motion.li
                       key={r.user_id + (r.current_period_end || "")}
@@ -319,7 +327,6 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Recent verification activity */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -369,7 +376,7 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Bottom row: registrations + religion */}
+      {/* Registrations + religion */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -393,7 +400,7 @@ export default function AdminDashboardPage() {
                         initial={{ height: 0 }}
                         animate={{ height: `${(d.count / maxDay) * 100}%` }}
                         transition={{ delay: 0.15 + i * 0.025, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                        className="w-full rounded-t-sm bg-gradient-to-t from-primary to-rose-400 min-h-[2px]"
+                        className="w-full rounded-t-sm bg-gradient-to-t from-primary via-primary/80 to-rose-300 min-h-[2px]"
                       />
                     </div>
                     <span className="text-[9.5px] text-muted2-foreground/70 tabular-nums">
@@ -430,7 +437,7 @@ export default function AdminDashboardPage() {
                         initial={{ width: 0 }}
                         animate={{ width: `${pct}%` }}
                         transition={{ delay: 0.2 + i * 0.05, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                        className="h-full rounded-full bg-gradient-to-r from-primary to-rose-400"
+                        className="h-full rounded-full bg-gradient-to-r from-primary via-rose-400 to-gold-300"
                       />
                     </div>
                   </div>
@@ -444,7 +451,75 @@ export default function AdminDashboardPage() {
   );
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+// ─── Hero ────────────────────────────────────────────────────────────────────
+
+function DashboardHero({
+  greeting, refresh, refreshing, totalUsers, newToday, pending,
+}: {
+  greeting: string;
+  refresh: () => void;
+  refreshing: boolean;
+  totalUsers?: number;
+  newToday?: number;
+  pending?: number;
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-card mb-6 bg-gradient-to-br from-[#FBF1EE] via-[#FDF9F4] to-[#F4E6E0] border border-border/60">
+      {/* decorative aura */}
+      <div aria-hidden className="absolute -top-24 -right-24 w-64 h-64 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+      <div aria-hidden className="absolute -bottom-20 -left-16 w-48 h-48 rounded-full bg-gold/10 blur-3xl pointer-events-none" />
+
+      <div className="relative px-5 py-6 sm:px-7 sm:py-7 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-5">
+        <div className="min-w-0">
+          <div className="inline-flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-primary/80 mb-2">
+            <Heart className="w-3 h-3" fill="currentColor" />
+            <span>Match4Marriage Console</span>
+          </div>
+          <h1 className="font-display text-[26px] sm:text-[30px] leading-tight tracking-tight font-semibold text-foreground">
+            {greeting}.
+          </h1>
+          <p className="mt-1 text-[13.5px] text-muted2-foreground max-w-xl">
+            Here&apos;s what&apos;s happening on the platform today.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {typeof totalUsers === "number" && (
+            <div className="hidden md:flex items-center gap-4 pr-4 mr-1 border-r border-border/70">
+              <HeroStat label="Members" value={totalUsers.toLocaleString()} />
+              {typeof newToday === "number" && <HeroStat label="Today" value={`+${newToday}`} />}
+              {typeof pending === "number" && pending > 0 && (
+                <HeroStat label="Pending" value={pending.toLocaleString()} accent />
+              )}
+            </div>
+          )}
+          <Button variant="secondary" size="sm" onClick={refresh} disabled={refreshing}>
+            <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+            Refresh
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HeroStat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="text-right">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted2-foreground/80">
+        {label}
+      </div>
+      <div className={cn(
+        "font-display text-[18px] leading-none font-semibold tabular-nums mt-1",
+        accent ? "text-primary" : "text-foreground",
+      )}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+// ─── KPI card ────────────────────────────────────────────────────────────────
 
 function KpiCard({
   label, value, hint, icon: Icon, tone = "neutral", trend, href,
@@ -453,25 +528,34 @@ function KpiCard({
   value: string;
   hint?: string;
   icon: any;
-  tone?: "neutral" | "good" | "warn" | "danger";
+  tone?: "neutral" | "good" | "warn" | "danger" | "gold";
   trend?: number;
   href?: string;
 }) {
-  const toneRing = {
-    neutral: "ring-border/60",
-    good:    "ring-emerald-200",
-    warn:    "ring-amber-200",
-    danger:  "ring-red-200",
+  // Brand-aware tones: sage/gold/rose, with cream surfaces. The icon chip
+  // also picks up an accent border so the tone reads without shouting.
+  const toneIconBg = {
+    neutral: "text-muted2-foreground bg-secondary border border-border/50",
+    good:    "text-[#3F6B4A] bg-[#EAF2EB] border border-[#CFE0D3]",
+    warn:    "text-gold-dark bg-gold-100 border border-gold/30",
+    danger:  "text-destructive bg-destructive/10 border border-destructive/20",
+    gold:    "text-gold-dark bg-gold-100 border border-gold/30",
   }[tone];
-  const toneIcon = {
-    neutral: "text-muted2-foreground bg-secondary",
-    good:    "text-emerald-700 bg-emerald-50",
-    warn:    "text-amber-700 bg-amber-50",
-    danger:  "text-red-700 bg-red-50",
+
+  const ring = {
+    neutral: "ring-border/60",
+    good:    "ring-[#CFE0D3]",
+    warn:    "ring-gold/30",
+    danger:  "ring-destructive/20",
+    gold:    "ring-gold/30",
   }[tone];
 
   const inner = (
-    <Card className={cn("ring-1 transition-all", toneRing, href && "hover:-translate-y-0.5 hover:shadow-md cursor-pointer")}>
+    <Card className={cn(
+      "ring-1 transition-all relative overflow-hidden",
+      ring,
+      href && "hover:-translate-y-0.5 hover:shadow-card cursor-pointer",
+    )}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -486,7 +570,7 @@ function KpiCard({
                 {trend !== undefined && Math.abs(trend) > 0.5 && (
                   <span className={cn(
                     "inline-flex items-center gap-0.5 font-semibold",
-                    trend > 0 ? "text-emerald-600" : "text-red-600",
+                    trend > 0 ? "text-[#3F6B4A]" : "text-destructive",
                   )}>
                     {trend > 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                     {Math.abs(trend).toFixed(0)}%
@@ -496,7 +580,7 @@ function KpiCard({
               </div>
             )}
           </div>
-          <div className={cn("w-9 h-9 rounded-md grid place-items-center shrink-0", toneIcon)}>
+          <div className={cn("w-9 h-9 rounded-md grid place-items-center shrink-0", toneIconBg)}>
             <Icon className="w-4 h-4" />
           </div>
         </div>
@@ -509,9 +593,9 @@ function KpiCard({
 
 function ActivityIcon({ status }: { status: string }) {
   const map: Record<string, { icon: any; cls: string }> = {
-    approved:  { icon: CheckCircle2, cls: "text-emerald-700 bg-emerald-50" },
-    rejected:  { icon: XCircle,      cls: "text-red-700 bg-red-50" },
-    submitted: { icon: Clock,        cls: "text-amber-700 bg-amber-50" },
+    approved:  { icon: CheckCircle2, cls: "text-[#3F6B4A] bg-[#EAF2EB]" },
+    rejected:  { icon: XCircle,      cls: "text-destructive bg-destructive/10" },
+    submitted: { icon: Clock,        cls: "text-gold-dark bg-gold-100" },
   };
   const { icon: Icon, cls } = map[status] || { icon: UserCheck, cls: "text-muted2-foreground bg-secondary" };
   return (
@@ -523,8 +607,10 @@ function ActivityIcon({ status }: { status: string }) {
 
 function EmptyState({ icon: Icon, text }: { icon: any; text: string }) {
   return (
-    <div className="py-6 text-center">
-      <Icon className="w-7 h-7 text-muted2-foreground/30 mx-auto mb-2" />
+    <div className="py-8 text-center">
+      <div className="mx-auto mb-2 w-10 h-10 rounded-full bg-secondary grid place-items-center">
+        <Icon className="w-4 h-4 text-muted2-foreground/50" />
+      </div>
       <p className="text-[12.5px] text-muted2-foreground">{text}</p>
     </div>
   );
@@ -533,7 +619,7 @@ function EmptyState({ icon: Icon, text }: { icon: any; text: string }) {
 function DashboardSkeleton() {
   return (
     <>
-      <PageHeader title="Dashboard" description="What's happening on your platform right now." />
+      <Skeleton className="h-[120px] rounded-card mb-6" />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[108px] rounded-lg" />)}
       </div>
