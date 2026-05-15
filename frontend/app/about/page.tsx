@@ -20,37 +20,31 @@ import PublicFooter from "@/components/PublicFooter";
 
 const principles = [
   {
-    n: "01",
     Icon: Users,
     title: "Family at the centre",
     body: "An Indian marriage is not the meeting of two people; it is the meeting of two families. Every introduction we make is shaped around that truth: values, upbringing, and the people who matter to you.",
   },
   {
-    n: "02",
     Icon: Sparkles,
     title: "Hand-picked, never crowded",
     body: "We deliberately stay small. Profiles are reviewed and accepted one at a time, by the same advisors who later guide the introductions. There is no algorithm behind the curtain. There is a person.",
   },
   {
-    n: "03",
     Icon: ShieldCheck,
     title: "Verified before introduced",
     body: "Identity, profession, and intent are checked privately before a profile is shown to anyone. By the time you meet a member, the meaningful background work has already been done.",
   },
   {
-    n: "04",
     Icon: Lock,
     title: "Discretion as a default",
     body: "Your photographs, your story, and your contact details are never visible to the open internet, never shared without consent, and never used to build advertising profiles.",
   },
   {
-    n: "05",
     Icon: Handshake,
     title: "Advisors, not operators",
     body: "Our role does not end at the introduction. We sit with families through hesitations, schedule the first meetings, and stay in touch through the months that follow. The conversation is human, all the way through.",
   },
   {
-    n: "06",
     Icon: Globe,
     title: "Britain-rooted, globally connected",
     body: "Founded in the United Kingdom and serving the global Indian diaspora, from London to Coimbatore, Singapore to Toronto. The same standard of care, wherever the family sits.",
@@ -301,7 +295,7 @@ export default function AboutPage() {
         <div className="max-w-4xl mx-auto">
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 36 }}>
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f" }}>
-              I — Why we exist
+              Why we exist
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
           </div>
@@ -363,7 +357,7 @@ export default function AboutPage() {
         <div className="max-w-7xl mx-auto">
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 64, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f" }}>
-              II — How we work
+              How we work
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)", minWidth: 40 }} />
           </div>
@@ -387,23 +381,7 @@ export default function AboutPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" style={{ rowGap: 56, columnGap: 56 }}>
             {principles.map((p) => (
-              <article key={p.n} style={{ position: "relative", paddingTop: 28, borderTop: "1px solid rgba(26,10,20,0.16)" }}>
-                <span
-                  className="font-display"
-                  style={{
-                    position: "absolute",
-                    top: -16,
-                    left: 0,
-                    background: "#faf3eb",
-                    paddingRight: 12,
-                    fontSize: 13,
-                    fontWeight: 700,
-                    letterSpacing: "0.08em",
-                    color: "#dc1e3c",
-                  }}
-                >
-                  {p.n}
-                </span>
+              <article key={p.title} style={{ paddingTop: 28, borderTop: "1px solid rgba(26,10,20,0.16)" }}>
                 <p.Icon size={20} strokeWidth={1.5} style={{ color: "#1a0a14", opacity: 0.85, marginBottom: 16 }} />
                 <h3 className="font-display" style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.25, marginBottom: 12, letterSpacing: "-0.01em" }}>
                   {p.title}
@@ -425,7 +403,7 @@ export default function AboutPage() {
         <div className="max-w-6xl mx-auto">
           <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 56, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "rgba(255,220,180,0.7)" }}>
-              III — How we differ
+              How we differ
             </span>
             <span style={{ flex: 1, height: 1, background: "rgba(255,220,180,0.18)", minWidth: 40 }} />
           </div>

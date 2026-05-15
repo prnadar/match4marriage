@@ -12,7 +12,6 @@ import PublicFooter from "@/components/PublicFooter";
    ──────────────────────────────────────────────────────────────── */
 
 interface Plan {
-  n: string;
   name: string;
   tagline: string;
   price: string;
@@ -27,7 +26,6 @@ interface Plan {
 
 const plans: Plan[] = [
   {
-    n: "I",
     name: "Basic",
     tagline: "Begin the conversation.",
     price: "£0",
@@ -38,7 +36,6 @@ const plans: Plan[] = [
     ctaHref: "/auth/register",
   },
   {
-    n: "II",
     name: "Premium",
     tagline: "When you are ready to engage.",
     price: "£300",
@@ -50,7 +47,6 @@ const plans: Plan[] = [
     recommended: true,
   },
   {
-    n: "III",
     name: "Elite",
     tagline: "Personally guided throughout.",
     price: "£1,000",
@@ -61,7 +57,6 @@ const plans: Plan[] = [
     ctaHref: "/auth/register",
   },
   {
-    n: "IV",
     name: "VIP Concierge",
     tagline: "Tailored to your family.",
     price: "Bespoke",
@@ -166,10 +161,6 @@ export default function PricingPage() {
                     Most chosen
                   </span>
                 )}
-
-                <span className="font-display" style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.1em", color: accent, marginBottom: 18 }}>
-                  {plan.n}
-                </span>
 
                 <h2 className="font-display" style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-0.01em", marginBottom: 6 }}>
                   {plan.name}
