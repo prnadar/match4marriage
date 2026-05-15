@@ -19,7 +19,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Heart, User as UserIcon, Phone, Shield, Mail, Lock, Eye, EyeOff,
@@ -78,6 +77,53 @@ const MOTHER_TONGUE_OPTIONS = [
 ];
 
 const EASE = [0.22, 1, 0.36, 1] as const;
+
+// ─── Onboarding hero slideshow ───────────────────────────────────────────────
+// Crossfades between the featured success-story photos so the sign-up screen
+// shows real couples from /success-stories. Pre-loads both, then alternates
+// every 6s with a 1.2s fade.
+
+const ONB_HERO_PHOTOS: ReadonlyArray<{ src: string; objectPosition: string }> = [
+  { src: "/couples/ashwini-rahul.jpg", objectPosition: "center 18%" },
+  { src: "/couples/alex-nisha.jpg",     objectPosition: "center 22%" },
+];
+
+function OnboardingHeroSlideshow() {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (ONB_HERO_PHOTOS.length < 2) return;
+    const id = window.setInterval(() => {
+      setIndex((i) => (i + 1) % ONB_HERO_PHOTOS.length);
+    }, 6000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  return (
+    <>
+      {ONB_HERO_PHOTOS.map((p, i) => (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          key={p.src}
+          src={p.src}
+          alt=""
+          aria-hidden
+          loading={i === 0 ? "eager" : "lazy"}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: p.objectPosition,
+            opacity: i === index ? 1 : 0,
+            transition: "opacity 1.2s ease-in-out",
+          }}
+        />
+      ))}
+    </>
+  );
+}
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
@@ -232,7 +278,7 @@ export default function OnboardingPage() {
         return false;
       }
       await api.get(`/api/v1/auth/verify-email?token=${trimmed}`);
-      // Verified — refresh Firebase token (the backend bumped trust_score)
+      // Verified — refresh Firebase token so the new email-verified claim lands
       try { await firebaseAuth.currentUser?.getIdToken(true); } catch { /* non-fatal */ }
       setStep1Mode("details"); // reset so coming back to step 1 shows form
       setStep(2);
@@ -419,14 +465,7 @@ export default function OnboardingPage() {
         overflow: "hidden",
         background: "#1a0a14",
       }}>
-        <Image
-          src="/couples/couple-hero.jpg"
-          alt=""
-          fill
-          priority
-          sizes="(max-width: 1024px) 100vw, 55vw"
-          style={{ objectFit: "cover", objectPosition: "center 22%" }}
-        />
+        <OnboardingHeroSlideshow />
         <div aria-hidden style={{
           position: "absolute", inset: 0,
           background: "linear-gradient(180deg, rgba(26,10,20,0.6) 0%, rgba(26,10,20,0.1) 35%, rgba(26,10,20,0.15) 60%, rgba(26,10,20,0.85) 100%)",
@@ -690,7 +729,7 @@ function Step1CreateAccount({
         {password.length > 0 && <PasswordStrength score={passwordStrength} />}
 
         <SubmitBtn disabled={!canSubmit} loading={loading}>
-          Continue — verify email
+          Continue to verify email
         </SubmitBtn>
       </form>
 
@@ -1266,7 +1305,7 @@ function Step3IdVerify({
     >
       <Eyebrow>Step 3 of 3</Eyebrow>
       <H2>Verify your identity</H2>
-      <Sub>Shared only with our review team — never with matches. Encrypted at rest.</Sub>
+      <Sub>Shared only with our review team, never with matches. Encrypted at rest.</Sub>
 
       <div style={{
         marginTop: 20, padding: "14px 16px",

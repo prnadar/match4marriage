@@ -265,7 +265,7 @@ export function PhotoGrid() {
           fontSize: "0.8125rem", color: "#888",
           fontFamily: "var(--font-poppins, sans-serif)", margin: 0,
         }}>
-          Upload up to {MAX_PHOTOS}. <strong style={{ color: "#dc1e3c" }}>Drag</strong> to reorder — your first photo is primary.
+          Upload up to {MAX_PHOTOS}. <strong style={{ color: "#dc1e3c" }}>Drag</strong> to reorder. Your first photo is primary.
           Profiles with photos get <strong style={{ color: "#dc1e3c" }}>8× more responses</strong>.
         </p>
         {topError && (

@@ -264,7 +264,7 @@ export default function AdminLoginPage() {
               fontWeight: 400,
             }}
           >
-            You&apos;re the keeper. Review profiles, verify identities, and guide the community you&apos;re building — all from one console.
+            You&apos;re the keeper. Review profiles, verify identities, and guide the community you&apos;re building, all from one console.
           </motion.p>
 
           {/* Feature pills */}

@@ -56,13 +56,13 @@ def _serialize_user(u: User, p: UserProfile | None) -> dict[str, Any]:
         primary = photos[0].get("url")
     return {
         "id": str(u.id),
+        "membership_number": u.membership_number,
         "email": u.email,
         "phone": u.phone,
         "is_active": bool(u.is_active),
         "is_phone_verified": bool(u.is_phone_verified),
         "is_email_verified": bool(u.is_email_verified),
         "is_profile_complete": bool(u.is_profile_complete),
-        "trust_score": int(u.trust_score or 0),
         "subscription_tier": u.subscription_tier.value if u.subscription_tier else "free",
         "created_at": u.created_at.isoformat() if u.created_at else None,
         "last_active_at": u.last_active_at.isoformat() if u.last_active_at else None,
@@ -81,10 +81,10 @@ def _serialize_user(u: User, p: UserProfile | None) -> dict[str, Any]:
 
 
 USER_CSV_COLS = [
-    "id", "first_name", "last_name", "email", "phone", "city", "country",
-    "religion", "occupation", "subscription_tier", "verification_status",
-    "trust_score", "completeness_score", "is_active", "is_email_verified",
-    "is_phone_verified", "created_at", "last_active_at",
+    "id", "membership_number", "first_name", "last_name", "email", "phone",
+    "city", "country", "religion", "occupation", "subscription_tier",
+    "verification_status", "completeness_score", "is_active",
+    "is_email_verified", "is_phone_verified", "created_at", "last_active_at",
 ]
 
 
@@ -124,9 +124,13 @@ async def list_users(
 
     if q:
         ql = f"%{q.lower()}%"
+        # Membership numbers are upper-case but we match case-insensitively
+        # so admins can type "m4m-2026-1" or paste verbatim from email.
+        qu = f"%{q.upper()}%"
         base = base.where(or_(
             func.lower(User.email).like(ql),
             User.phone.like(f"%{q}%"),
+            User.membership_number.like(qu),
             func.lower(UserProfile.first_name).like(ql),
             func.lower(UserProfile.last_name).like(ql),
         ))
@@ -405,29 +409,6 @@ async def restore_user(
     await db.flush()
     logger.info("admin_restore_user", admin=current_user.get("sub"), target=str(user_id))
     return APIResponse(success=True, data={"id": str(u.id)})
-
-
-@router.post("/users/{user_id}/trust-boost", response_model=APIResponse[dict])
-async def trust_boost(
-    user_id: uuid.UUID,
-    payload: dict,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[dict, Depends(get_current_user)],
-    tenant_slug: str = Depends(get_current_tenant_slug),
-):
-    _require_admin(current_user)
-    tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
-    try:
-        delta = int(payload.get("delta", 0))
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="delta must be an integer")
-    if delta == 0:
-        raise HTTPException(status_code=400, detail="delta must be non-zero")
-    u = await _load_user_for_admin(db, user_id, tenant_uuid)
-    u.trust_score = max(0, min(100, (u.trust_score or 0) + delta))
-    await db.flush()
-    logger.info("admin_trust_boost", admin=current_user.get("sub"), target=str(user_id), delta=delta)
-    return APIResponse(success=True, data={"id": str(u.id), "trust_score": u.trust_score})
 
 
 # ─── Stats / Dashboard ───────────────────────────────────────────────────────

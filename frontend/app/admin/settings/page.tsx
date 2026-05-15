@@ -1098,7 +1098,7 @@ function SeoTab() {
               <input
                 value={draft.title}
                 onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-                placeholder="e.g. Match4Marriage — Premium Matrimony"
+                placeholder="e.g. Match4Marriage: Premium Matrimony"
                 style={inputStyle}
               />
             </Field>
@@ -1638,7 +1638,7 @@ function PaymentGatewayTab() {
             fontSize: 11.5, color: "#666", lineHeight: 1.55,
           }}>
             <strong style={{ color: "#a0153c" }}>Security:</strong> secret values are write-only.
-            We never echo back what&apos;s stored — leaving the field blank keeps the existing value.
+            We never echo back what&apos;s stored. Leaving the field blank keeps the existing value.
             Use <em>Clear</em> to remove a secret intentionally.
           </div>
 

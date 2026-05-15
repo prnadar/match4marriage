@@ -85,7 +85,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [sidebarName, setSidebarName] = useState("");
   const [sidebarInitial, setSidebarInitial] = useState("");
-  const [sidebarTrustScore, setSidebarTrustScore] = useState<number | null>(null);
   const [sidebarPlan, setSidebarPlan] = useState<string>("Basic");
   // Same hook PublicHeader uses; keeps the sidebar avatar in lock-step
   // with the top-bar avatar after a primary-photo change.
@@ -127,13 +126,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         setSidebarName(resolvedName);
         setSidebarInitial(resolvedName.charAt(0).toUpperCase());
       }
-
-      try {
-        const res = await profileApi.getTrustScore();
-        const d = (res.data as any)?.data ?? res.data;
-        if (d?.total !== undefined) setSidebarTrustScore(d.total);
-        else if (d?.trust_score !== undefined) setSidebarTrustScore(d.trust_score);
-      } catch { /* ignore */ }
 
       // Resolve current subscription tier — `users.subscription_tier` returns
       // free/silver/gold/platinum; we map that to the plan label users see in
@@ -233,7 +225,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <p className="text-sm font-semibold truncate" style={{ color: "#ffffff" }}>{sidebarName || "My Profile"}</p>
                 <div className="flex items-center gap-1 mt-0.5">
                   <Shield className="w-3 h-3" style={{ color: "#8DB870" }} />
-                  <span className="text-xs font-medium" style={{ color: "#8DB870" }}>Trust Score: {sidebarTrustScore ?? "–"}</span>
+                  <span className="text-xs font-medium" style={{ color: "#8DB870" }}>{sidebarPlan} member</span>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: "rgba(255,255,255,0.25)" }} />

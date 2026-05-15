@@ -214,7 +214,7 @@ export default function PrivacyPage() {
                         { Icon: FileText,  label: "Company No.", value: "15272378" },
                         { Icon: MapPin,    label: "Address",     value: "282 Warwick Road, Solihull, England, B92 7AF" },
                         { Icon: Mail,      label: "Email",       value: "enquiry@match4marriage.com", href: "mailto:enquiry@match4marriage.com" },
-                        { Icon: Scale,     label: "Regulator",   value: "Information Commissioner's Office (ICO) — ico.org.uk", href: "https://ico.org.uk" },
+                        { Icon: Scale,     label: "Regulator",   value: "Information Commissioner's Office (ICO), ico.org.uk", href: "https://ico.org.uk" },
                       ] as Array<{ Icon: LucideIcon; label: string; value: string; href?: string }>).map((item) => (
                         <div key={item.label} style={{ display: "flex", gap: 14, marginBottom: 14, alignItems: "flex-start" }}>
                           <span style={{ flexShrink: 0, marginTop: 1, color: "#dc1e3c" }}>

@@ -19,7 +19,7 @@ class UserCreate(BaseSchema):
 class UserRead(TimestampedSchema):
     phone: str
     email: str | None
-    trust_score: int
+    membership_number: str | None = None
     subscription_tier: SubscriptionTier
     is_active: bool
     is_phone_verified: bool
@@ -148,5 +148,4 @@ class ProfileCard(BaseSchema):
     education_level: str | None
     religion: Religion | None
     primary_photo_url: str | None
-    trust_score: int
     completeness_score: int

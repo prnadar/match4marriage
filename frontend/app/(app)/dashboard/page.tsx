@@ -6,7 +6,7 @@ import {
   Shield, Heart, Clock, Sparkles, Search, ArrowRight, AlertCircle,
   Check, Plus,
 } from "lucide-react";
-import { matchApi, profileApi, ApiError } from "@/lib/api";
+import { matchApi, profileApi, api, ApiError } from "@/lib/api";
 import { ProfileCard, type ProfileCardData } from "@/components/ui/profile-card";
 import { LuxeButton } from "@/components/ui/luxe-button";
 import { RevealText } from "@/components/ui/reveal-text";
@@ -40,7 +40,6 @@ function mapMatch(p: any, idx: number): ProfileCardData {
     height: p.height_cm ? cmToFeetInches(p.height_cm) : p.height || "",
     verified: p.is_verified ?? p.verified ?? false,
     premium: p.is_premium ?? p.premium ?? false,
-    trustScore: p.trust_score ?? p.trustScore ?? 0,
     compatibility: p.compatibility ?? p.match_score ?? 0,
     photoUrl: p.profile_photo || p.photo_url || p.photoUrl || null,
     gender: p.gender,
@@ -48,41 +47,6 @@ function mapMatch(p: any, idx: number): ProfileCardData {
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
-
-/* ── Trust Ring (pure SVG, no deps) ─────────────────────────────────── */
-
-function TrustRing({ value, max = 100, size = 132 }: { value: number; max?: number; size?: number }) {
-  const stroke = 10;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const offset = c - (Math.max(0, Math.min(value, max)) / max) * c;
-  return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r}
-          stroke="rgba(220,30,60,0.10)" strokeWidth={stroke} fill="none" />
-        <circle cx={size / 2} cy={size / 2} r={r}
-          stroke="url(#m4mTrustGrad)" strokeWidth={stroke} fill="none"
-          strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
-          style={{ transition: "stroke-dashoffset 1.1s cubic-bezier(.2,.7,.2,1)" }} />
-        <defs>
-          <linearGradient id="m4mTrustGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#C9954A" />
-            <stop offset="100%" stopColor="#dc1e3c" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="font-display text-[40px] font-semibold leading-none gold-text gold-text-shimmer">
-          {value}
-        </span>
-        <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-rose-700/70">
-          Trust score
-        </span>
-      </div>
-    </div>
-  );
-}
 
 /* ── Page ───────────────────────────────────────────────────────────── */
 
@@ -96,8 +60,8 @@ interface CompletionInfo {
 export default function DashboardPage() {
   const [interests, setInterests] = useState<Record<string, "sent" | "passed">>({});
   const [matches, setMatches] = useState<ProfileCardData[]>([]);
-  const [trustScore, setTrustScore] = useState<number | null>(null);
   const [completion, setCompletion] = useState<CompletionInfo | null>(null);
+  const [membershipNumber, setMembershipNumber] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,11 +69,16 @@ export default function DashboardPage() {
     async function load() {
       setLoading(true); setError(null);
       try {
-        const [matchRes, trustRes, completionRes] = await Promise.allSettled([
+        const [matchRes, completionRes, meRes] = await Promise.allSettled([
           matchApi.getDailyMatches(),
-          profileApi.getTrustScore(),
           profileApi.getCompletion(),
+          api.get("/api/v1/auth/me"),
         ]);
+
+        if (meRes.status === "fulfilled") {
+          const d = (meRes.value.data as any)?.data ?? meRes.value.data;
+          setMembershipNumber(d?.membership_number ?? null);
+        }
 
         // Backend envelope: APIResponse{success, data: T} for singular,
         // PaginatedResponse{success, data: T[], ...} for paginated.
@@ -118,11 +87,6 @@ export default function DashboardPage() {
           const payload = (matchRes.value.data as any)?.data;
           const list: any[] = payload?.matches ?? (Array.isArray(payload) ? payload : []);
           setMatches(list.map(mapMatch));
-        }
-
-        if (trustRes.status === "fulfilled") {
-          const d = (trustRes.value.data as any)?.data ?? trustRes.value.data;
-          setTrustScore(d?.total ?? d?.trust_score ?? d?.trustScore ?? d?.score ?? null);
         }
 
         if (completionRes.status === "fulfilled") {
@@ -153,7 +117,6 @@ export default function DashboardPage() {
 
   const active = matches.filter((m) => !interests[m.id]);
   const sent = matches.filter((m) => interests[m.id] === "sent");
-  const displayScore = trustScore ?? 0;
   const completionScore = completion?.score ?? 0;
 
   return (
@@ -171,6 +134,12 @@ export default function DashboardPage() {
                 Your curated matches
               </RevealText>
             </h1>
+            {membershipNumber && (
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-rose-100 bg-white/70 px-3 py-1 text-[11px] font-semibold tracking-[0.14em] text-rose-700 shadow-[0_2px_8px_rgba(220,30,60,0.05)]">
+                <span className="text-rose-700/60 uppercase">Member</span>
+                <span className="font-mono tabular-nums text-[#1a0a14]">{membershipNumber}</span>
+              </div>
+            )}
             <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-[#6a5560]">
               {loading
                 ? "Loading the introductions our advisors selected for you today…"
@@ -190,27 +159,26 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Trust card */}
+          {/* Profile strength card */}
           <div
             className="relative flex items-center gap-5 rounded-3xl border border-rose-100/70 bg-white p-5 shadow-[0_2px_18px_rgba(220,30,60,0.06)]"
-            style={{ minWidth: 320 }}
+            style={{ minWidth: 300 }}
           >
-            <TrustRing value={displayScore} />
             <div className="flex flex-col gap-1.5">
               <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-100">
-                <Shield className="h-3 w-3" /> Verified
+                <Shield className="h-3 w-3" /> Verified member
               </div>
               <p className="font-display text-[15px] text-[#1a0a14]">
-                Boost your trust score
+                A complete profile gets noticed
               </p>
               <p className="text-[12px] leading-snug text-[#6a5560]">
-                Verified members receive 3.4× more interest.
+                Members with full profiles and photos receive far more interest.
               </p>
               <Link
                 href="/profile/me"
                 className="mt-1 inline-flex items-center gap-1 self-start text-[12px] font-semibold text-rose-700 hover:text-rose-800"
               >
-                Boost score <ArrowRight className="h-3 w-3" />
+                Complete your profile <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
           </div>

@@ -12,7 +12,7 @@ const themes = [
   {
     id: "crimson-gold",
     name: "Crimson & Gold",
-    subtitle: "Current — Indian Wedding Silk",
+    subtitle: "Current · Indian Wedding Silk",
     tag: "CURRENT",
     isDark: true,
     bg: "#0F0A0A",
@@ -32,7 +32,7 @@ const themes = [
   {
     id: "obsidian-champagne",
     name: "Obsidian & Champagne",
-    subtitle: "Rolls Royce — Pure Luxury",
+    subtitle: "Rolls Royce · Pure Luxury",
     tag: "PREMIUM",
     isDark: true,
     bg: "#0C0A09",
@@ -52,7 +52,7 @@ const themes = [
   {
     id: "midnight-navy",
     name: "Midnight Navy & Gold",
-    subtitle: "Ritz-Carlton — Heritage Prestige",
+    subtitle: "Ritz-Carlton · Heritage Prestige",
     tag: "CLASSIC",
     isDark: true,
     bg: "#080E1F",
@@ -72,7 +72,7 @@ const themes = [
   {
     id: "burgundy-rose",
     name: "Burgundy & Rose Gold",
-    subtitle: "Mughal Court — Rich Indian Heritage",
+    subtitle: "Mughal Court · Rich Indian Heritage",
     tag: "INDIAN LUXURY",
     isDark: true,
     bg: "#0D0509",
@@ -92,7 +92,7 @@ const themes = [
   {
     id: "onyx-emerald",
     name: "Onyx & Emerald",
-    subtitle: "Bulgari — Jewellery Box Opulence",
+    subtitle: "Bulgari · Jewellery Box Opulence",
     tag: "BOLD",
     isDark: true,
     bg: "#030A06",
@@ -114,7 +114,7 @@ const themes = [
   {
     id: "cream-rose",
     name: "Ivory & Marigold",
-    subtitle: "Sabyasachi — Luxury Wedding Invite",
+    subtitle: "Sabyasachi · Luxury Wedding Invite",
     tag: "LIGHT · WEDDING GOLD",
     isDark: false,
     bg: "#FFFAF8",
@@ -134,7 +134,7 @@ const themes = [
   {
     id: "pearl-sindoor",
     name: "Pearl & Sindoor",
-    subtitle: "Kanjivaram Silk — Sacred Tradition",
+    subtitle: "Kanjivaram Silk · Sacred Tradition",
     tag: "LIGHT · SINDOOR RED",
     isDark: false,
     bg: "#FEF8F5",
@@ -154,7 +154,7 @@ const themes = [
   {
     id: "parchment-peacock",
     name: "Parchment & Peacock",
-    subtitle: "Rajasthani Palace — Royal Heritage",
+    subtitle: "Rajasthani Palace · Royal Heritage",
     tag: "LIGHT · PEACOCK TEAL",
     isDark: false,
     bg: "#FBF5E6",
@@ -184,7 +184,7 @@ export default function ThemesPage() {
       {/* Header */}
       <div style={{ padding: "40px 32px 24px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <p style={{ color: "rgba(255,255,255,0.3)", fontSize: "11px", letterSpacing: "3px", textTransform: "uppercase", marginBottom: "10px" }}>
-          UI Pro Max — Design System
+          UI Pro Max · Design System
         </p>
         <h1 style={{ fontFamily: "'Cormorant', Georgia, serif", color: "#fff", fontSize: "clamp(1.8rem,4vw,2.8rem)", fontWeight: 300, margin: 0 }}>
           Choose Your Colour Scheme
@@ -287,7 +287,7 @@ function ThemePreview({ theme: t }: { theme: (typeof themes)[0] }) {
       >
         {/* Tag */}
         <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "5px 14px", borderRadius: "99px", border: `1px solid ${t.glassBorder}`, background: `${t.accent}18`, marginBottom: "24px" }}>
-          <span style={{ fontSize: "9px", color: t.accent, letterSpacing: "2px", textTransform: "uppercase", fontWeight: 600 }}>{t.tag} — {t.subtitle}</span>
+          <span style={{ fontSize: "9px", color: t.accent, letterSpacing: "2px", textTransform: "uppercase", fontWeight: 600 }}>{t.tag} · {t.subtitle}</span>
         </div>
 
         {/* Devanagari */}
@@ -306,7 +306,7 @@ function ThemePreview({ theme: t }: { theme: (typeof themes)[0] }) {
         </h2>
 
         <p style={{ color: t.textMuted, fontSize: "14px", maxWidth: "500px", margin: "0 auto 32px", lineHeight: 1.7 }}>
-          AI-powered compatibility. Government-grade verification. Cultural depth — for modern India and the global diaspora.
+          AI-powered compatibility. Government-grade verification. Cultural depth for modern India and the global diaspora.
         </p>
 
         {/* Buttons */}

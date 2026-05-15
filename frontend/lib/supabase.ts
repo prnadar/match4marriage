@@ -6,7 +6,7 @@
  */
 type Result<T = unknown> = Promise<{ data: T | null; error: { message: string } | null }>;
 
-const notImpl = (): Result => Promise.resolve({ data: null, error: { message: "Auth migrated to Firebase — please use phone sign-in at /onboarding" } });
+const notImpl = (): Result => Promise.resolve({ data: null, error: { message: "Auth migrated to Firebase. Please use phone sign-in at /onboarding" } });
 
 export const supabase = {
   auth: {

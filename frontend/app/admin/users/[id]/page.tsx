@@ -6,7 +6,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Mail, Phone, MapPin, Calendar, Shield,
-  AlertTriangle, ChevronUp, ChevronDown,
+  AlertTriangle,
   UserX, UserCheck, Trash2, RotateCcw, BadgeCheck,
 } from "lucide-react";
 import { PageShell, Button, GlassCard, fadeUp } from "@/components/admin/PageShell";
@@ -15,13 +15,13 @@ import { useToast } from "@/components/admin/Toast";
 
 interface UserDetail {
   id: string;
+  membership_number: string | null;
   email: string | null;
   phone: string | null;
   is_active: boolean;
   is_email_verified: boolean;
   is_phone_verified: boolean;
   deleted_at: string | null;
-  trust_score: number;
   completeness_score: number;
   verification_status: string;
   subscription_tier: string;
@@ -139,6 +139,19 @@ export default function AdminUserDetailPage() {
                 <span style={{ fontSize: 11, color: "#666", background: "rgba(0,0,0,0.04)", padding: "4px 10px", borderRadius: 999, textTransform: "capitalize", fontWeight: 500 }}>
                   {user.subscription_tier}
                 </span>
+                {user.membership_number && (
+                  <span style={{
+                    fontSize: 11, color: "#1a0a14",
+                    background: "rgba(220,30,60,0.08)",
+                    border: "1px solid rgba(220,30,60,0.20)",
+                    padding: "4px 10px", borderRadius: 999,
+                    fontFamily: "ui-monospace, monospace",
+                    letterSpacing: "0.04em",
+                    fontWeight: 600,
+                  }} title="Membership number">
+                    {user.membership_number}
+                  </span>
+                )}
               </div>
               <div style={{ fontSize: 12, color: "#666", display: "flex", gap: 14, flexWrap: "wrap" }}>
                 {user.email && (
@@ -163,7 +176,6 @@ export default function AdminUserDetailPage() {
             </div>
 
             <div style={{ display: "flex", gap: 20 }}>
-              <KPI label="Trust" value={user.trust_score} max={100} tone={user.trust_score >= 60 ? "good" : user.trust_score >= 40 ? "warn" : "bad"} />
               <KPI label="Complete" value={user.completeness_score} suffix="%" />
               <KPI label="Reports" value={user.reports_against} tone={user.reports_against > 0 ? "bad" : "neutral"} />
             </div>
@@ -193,17 +205,6 @@ export default function AdminUserDetailPage() {
                 <UserCheck style={{ width: 13, height: 13 }} /> Activate
               </Button>
             )}
-
-            <div style={{
-              display: "inline-flex", alignItems: "center", gap: 2,
-              background: "rgba(255,255,255,0.8)", border: "1px solid rgba(220,30,60,0.12)",
-              borderRadius: 10, padding: 3,
-              backdropFilter: "blur(6px)",
-            }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: "#888", padding: "0 10px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Trust</span>
-              <TrustBtn onClick={() => act("+10 trust", () => adminApi.trustBoost(user.id, +10))} disabled={busy} up />
-              <TrustBtn onClick={() => act("-10 trust", () => adminApi.trustBoost(user.id, -10))} disabled={busy} />
-            </div>
 
             {user.verification_status !== "approved" && user.profile && (
               <Link href="/admin/verifications" style={{
@@ -247,28 +248,6 @@ function BackLink() {
     >
       <ArrowLeft style={{ width: 14, height: 14 }} /> Back to users
     </Link>
-  );
-}
-
-function TrustBtn({ onClick, disabled, up = false }: { onClick: () => void; disabled: boolean; up?: boolean }) {
-  return (
-    <motion.button
-      onClick={onClick}
-      disabled={disabled}
-      whileHover={disabled ? undefined : { scale: 1.05 }}
-      whileTap={disabled ? undefined : { scale: 0.95 }}
-      style={{
-        background: "transparent", border: "none", cursor: disabled ? "not-allowed" : "pointer",
-        padding: "6px 10px", borderRadius: 6,
-        color: up ? "#5C7A52" : "#dc1e3c",
-        fontSize: 12, fontWeight: 700,
-        display: "inline-flex", alignItems: "center", gap: 3,
-        fontFamily: "inherit", opacity: disabled ? 0.5 : 1,
-      }}
-    >
-      {up ? <ChevronUp style={{ width: 14, height: 14 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />}
-      {up ? "+10" : "-10"}
-    </motion.button>
   );
 }
 

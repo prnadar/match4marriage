@@ -493,9 +493,9 @@ export default function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4" style={{ rowGap: 48, columnGap: 40 }}>
             {[
               { n: "01", title: "Tell us about you", body: "Begin with a private intake call. Our advisor takes the time to understand who you are, what matters, and what you are looking for in a partner." },
-              { n: "02", title: "We hand-pick matches", body: "We curate three to five compatible introductions per month. No algorithm, no swiping — just considered, advisor-led suggestions." },
+              { n: "02", title: "We hand-pick matches", body: "We curate three to five compatible introductions per month. No algorithm, no swiping, just considered, advisor-led suggestions." },
               { n: "03", title: "Connect in private", body: "Express interest discreetly. Your contact details are shared only when both sides have indicated mutual interest." },
-              { n: "04", title: "Begin forever", body: "Meet families and take the next step. Our advisors stay alongside you — through the introductions, the meetings, and the wedding." },
+              { n: "04", title: "Begin forever", body: "Meet families and take the next step. Our advisors stay alongside you, through the introductions, the meetings, and the wedding." },
             ].map((step) => (
               <article key={step.n} style={{ paddingTop: 24, borderTop: "1px solid rgba(26,10,20,0.16)" }}>
                 <h3 className="font-display" style={{ fontSize: 20, fontWeight: 600, lineHeight: 1.25, marginBottom: 12, letterSpacing: "-0.01em", color: "#1a0a14" }}>
@@ -530,7 +530,7 @@ export default function HomePage() {
             </h2>
             <p style={{ fontSize: 16, lineHeight: 1.75, color: "#4a3a40", marginBottom: 28 }}>
               For their privacy, member profiles are not visible to the open
-              internet. Every introduction begins with a confidential call —
+              internet. Every introduction begins with a confidential call,
               and only after we genuinely believe two families are right for
               each other.
             </p>
@@ -558,7 +558,7 @@ export default function HomePage() {
           <div className="lg:col-span-7" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
             {[
               { kicker: "01", title: "Confidential intake", body: "A 30-minute call with one of our advisors to understand what matters to you and your family." },
-              { kicker: "02", title: "Hand-picked profiles", body: "Three to five considered introductions per month — never automated, never compromised." },
+              { kicker: "02", title: "Hand-picked profiles", body: "Three to five considered introductions per month, never automated, never compromised." },
               { kicker: "03", title: "Guided introduction", body: "When you are both interested, we facilitate the family meeting with discretion and care." },
             ].map((step) => (
               <article key={step.kicker} style={{
@@ -717,7 +717,7 @@ export default function HomePage() {
             </h2>
             <p style={{ fontSize: 16, lineHeight: 1.7, color: "#4a3a40", margin: 0 }}>
               Every detail of how we work has been chosen with a single
-              question in mind — what would we want for our own family?
+              question in mind. What would we want for our own family?
             </p>
           </div>
           <div className="lg:col-span-7">
@@ -764,10 +764,10 @@ export default function HomePage() {
           <div>
             {[
               { q: "How is Match4Marriage different from other matrimony sites?", a: "We are a boutique service, not a mass-market platform. Every profile is hand-picked and personally vetted by our team. We focus on quality introductions, not volume." },
-              { q: "How does the matching process work?", a: "Once you register, our advisors review your profile and preferences. We personally curate compatible introductions. No swiping, no endless browsing — just meaningful, considered matches." },
+              { q: "How does the matching process work?", a: "Once you register, our advisors review your profile and preferences. We personally curate compatible introductions. No swiping, no endless browsing, just meaningful, considered matches." },
               { q: "Is my information kept private?", a: "Absolutely. Your contact details and personal information are never shared without explicit consent. All data is handled in compliance with UK GDPR regulations." },
               { q: "How long does it typically take to find a match?", a: "Every journey is unique. Some members find their match within weeks; others take a few months. We guide you at every stage and never rush the process." },
-              { q: "Do you serve families outside the UK?", a: "Yes. While our primary focus is the British Indian community, we connect families globally — including India, UAE, Canada, Australia, and the USA." },
+              { q: "Do you serve families outside the UK?", a: "Yes. While our primary focus is the British Indian community, we connect families globally, including India, UAE, Canada, Australia, and the USA." },
             ].map((faq, i) => {
               const open = openFaq === i;
               return (
@@ -835,7 +835,7 @@ export default function HomePage() {
             </span>
           </h2>
           <p style={{ fontSize: 16, lineHeight: 1.7, color: "#4a3a40", maxWidth: 540, margin: "0 auto 36px" }}>
-            Begin with a private call — no commitment, just a conversation about
+            Begin with a private call. No commitment, just a conversation about
             what you and your family are looking for.
           </p>
           <div style={{ display: "inline-flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>

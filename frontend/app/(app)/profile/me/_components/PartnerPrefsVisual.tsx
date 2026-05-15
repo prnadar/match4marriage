@@ -114,7 +114,7 @@ export function PartnerPrefsVisual({ form, update, onSave, saving }: Props) {
         </Row>
       </Card>
 
-      <Card title="Background — pick any that fit">
+      <Card title="Background (pick any that fit)">
         <PillGroup
           label="Marital status"
           options={MARITAL}
@@ -659,7 +659,7 @@ function MatchPreview({
 
       {isEmpty ? (
         <div style={{ textAlign: "center", padding: "16px 0", color: "#aaa", fontSize: 12 }}>
-          No matches yet — try widening your range or removing a filter.
+          No matches yet. Try widening your range or removing a filter.
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>

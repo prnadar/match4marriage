@@ -196,7 +196,6 @@ export const profileApi = {
     return api.patch("/api/v1/profile/me", data);
   },
   submitForReview: () => api.post("/api/v1/profile/me/submit", {}),
-  getTrustScore: () => api.get("/api/v1/profile/trust-score"),
   /** Backend: GET /profile/me/completion → { score, sections: {...}, missing: [...] } */
   getCompletion: () => api.get("/api/v1/profile/me/completion"),
   // Photo upload happens via direct calls to `api.post` in PhotoGrid:
@@ -295,7 +294,6 @@ export const adminApi = {
   activateUser: (userId: string) => api.post(`/api/v1/admin/users/${userId}/activate`),
   softDeleteUser: (userId: string) => api.post(`/api/v1/admin/users/${userId}/soft-delete`),
   restoreUser: (userId: string) => api.post(`/api/v1/admin/users/${userId}/restore`),
-  trustBoost: (userId: string, delta: number) => api.post(`/api/v1/admin/users/${userId}/trust-boost`, { delta }),
 
   // Dashboard
   getStats: () => api.get("/api/v1/admin/stats"),

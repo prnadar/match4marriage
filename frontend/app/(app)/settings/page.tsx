@@ -163,8 +163,7 @@ export default function SettingsPage() {
   // Pulled from /auth/me (server-side truth). If is_email_verified is false
   // we show a "Verify now" card that POSTs /auth/send-verification-email,
   // then takes the 6-digit code via /auth/verify-email?token=... which on
-  // success sets is_email_verified=true and bumps the user's trust score
-  // (+20 in compute_trust_score for the email signal).
+  // success sets is_email_verified=true.
   const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
   const [emailVerifyStage, setEmailVerifyStage] = useState<"idle" | "sending" | "code" | "verifying">("idle");
   const [emailVerifyMsg, setEmailVerifyMsg] = useState<{ tone: "info" | "error" | "success"; text: string } | null>(null);
@@ -218,7 +217,7 @@ export default function SettingsPage() {
       setEmailVerifyStage("idle");
       setEmailVerifyMsg({
         tone: "success",
-        text: "Email verified — your Trust Score has been boosted.",
+        text: "Email verified. Thank you for confirming your address.",
       });
       setEmailCode("");
     } catch (e: any) {
@@ -483,7 +482,7 @@ export default function SettingsPage() {
               <>
                 {/* Email verification card. Hidden while the verified flag
                     is loading (null) so the UI doesn't flash 'Not verified'
-                    for a verified user. Boosts trust score on success. */}
+                    for a verified user. */}
                 {emailVerified !== null && (
                   <div
                     style={{

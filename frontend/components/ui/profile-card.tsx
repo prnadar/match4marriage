@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
-  MapPin, Briefcase, GraduationCap, ShieldCheck, BadgeCheck, Sparkles,
+  MapPin, Briefcase, GraduationCap, BadgeCheck, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Portrait } from "./portrait";
@@ -51,7 +51,6 @@ export interface ProfileCardData {
   height?: string;
   verified?: boolean;
   premium?: boolean;
-  trustScore?: number;
   compatibility?: number;
   about?: string;
   photoUrl?: string | null;
@@ -247,11 +246,6 @@ export function ProfileCard({
           )}
           {data.height && <Chip>{data.height}</Chip>}
           {data.religion && <Chip>{data.religion}</Chip>}
-          {typeof data.trustScore === "number" && data.trustScore > 0 && (
-            <Chip icon={<ShieldCheck className="h-3 w-3 text-emerald-700" />}>
-              Trust {data.trustScore}
-            </Chip>
-          )}
         </div>
       </div>
     </Link>

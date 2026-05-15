@@ -560,7 +560,7 @@ function DetailPane({
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Notes for the team — never shown to the user."
+          placeholder="Notes for the team. Never shown to the user."
           rows={4}
           style={{
             width: "100%", boxSizing: "border-box",

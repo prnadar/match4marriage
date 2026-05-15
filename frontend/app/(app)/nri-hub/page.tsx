@@ -14,7 +14,7 @@ export default function NriHubPage() {
       icon={<Globe className="h-6 w-6 text-rose-700" />}
       kicker="NRI hub"
       title="A dedicated space for the global Indian community"
-      body="We're building a curated NRI experience: filter by country and visa status, see only members open to international matches, and chat across timezones with smart suggested hours. Browse all profiles in the meantime — every member's country and visa status is shown on their detail page."
+      body="We're building a curated NRI experience: filter by country and visa status, see only members open to international matches, and chat across timezones with smart suggested hours. Browse all profiles in the meantime. Every member's country and visa status is shown on their detail page."
       bullets={[
         "Country and visa-status filters in browse",
         "Members open to relocation flagged on every card",

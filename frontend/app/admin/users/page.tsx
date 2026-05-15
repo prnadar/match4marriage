@@ -13,11 +13,11 @@ import { adminApi, ApiError, downloadCsv } from "@/lib/api";
 
 interface AdminUserRow {
   id: string;
+  membership_number: string | null;
   email: string | null;
   phone: string | null;
   is_active: boolean;
   deleted_at: string | null;
-  trust_score: number;
   completeness_score: number;
   verification_status: string;
   subscription_tier: string;
@@ -150,7 +150,7 @@ export default function AdminUsersPage() {
           <Search style={{ width: 15, height: 15, color: "#aaa" }} />
           <input
             type="text"
-            placeholder="Search name, email, phone…"
+            placeholder="Search name, email, phone, membership…"
             value={qLive}
             onChange={(e) => setQLive(e.target.value)}
             style={searchInputStyle}
@@ -209,7 +209,6 @@ export default function AdminUsersPage() {
             <div>Contact</div>
             <div>Location</div>
             <div>Status</div>
-            <div>Trust</div>
             <div>Joined</div>
           </div>
 
@@ -393,6 +392,11 @@ function UserRow({
           </div>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a14", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+            {user.membership_number && (
+              <div style={{ fontSize: 10.5, color: "#a78a8f", fontFamily: "ui-monospace, monospace", letterSpacing: "0.04em", marginTop: 1 }}>
+                {user.membership_number}
+              </div>
+            )}
             <div style={{ fontSize: 11, color: "#888", textTransform: "capitalize" }}>
               {user.religion || "—"}{user.occupation ? ` · ${user.occupation}` : ""}
             </div>
@@ -433,8 +437,6 @@ function UserRow({
 
         <div><StatusChip user={user} /></div>
 
-        <div><TrustBar value={user.trust_score} /></div>
-
         <div style={{ fontSize: 12, color: "#888" }}>{joined}</div>
       </Link>
     </motion.div>
@@ -452,24 +454,6 @@ function StatusChip({ user }: { user: AdminUserRow }) {
       fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
       padding: "4px 9px", borderRadius: 999, background: bg, color,
     }}>{label}</span>
-  );
-}
-
-function TrustBar({ value }: { value: number }) {
-  const pct = Math.max(0, Math.min(100, value));
-  const color = pct >= 60 ? "#5C7A52" : pct >= 40 ? "#C89020" : "#dc1e3c";
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <div style={{ flex: 1, height: 5, background: "rgba(0,0,0,0.06)", borderRadius: 3, overflow: "hidden", minWidth: 40 }}>
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          style={{ height: "100%", background: color }}
-        />
-      </div>
-      <span style={{ fontSize: 11, color: "#666", fontWeight: 600, minWidth: 24, textAlign: "right" }}>{value}</span>
-    </div>
   );
 }
 
@@ -500,7 +484,7 @@ const searchInputStyle: React.CSSProperties = {
 
 const tableHeadStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "32px minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)",
+  gridTemplateColumns: "32px minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(100px, 0.7fr)",
   background: "rgba(26,10,20,0.03)",
   borderBottom: "1px solid rgba(0,0,0,0.05)",
   padding: "10px 18px",
@@ -509,7 +493,7 @@ const tableHeadStyle: React.CSSProperties = {
 
 const tableRowStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "32px minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(110px, 0.8fr) minmax(100px, 0.7fr)",
+  gridTemplateColumns: "32px minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(100px, 0.7fr)",
   padding: "12px 18px",
   borderBottom: "1px solid rgba(0,0,0,0.04)",
   alignItems: "center",

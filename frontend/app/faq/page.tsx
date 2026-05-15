@@ -23,11 +23,11 @@ const categories: Array<{ n: string; name: string; intro: string; faqs: { q: str
       },
       {
         q: "How does the matching process work?",
-        a: "Once you register, our advisors review your profile and preferences. We personally curate compatible introductions. No swiping, no endless browsing — just meaningful, considered matches.",
+        a: "Once you register, our advisors review your profile and preferences. We personally curate compatible introductions. No swiping, no endless browsing, just meaningful, considered matches.",
       },
       {
         q: "Who can register on Match4Marriage?",
-        a: "Match4Marriage is open to all Indian and South Asian communities worldwide — Hindu, Muslim, Christian, Sikh, Jain and others. We welcome NRIs and diaspora from the UK, India, UAE, Canada, Australia, USA and beyond.",
+        a: "Match4Marriage is open to all Indian and South Asian communities worldwide: Hindu, Muslim, Christian, Sikh, Jain and others. We welcome NRIs and diaspora from the UK, India, UAE, Canada, Australia, USA and beyond.",
       },
     ],
   },
@@ -61,7 +61,7 @@ const categories: Array<{ n: string; name: string; intro: string; faqs: { q: str
       },
       {
         q: "Do you serve families outside the UK?",
-        a: "Yes. While our primary focus is the British Indian community, we connect families globally — including India, UAE, Canada, Australia, and the USA.",
+        a: "Yes. While our primary focus is the British Indian community, we connect families globally, including India, UAE, Canada, Australia, and the USA.",
       },
       {
         q: "Can my family be involved in the process?",
@@ -155,7 +155,7 @@ export default function FAQPage() {
             <div key={cat.name} className="editorial-reveal" style={{ marginBottom: 64 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 16 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f" }}>
-                  {cat.n} — {cat.name}
+                  {cat.n} · {cat.name}
                 </span>
                 <span style={{ flex: 1, height: 1, background: "rgba(26,10,20,0.10)" }} />
               </div>

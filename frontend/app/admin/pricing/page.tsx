@@ -533,7 +533,7 @@ function PlanEditor({
                 style={{ accentColor: "#dc1e3c" }}
               />
               <span style={{ flex: 1, color: "#1a0a14", fontWeight: 500 }}>
-                {draft.is_active ? "Live — visible on public pricing page" : "Hidden — not shown to users"}
+                {draft.is_active ? "Live, visible on public pricing page" : "Hidden, not shown to users"}
               </span>
             </label>
           </div>

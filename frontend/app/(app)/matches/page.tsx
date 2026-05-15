@@ -37,7 +37,6 @@ function mapApiProfile(p: any, idx: number): ProfileCardData {
     height: p.height_cm ? cmToFeetInches(p.height_cm) : p.height || "",
     verified: p.is_verified ?? p.verified ?? false,
     premium: p.is_premium ?? p.premium ?? false,
-    trustScore: p.trust_score ?? p.trustScore ?? 0,
     compatibility: p.compatibility ?? p.match_score ?? 0,
     photoUrl: p.profile_photo || p.photo_url || p.photoUrl || null,
     gender: p.gender,

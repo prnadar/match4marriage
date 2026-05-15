@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  useState, useRef, useEffect, useCallback, useId, useMemo,
+  createContext, useContext, Children, isValidElement,
+} from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { profileApi, api } from "@/lib/api";
@@ -70,13 +73,6 @@ const INTERESTS_CONFIG: Record<string, string[]> = {
   Dress:   ["Indian Traditional","Indo Western","Western Wear","Casual","Formal","No Preference"],
 };
 
-const VERIFICATIONS = [
-  { label: "Email Verified",    done: true,  pts: 20 },
-  { label: "Mobile Verified",   done: true,  pts: 20 },
-  { label: "ID Verified",       done: false, pts: 30 },
-  { label: "Profile Complete",  done: false, pts: 20 },
-  { label: "LinkedIn",          done: false, pts: 10 },
-];
 
 // Totals are computed dynamically from state shape (see tabCounts below).
 const TABS = [
@@ -219,6 +215,17 @@ export default function MyProfilePage() {
   // wipes server-side data.
   const [loadStatus, setLoadStatus] = useState<"loading" | "ok" | "error">("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [membershipNumber, setMembershipNumber] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get("/api/v1/auth/me").then((res) => {
+      if (cancelled) return;
+      const d = (res.data as any)?.data ?? res.data;
+      setMembershipNumber(d?.membership_number ?? null);
+    }).catch(() => { /* ignore — non-critical chrome */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Tracks mount state so an in-flight profile fetch that resolves after
   // the user has navigated away doesn't call setState on an unmounted
@@ -249,7 +256,8 @@ export default function MyProfilePage() {
           height: p.height_cm ? `${Math.floor(p.height_cm / 30.48)}ft ${Math.round((p.height_cm % 30.48) / 2.54)}in` : prev.height,
           weight: p.weight_kg ? String(p.weight_kg) : prev.weight,
           religion: p.religion ? p.religion.charAt(0).toUpperCase() + p.religion.slice(1) : prev.religion,
-          subCaste: p.caste || prev.subCaste,
+          denomination: p.caste || prev.denomination,
+          subCaste: p.sub_caste || prev.subCaste,
           motherTongue: p.mother_tongue || prev.motherTongue,
           countryLivingIn: normalizeCountry(p.country) || prev.countryLivingIn,
           currentLocation: p.city || prev.currentLocation,
@@ -478,7 +486,7 @@ export default function MyProfilePage() {
       country: general.countryLivingIn || undefined,
       city: general.currentLocation || undefined,
       religion: religionVal,
-      caste: general.subCaste || general.denomination || undefined,
+      caste: general.denomination || undefined,
       sub_caste: general.subCaste || undefined,
       mother_tongue: general.motherTongue || undefined,
       height_cm: general.height ? parseHeightCm(general.height) : undefined,
@@ -585,16 +593,37 @@ export default function MyProfilePage() {
 
   return (
     <div style={{ padding: "2rem", background: "#fdfbf9", minHeight: "100%" }}>
-      <h1 style={{
-        fontFamily: "var(--font-playfair, serif)",
-        fontSize: "1.875rem",
-        fontWeight: 300,
-        color: "#1a0a14",
-        marginBottom: "1.5rem",
-        letterSpacing: "-0.01em",
-      }}>
-        My Profile
-      </h1>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: "1.5rem" }}>
+        <h1 style={{
+          fontFamily: "var(--font-playfair, serif)",
+          fontSize: "1.875rem",
+          fontWeight: 300,
+          color: "#1a0a14",
+          letterSpacing: "-0.01em",
+          margin: 0,
+        }}>
+          My Profile
+        </h1>
+        {membershipNumber && (
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 8,
+            padding: "6px 12px",
+            background: "#fff",
+            border: "1px solid rgba(220,30,60,0.15)",
+            borderRadius: 9999,
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.14em",
+            color: "#a78a8f",
+            boxShadow: "0 2px 8px rgba(220,30,60,0.05)",
+          }}>
+            <span style={{ textTransform: "uppercase" }}>Member</span>
+            <span style={{ fontFamily: "ui-monospace, monospace", color: "#1a0a14", letterSpacing: "0.06em" }}>
+              {membershipNumber}
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* Verification status banner */}
       <div style={{
@@ -611,7 +640,7 @@ export default function MyProfilePage() {
           {verifStatus === "approved"  && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><CheckCircle style={{ width: 16, height: 16, color: "#16a34a" }} /> <strong>Approved.</strong> Your profile is live and visible to matches.</span>}
           {verifStatus === "submitted" && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Clock        style={{ width: 16, height: 16, color: "#b45309" }} /> <strong>Under review.</strong> We'll notify you once verified.</span>}
           {verifStatus === "rejected"  && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><AlertTriangle style={{ width: 16, height: 16, color: "#dc2626" }} /> <strong>Changes needed:</strong> {rejectionReason || "please update and resubmit."}</span>}
-          {verifStatus === "draft" && rejectionReason && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Info style={{ width: 16, height: 16, color: "#0284c7" }} /> <strong>Admin request:</strong> {rejectionReason.replace(/^More info needed: /, "")} — update and resubmit.</span>}
+          {verifStatus === "draft" && rejectionReason && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Info style={{ width: 16, height: 16, color: "#0284c7" }} /> <strong>Admin request:</strong> {rejectionReason.replace(/^More info needed: /, "")}. Please update and resubmit.</span>}
           {verifStatus === "draft" && !rejectionReason && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Edit3 style={{ width: 16, height: 16, color: "#dc1e3c" }} /> <strong>Draft.</strong> Complete all sections, then submit for verification.</span>}
           <span style={{ marginLeft: 12, color: "#666", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
             {autoSaveState === "saving" && "Saving…"}
@@ -742,7 +771,6 @@ export default function MyProfilePage() {
         {/* ── Left Sidebar ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <PhotoCard name={general.name || "Your Name"} photoUrl={primaryPhotoUrl} />
-          <TrustScoreCard score={40} />
           <CompletenessCard completeness={completenessScore} />
         </div>
 
@@ -1509,27 +1537,101 @@ function ContactTab({
 
 // ─── Shared UI Components ──────────────────────────────────────────────────────
 
+/* Each SubSection is a small registry: Field children report whether they
+ * are a required-but-empty field. When at least one is missing, the section
+ * header grows a gently-wiggling reminder pill so the user knows there's
+ * still something to fill in without a blocking modal. */
+type SubSectionCtx = { report: (id: string, label: string | null) => void };
+const SubSectionContext = createContext<SubSectionCtx | null>(null);
+
 function SubSection({ title, children }: { title: string; children: React.ReactNode }) {
+  const reduceMotion = useReducedMotion();
+  const [missing, setMissing] = useState<Record<string, string>>({});
+
+  const report = useCallback((id: string, label: string | null) => {
+    setMissing((prev) => {
+      if (label === null) {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      if (prev[id] === label) return prev;
+      return { ...prev, [id]: label };
+    });
+  }, []);
+
+  const ctx = useMemo(() => ({ report }), [report]);
+  const count = Object.keys(missing).length;
+
   return (
-    <div style={{
-      ...CARD_STYLE,
-      display: "flex",
-      flexDirection: "column",
-      gap: 0,
-    }}>
-      <h3 style={{
-        fontFamily: "var(--font-playfair, serif)",
-        fontSize: "1.0625rem",
-        fontWeight: 600,
-        color: "#1a0a14",
-        marginBottom: "1.25rem",
-        paddingBottom: "0.75rem",
-        borderBottom: "1px solid rgba(220,30,60,0.07)",
+    <SubSectionContext.Provider value={ctx}>
+      <div style={{
+        ...CARD_STYLE,
+        display: "flex",
+        flexDirection: "column",
+        gap: 0,
       }}>
-        {title}
-      </h3>
-      {children}
-    </div>
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          marginBottom: "1.25rem",
+          paddingBottom: "0.75rem",
+          borderBottom: "1px solid rgba(220,30,60,0.07)",
+          flexWrap: "wrap",
+        }}>
+          <h3 style={{
+            fontFamily: "var(--font-playfair, serif)",
+            fontSize: "1.0625rem",
+            fontWeight: 600,
+            color: "#1a0a14",
+            margin: 0,
+          }}>
+            {title}
+          </h3>
+
+          <AnimatePresence>
+            {count > 0 && (
+              <motion.div
+                key="m4m-subsection-nudge"
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.7, y: -4 }}
+                animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.7, y: -4 }}
+                transition={{ type: "spring", stiffness: 420, damping: 24 }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "5px 12px 5px 9px",
+                  borderRadius: 9999,
+                  background: "linear-gradient(180deg,#fff5f7,#ffe9ee)",
+                  border: "1px solid rgba(220,30,60,0.22)",
+                  color: "#b3173a",
+                  fontFamily: "var(--font-poppins, sans-serif)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                  boxShadow: "0 2px 10px rgba(220,30,60,0.10)",
+                }}
+              >
+                <motion.span
+                  aria-hidden
+                  style={{ display: "inline-flex" }}
+                  animate={reduceMotion ? undefined : { rotate: [0, -12, 10, -8, 6, 0] }}
+                  transition={reduceMotion ? undefined : { duration: 1.4, repeat: Infinity, repeatDelay: 1.8, ease: "easeInOut" }}
+                >
+                  <Heart style={{ width: 13, height: 13, fill: "#dc1e3c", color: "#dc1e3c" }} />
+                </motion.span>
+                {count} {count === 1 ? "detail" : "details"} still {count === 1 ? "needs" : "need"} you
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        {children}
+      </div>
+    </SubSectionContext.Provider>
   );
 }
 
@@ -1547,11 +1649,54 @@ function TwoCol({ children, style }: { children: React.ReactNode; style?: React.
 }
 
 function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
+  const ctx = useContext(SubSectionContext);
+  const reduceMotion = useReducedMotion();
+  const fieldId = useId();
+
+  // Introspect the wrapped input's `value` prop — every input component in
+  // this form (FInput / FSelect / FTextarea / Segmented) exposes one, so we
+  // can tell "required but empty" without threading values through call sites.
+  let filled = true;
+  if (required) {
+    const child = Children.toArray(children).find(
+      (c) => isValidElement(c) && "value" in ((c.props as Record<string, unknown>) || {}),
+    ) as { props?: { value?: unknown } } | undefined;
+    const v = child?.props?.value;
+    filled = Array.isArray(v) ? v.length > 0 : String(v ?? "").trim() !== "";
+  }
+  const missing = !!required && !filled;
+
+  useEffect(() => {
+    if (!ctx) return;
+    ctx.report(fieldId, missing ? label : null);
+    return () => ctx.report(fieldId, null);
+  }, [ctx, missing, fieldId, label]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
-      <label style={LABEL_STYLE}>
+      <label style={{ ...LABEL_STYLE, display: "inline-flex", alignItems: "center" }}>
         {label}
         {required && <span style={{ color: "#dc1e3c", marginLeft: 3, fontWeight: 700 }}>*</span>}
+        {missing && (
+          <motion.span
+            aria-hidden
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0 }}
+            animate={reduceMotion
+              ? { opacity: 1 }
+              : { opacity: 1, scale: [1, 1.5, 1] }}
+            transition={reduceMotion
+              ? undefined
+              : { scale: { duration: 1.3, repeat: Infinity, ease: "easeInOut" } }}
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: 9999,
+              background: "#dc1e3c",
+              marginLeft: 7,
+              display: "inline-block",
+            }}
+          />
+        )}
       </label>
       {children}
     </div>
@@ -1877,77 +2022,6 @@ function PhotoCard({ name, photoUrl }: { name: string; photoUrl?: string | null 
             Edit your profile below <ArrowRight size={11} strokeWidth={2} />
           </span>
         </p>
-      </div>
-    </div>
-  );
-}
-
-function TrustScoreCard({ score }: { score: number }) {
-  return (
-    <div style={{ ...CARD_STYLE }}>
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        marginBottom: "0.75rem",
-      }}>
-        <span style={{
-          fontFamily: "var(--font-poppins, sans-serif)",
-          fontSize: "0.875rem",
-          fontWeight: 600,
-          color: "#1a0a14",
-        }}>
-          Trust Score
-        </span>
-        <span style={{
-          fontFamily: "var(--font-playfair, serif)",
-          fontSize: "1.75rem",
-          fontWeight: 700,
-          color: "#dc1e3c",
-        }}>
-          {score}
-        </span>
-      </div>
-      <div style={{
-        height: 6,
-        background: "rgba(26,10,20,0.06)",
-        borderRadius: 99,
-        overflow: "hidden",
-        marginBottom: "0.75rem",
-      }}>
-        <div style={{
-          height: "100%",
-          borderRadius: 99,
-          width: `${score}%`,
-          background: "linear-gradient(90deg,#dc1e3c,#a0153c)",
-          transition: "width 0.5s ease",
-        }} />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {VERIFICATIONS.map((v) => (
-          <div key={v.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {v.done
-              ? <CheckCircle style={{ width: 15, height: 15, color: "#dc1e3c", flexShrink: 0 }} />
-              : <AlertCircle style={{ width: 15, height: 15, color: "rgba(26,10,20,0.18)", flexShrink: 0 }} />
-            }
-            <span style={{
-              flex: 1,
-              fontFamily: "var(--font-poppins, sans-serif)",
-              fontSize: "0.75rem",
-              color: v.done ? "rgba(26,10,20,0.7)" : "rgba(26,10,20,0.35)",
-            }}>
-              {v.label}
-            </span>
-            <span style={{
-              fontFamily: "var(--font-poppins, sans-serif)",
-              fontSize: "0.7rem",
-              fontWeight: 700,
-              color: v.done ? "#dc1e3c" : "rgba(26,10,20,0.18)",
-            }}>
-              +{v.pts}
-            </span>
-          </div>
-        ))}
       </div>
     </div>
   );

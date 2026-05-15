@@ -23,13 +23,13 @@ const principles = [
     n: "01",
     Icon: Users,
     title: "Family at the centre",
-    body: "An Indian marriage is not the meeting of two people; it is the meeting of two families. Every introduction we make is shaped around that truth — values, upbringing, and the people who matter to you.",
+    body: "An Indian marriage is not the meeting of two people; it is the meeting of two families. Every introduction we make is shaped around that truth: values, upbringing, and the people who matter to you.",
   },
   {
     n: "02",
     Icon: Sparkles,
     title: "Hand-picked, never crowded",
-    body: "We deliberately stay small. Profiles are reviewed and accepted one at a time, by the same advisors who later guide the introductions. There is no algorithm behind the curtain — there is a person.",
+    body: "We deliberately stay small. Profiles are reviewed and accepted one at a time, by the same advisors who later guide the introductions. There is no algorithm behind the curtain. There is a person.",
   },
   {
     n: "03",
@@ -53,7 +53,7 @@ const principles = [
     n: "06",
     Icon: Globe,
     title: "Britain-rooted, globally connected",
-    body: "Founded in the United Kingdom and serving the global Indian diaspora — London to Coimbatore, Singapore to Toronto. The same standard of care, wherever the family sits.",
+    body: "Founded in the United Kingdom and serving the global Indian diaspora, from London to Coimbatore, Singapore to Toronto. The same standard of care, wherever the family sits.",
   },
 ];
 
@@ -210,7 +210,7 @@ export default function AboutPage() {
               British Indian community and the wider diaspora. We do not run a
               dating app. We hand-pick a limited number of profiles, verify each
               one personally, and accompany families through every stage of an
-              introduction — the call, the meeting, the conversation that follows.
+              introduction: the call, the meeting, the conversation that follows.
             </p>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 28, marginTop: 36, alignItems: "center" }}>
@@ -326,13 +326,13 @@ export default function AboutPage() {
           >
             We started Match4Marriage because the families we knew were tired of
             scrolling. Tired of being one of ten thousand profiles. Tired of an
-            algorithm choosing for them. They wanted what their parents had — a
+            algorithm choosing for them. They wanted what their parents had: a
             personal introduction, made by someone who actually knew both sides.
           </p>
 
           <p style={{ fontSize: 16, lineHeight: 1.85, color: "#4a3a40", marginBottom: 18 }}>
             That is the whole idea. We sit with one family at a time. We listen,
-            properly. We make a small number of introductions each month — not
+            properly. We make a small number of introductions each month, not
             every match in the database, just the ones we genuinely believe in.
             And we stay in the room for the conversations that follow.
           </p>
@@ -531,7 +531,7 @@ export default function AboutPage() {
             we would like to meet.
           </h2>
           <p style={{ fontSize: 16, lineHeight: 1.7, color: "#4a3a40", maxWidth: 520, margin: "0 auto 36px" }}>
-            Begin with a private call. No commitment, no obligation — just a
+            Begin with a private call. No commitment, no obligation, just a
             conversation about what you are looking for.
           </p>
           <div style={{ display: "inline-flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>

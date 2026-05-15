@@ -19,7 +19,6 @@ interface ChatThread {
     age?: number | null;
     city?: string | null;
     primary_photo_url?: string | null;
-    trust_score?: number;
     completeness_score?: number;
   } | null;
 }
@@ -201,7 +200,7 @@ export default function MessagesPage() {
                           (unread > 0 ? "text-[#1a0a14]/70" : "text-[#1a0a14]/40")
                         }
                       >
-                        {t.last_message_preview ?? "Say hello — start the conversation."}
+                        {t.last_message_preview ?? "Say hello and start the conversation."}
                       </p>
                       {op?.city && (
                         <p className="mt-0.5 text-[10px] text-[#6a5560]/80">{op.city}</p>

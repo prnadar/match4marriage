@@ -110,7 +110,7 @@ export default function SuccessStoriesPage() {
             </span>
           </h1>
           <p style={{ fontSize: "clamp(15px, 1.4vw, 18px)", lineHeight: 1.7, color: "#4a3a40", maxWidth: 580, margin: "0 auto" }}>
-            We honour our members&apos; privacy — every story is shared with
+            We honour our members&apos; privacy. Every story is shared with
             explicit consent. A glimpse of journeys that began here.
           </p>
         </div>

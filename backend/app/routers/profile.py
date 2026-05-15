@@ -27,8 +27,10 @@ from app.models.user import MaritalStatus, Religion, User, UserProfile
 from app.models.verification import Verification, VerificationStatus, VerificationType
 from app.schemas.common import APIResponse, PaginatedResponse
 from app.schemas.user import ProfileCard, ProfileCreate, ProfileRead, ProfileUpdate
+from app.services.email import send_membership_welcome_email
+from app.services.membership import assign_membership_number
+from app.services.profile_completeness import compute_profile_completeness
 from app.services.storage import generate_photo_upload_signature, generate_upload_url
-from app.services.trust_score import compute_profile_completeness, compute_trust_score
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 logger = get_logger(__name__)
@@ -157,16 +159,6 @@ async def _run_schema_guard_once(db: AsyncSession) -> None:
         logger.error("schema_guard_connect_failed", error=str(e))
 
 
-@router.get("/trust-score", response_model=APIResponse[dict])
-async def get_trust_score(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[dict, Depends(get_current_user)],
-):
-    """Returns the current user's trust score (0-100) and a per-signal breakdown."""
-    result = await compute_trust_score(current_user, db)
-    return APIResponse(success=True, data=result)
-
-
 @router.get("/browse", response_model=PaginatedResponse[ProfileCard])
 @limiter.limit(BROWSE_LIMIT)
 async def browse_profiles(
@@ -272,7 +264,6 @@ async def browse_profiles(
                 education_level=profile_row.education_level,
                 religion=profile_row.religion,
                 primary_photo_url=_primary_photo(profile_row.photos or []),
-                trust_score=user_row.trust_score,
                 completeness_score=profile_row.completeness_score,
             )
         )
@@ -1142,15 +1133,50 @@ async def submit_verification(
     profile.completeness_score = compute_profile_completeness(profile)
     await db.flush()
 
+    # Onboarding is now complete (account + about-you + ID submitted).
+    # Mint a membership number if the user doesn't have one yet and email
+    # them their welcome note. Failures here are logged but never fail the
+    # verification submission itself.
+    membership_number: str | None = None
+    user_row = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user_row is not None:
+        try:
+            membership_number = await assign_membership_number(db, user_row)
+        except Exception as e:
+            logger.error("membership_assign_failed", user_id=str(user_id), error=str(e))
+
+        if membership_number and user_row.email:
+            display_name = " ".join(
+                p for p in (profile.first_name, profile.last_name) if p
+            ).strip() or (user_row.email.split("@")[0])
+            try:
+                await send_membership_welcome_email(
+                    email=user_row.email,
+                    user_name=display_name,
+                    membership_number=membership_number,
+                )
+            except Exception as e:
+                logger.error(
+                    "membership_email_failed",
+                    user_id=str(user_id),
+                    membership_number=membership_number,
+                    error=str(e),
+                )
+
     logger.info(
         "verification_submitted",
         user_id=str(user_id),
         verification_type=verification_type.value,
         verification_id=str(verification_id),
+        membership_number=membership_number,
     )
     return APIResponse(
         success=True,
-        data={"verification_id": str(verification_id), "status": "in_review"},
+        data={
+            "verification_id": str(verification_id),
+            "status": "in_review",
+            "membership_number": membership_number,
+        },
         message="Verification submitted. Our review team will get back to you shortly.",
     )
 

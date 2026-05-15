@@ -84,8 +84,16 @@ class User(TenantModel):
     aadhaar_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     pan_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    # Trust & subscription
-    trust_score: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    # Membership number assigned once onboarding completes. Format:
+    # ``M4MYYYYNNNNN`` (no separators) where YYYY is the year of issuance
+    # and NNNNN is a zero-padded sequence per year. Nullable so we can
+    # issue on completion rather than at signup; uniqueness is enforced
+    # inside the tenant.
+    membership_number: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+
+    # Subscription tier. The legacy ``trust_score`` column has been retired
+    # from the application surface; the underlying DB column is kept until
+    # a future migration drops it so existing rows are not destroyed.
     subscription_tier: Mapped[SubscriptionTier] = mapped_column(
         Enum(SubscriptionTier), nullable=False, default=SubscriptionTier.FREE
     )

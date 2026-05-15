@@ -15,7 +15,7 @@ export default function FamilyPage() {
       icon={<Users className="h-6 w-6 text-rose-700" />}
       kicker="Family mode"
       title="Co-pilot your search with family"
-      body="Invite parents, siblings or close family to view profiles you've shortlisted, leave private notes, and help shape introductions. We're building this with the privacy controls it deserves — invitations and shared shortlists go live in the next release."
+      body="Invite parents, siblings or close family to view profiles you've shortlisted, leave private notes, and help shape introductions. We're building this with the privacy controls it deserves. Invitations and shared shortlists go live in the next release."
       bullets={[
         "Invite up to four family members per account",
         "They see only profiles you choose to share",

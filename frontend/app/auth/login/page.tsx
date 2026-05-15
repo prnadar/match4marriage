@@ -35,7 +35,7 @@ const STORIES = [
   {
     src: "/couples/couple-hero.jpg",
     focal: "center 22%",
-    quote: "From the first conversation I knew. Match4Marriage made the family part feel easy — everything else just followed.",
+    quote: "From the first conversation I knew. Match4Marriage made the family part feel easy, and everything else just followed.",
     couple: "Meera & Rahul",
     location: "London",
     year: 2025,
@@ -201,7 +201,7 @@ export default function LoginPage() {
           `and (if reCAPTCHA Enterprise is enabled) under Google Cloud → reCAPTCHA Enterprise → key → Allowed domains.`
         );
       } else if (code.includes("invalid-phone-number")) {
-        setError("That phone number doesn't look right — please check the country code and digits.");
+        setError("That phone number doesn't look right. Please check the country code and digits.");
       } else if (code.includes("too-many-requests")) {
         setError("Too many attempts. Please wait a few minutes and try again.");
       } else if (code.includes("quota-exceeded")) {

@@ -27,7 +27,6 @@ interface OtherProfile {
   age?: number | null;
   city?: string | null;
   primary_photo_url?: string | null;
-  trust_score?: number;
 }
 
 function fmtTime(iso: string): string {
@@ -247,7 +246,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                   <MessageCircle className="mx-auto h-9 w-9 text-rose-700/40" />
                   <p className="font-display mt-3 text-[16px] font-semibold text-[#1a0a14]">Start the conversation</p>
                   <p className="mx-auto mt-1.5 max-w-md text-[12.5px] text-[#6a5560]">
-                    Say hello — a thoughtful first message goes a long way.
+                    Say hello. A thoughtful first message goes a long way.
                   </p>
                 </div>
               ) : (

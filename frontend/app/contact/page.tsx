@@ -121,7 +121,7 @@ export default function ContactPage() {
 
             <p style={{ fontSize: 16, lineHeight: 1.7, color: "#4a3a40", marginBottom: 48, maxWidth: 460 }}>
               Whether you have a question about our service, want to book a
-              private call, or simply want to begin — we are here to help.
+              private call, or simply want to begin, we are here to help.
               We typically respond within a few hours.
             </p>
 
@@ -163,10 +163,10 @@ export default function ContactPage() {
                   WhatsApp
                 </h3>
                 <p style={{ fontSize: 14, color: "#88787f", margin: "0 0 6px" }}>
-                  Mon — Sat, 9:00 AM — 6:00 PM BST
+                  Mon to Sat, 9:00 AM to 6:00 PM BST
                 </p>
-                <a href="https://wa.me/447476212655" target="_blank" rel="noopener noreferrer" style={{ color: "#dc1e3c", fontSize: 15, fontWeight: 600, textDecoration: "none" }}>
-                  +44 7476 212655
+                <a href="https://wa.me/447438612054" target="_blank" rel="noopener noreferrer" style={{ color: "#dc1e3c", fontSize: 15, fontWeight: 600, textDecoration: "none" }}>
+                  +44 7438 612054
                 </a>
               </div>
             </div>

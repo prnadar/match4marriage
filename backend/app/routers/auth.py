@@ -263,6 +263,7 @@ async def auth_me(
     phone = current_user.get("phone")
     is_email_verified = False
     is_phone_verified = False
+    membership_number: str | None = None
     try:
         import uuid as _uuid
         db_user = (await db.execute(
@@ -273,6 +274,7 @@ async def auth_me(
             phone = phone or db_user.phone
             is_email_verified = bool(db_user.is_email_verified)
             is_phone_verified = bool(db_user.is_phone_verified)
+            membership_number = db_user.membership_number
     except Exception:
         pass
 
@@ -284,6 +286,7 @@ async def auth_me(
             "phone": phone,
             "is_email_verified": is_email_verified,
             "is_phone_verified": is_phone_verified,
+            "membership_number": membership_number,
             "roles": roles,
             "is_admin": "admin" in roles or "super_admin" in roles,
             "is_super_admin": "super_admin" in roles,
@@ -533,7 +536,6 @@ async def verify_email_endpoint(
 
     On success:
     - Sets User.is_email_verified = True
-    - Increments trust_score by +5
     - Deletes the token from Redis (single-use)
     - Sends a welcome email
     """
@@ -577,7 +579,6 @@ async def verify_email_endpoint(
 
     # Mark as verified
     user.is_email_verified = True
-    user.trust_score = (user.trust_score or 0) + 5     # email verification trust boost
     await db.flush()
 
     # Consume token — single-use
