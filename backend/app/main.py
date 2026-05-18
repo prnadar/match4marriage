@@ -112,11 +112,13 @@ async def _ensure_verification_columns() -> None:
         logger.warning("marital_status_enum_update_failed", error=str(e))
 
     # PayPal added as a payment gateway — extend the two native enum types.
+    # SQLAlchemy serializes the enum by MEMBER NAME, so the stored label is
+    # 'PAYPAL' (uppercase), matching the existing RAZORPAY/STRIPE/UPI labels.
     try:
         async with engine.connect() as conn:
             await conn.execution_options(isolation_level="AUTOCOMMIT")
-            await conn.execute(text("ALTER TYPE paymentgatewayname ADD VALUE IF NOT EXISTS 'paypal'"))
-            await conn.execute(text("ALTER TYPE paymentgateway ADD VALUE IF NOT EXISTS 'paypal'"))
+            await conn.execute(text("ALTER TYPE paymentgatewayname ADD VALUE IF NOT EXISTS 'PAYPAL'"))
+            await conn.execute(text("ALTER TYPE paymentgateway ADD VALUE IF NOT EXISTS 'PAYPAL'"))
     except Exception as e:
         logger.warning("paypal_enum_update_failed", error=str(e))
 
