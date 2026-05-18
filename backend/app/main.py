@@ -22,9 +22,10 @@ from app.models import *  # noqa: F401,F403 — register all models with Alembic
 from app.routers import (
     admin, admin_cms, admin_payment_gateway, admin_payments, admin_pricing,
     admin_settings, auth, chat, enquiries, health, matches, notifications,
-    profile, reports, success_stories,
+    profile, reports, subscriptions, success_stories,
 )
-# subscriptions router disabled for launch (razorpay/stripe deps removed)
+# subscriptions router re-enabled for PayPal. Razorpay/Stripe SDKs are still
+# absent, but those branches import lazily and PayPal needs only `requests`.
 
 settings = get_settings()
 configure_logging(debug=settings.DEBUG)
@@ -279,6 +280,7 @@ app.include_router(chat.router, prefix=PREFIX)
 app.include_router(reports.router, prefix=PREFIX)
 app.include_router(notifications.router, prefix=PREFIX)
 app.include_router(success_stories.router, prefix=PREFIX)
+app.include_router(subscriptions.router, prefix=PREFIX)
 app.include_router(health.router, prefix=PREFIX)
 
 
