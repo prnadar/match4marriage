@@ -207,6 +207,7 @@ async def _resolve_tenant(db: AsyncSession, tenant_slug: str):
 async def _activate_subscription(
     db: AsyncSession,
     *,
+    tenant_id: uuid.UUID,
     user_uuid: uuid.UUID,
     plan: str,
     gateway: PaymentGateway,
@@ -241,11 +242,14 @@ async def _activate_subscription(
         update(User).where(User.id == user_uuid).values(subscription_tier=tier)
     )
 
-    now = datetime.now(timezone.utc)
+    # subscriptions.current_period_* are TIMESTAMP WITHOUT TIME ZONE, so use
+    # naive UTC datetimes (asyncpg rejects tz-aware values for these columns).
+    now = datetime.utcnow()
     period_end = now + timedelta(days=PLAN_TERM_DAYS.get(plan, 180))
     feat = PLAN_FEATURE_MAP.get(plan, {})
 
     db.add(Subscription(
+        tenant_id=tenant_id,
         user_id=user_uuid,
         plan=plan,
         status=SubscriptionStatus.ACTIVE,
@@ -263,6 +267,7 @@ async def _activate_subscription(
 
     plan_display = PLAN_DISPLAY.get(plan, plan.title())
     db.add(Notification(
+        tenant_id=tenant_id,
         user_id=user_uuid,
         type="subscription_activated",
         title=f"Welcome to {plan_display}",
@@ -291,9 +296,32 @@ async def _checkout_paypal(
         raise HTTPException(status_code=503, detail="PayPal is not configured")
 
     plan = payload.plan
-    amount_pence = PLAN_PRICE_GBP_PENCE.get(plan)
-    if not amount_pence:
-        raise HTTPException(status_code=400, detail="Invalid plan")
+
+    # Price the order from the active DB pricing plan for this tier so the
+    # amount charged always equals the amount the member saw. Fall back to
+    # the settings map only if no active plan row exists.
+    from app.models.pricing_plan import PricingPlan
+    plan_row = (await db.execute(
+        select(PricingPlan).where(
+            PricingPlan.tenant_id == tenant_uuid,
+            PricingPlan.tier == plan,
+            PricingPlan.is_active == True,  # noqa: E712
+            PricingPlan.deleted_at.is_(None),
+        ).order_by(PricingPlan.sort_order.asc())
+    )).scalars().first()
+
+    if plan_row is not None:
+        amount_pence = int(plan_row.price_paise)
+        currency = (plan_row.currency or "GBP").upper()
+    else:
+        amount_pence = PLAN_PRICE_GBP_PENCE.get(plan, 0)
+        currency = "GBP"
+
+    if amount_pence <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="This plan has no payable amount. Free plans don't require PayPal.",
+        )
 
     user_id = current_user.get("sub") or current_user.get("user_id", "")
     custom_id = f"{user_id}|{plan}|{tenant_slug}"
@@ -306,7 +334,7 @@ async def _checkout_paypal(
         order = paypal_svc.create_order(
             cfg,
             amount_pence=amount_pence,
-            currency="GBP",
+            currency=currency,
             plan=plan,
             return_url=return_url,
             cancel_url=cancel_url,
@@ -372,14 +400,18 @@ async def paypal_capture(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid user reference on order")
 
+    cap_amt = paypal_svc.captured_amount_minor(order)
+    amount_pence, currency = cap_amt if cap_amt else (PLAN_PRICE_GBP_PENCE.get(plan.lower(), 0), "GBP")
+
     newly = await _activate_subscription(
         db,
+        tenant_id=tenant_uuid,
         user_uuid=user_uuid,
         plan=plan,
         gateway=PaymentGateway.PAYPAL,
         gateway_ref=order.get("id", payload.order_id),
-        amount_pence=PLAN_PRICE_GBP_PENCE.get(plan.lower(), 0),
-        currency="GBP",
+        amount_pence=amount_pence,
+        currency=currency,
         raw=order,
         gateway_label="paypal",
     )
@@ -439,14 +471,18 @@ async def paypal_webhook(
         return {"status": "ok", "skipped": "invalid user"}
     plan = parts[1]
 
+    cap_amt = paypal_svc.captured_amount_minor(resource)
+    amount_pence, currency = cap_amt if cap_amt else (PLAN_PRICE_GBP_PENCE.get(plan.lower(), 0), "GBP")
+
     await _activate_subscription(
         db,
+        tenant_id=tenant_uuid,
         user_uuid=user_uuid,
         plan=plan,
         gateway=PaymentGateway.PAYPAL,
         gateway_ref=order_id,
-        amount_pence=PLAN_PRICE_GBP_PENCE.get(plan.lower(), 0),
-        currency="GBP",
+        amount_pence=amount_pence,
+        currency=currency,
         raw=event,
         gateway_label="paypal",
     )

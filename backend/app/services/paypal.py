@@ -200,6 +200,31 @@ def order_is_paid(order: dict[str, Any]) -> bool:
     return False
 
 
+def captured_amount_minor(payload: dict[str, Any]) -> tuple[int, str] | None:
+    """
+    Pull the actually-captured amount as (minor_units, currency) from either
+    a captured Orders payload or a PAYMENT.CAPTURE.COMPLETED webhook resource.
+    Returns None if not present.
+    """
+    # Webhook resource shape: {"amount": {"value": "300.00", "currency_code": "GBP"}}
+    amt = payload.get("amount")
+    if isinstance(amt, dict) and amt.get("value"):
+        try:
+            return round(float(amt["value"]) * 100), (amt.get("currency_code") or "GBP").upper()
+        except (TypeError, ValueError):
+            return None
+    # Orders capture shape: purchase_units[].payments.captures[].amount
+    for pu in payload.get("purchase_units", []):
+        for cap in pu.get("payments", {}).get("captures", []):
+            a = cap.get("amount", {})
+            if a.get("value"):
+                try:
+                    return round(float(a["value"]) * 100), (a.get("currency_code") or "GBP").upper()
+                except (TypeError, ValueError):
+                    return None
+    return None
+
+
 def extract_custom_id(order: dict[str, Any]) -> str | None:
     for pu in order.get("purchase_units", []):
         if pu.get("custom_id"):
