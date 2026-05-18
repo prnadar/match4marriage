@@ -74,10 +74,16 @@ async def load_paypal_config(db: AsyncSession, tenant_id) -> PayPalConfig | None
     )
 
 
+def _ascii(v: str) -> str:
+    """Keep only printable ASCII — defends the auth header against stray
+    pasted characters (U+2028, NBSP, zero-width) that survived storage."""
+    return "".join(ch for ch in (v or "") if 0x20 <= ord(ch) <= 0x7E).strip()
+
+
 def _access_token(cfg: PayPalConfig) -> str:
     resp = http_requests.post(
         f"{cfg.base_url}/v1/oauth2/token",
-        auth=(cfg.client_id, cfg.client_secret),
+        auth=(_ascii(cfg.client_id), _ascii(cfg.client_secret)),
         data={"grant_type": "client_credentials"},
         headers={"Accept": "application/json"},
         timeout=_TIMEOUT,

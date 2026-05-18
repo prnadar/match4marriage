@@ -38,6 +38,17 @@ async def _tenant_uuid(db: AsyncSession, tenant_slug: str) -> uuid.UUID:
     return t
 
 
+def _clean_credential(v: str) -> str:
+    """
+    Strip surrounding whitespace and any non-printable / non-ASCII chars.
+    Pasting keys from PDFs, emails or chat often drags in invisible
+    characters (U+2028 line separator, NBSP, zero-width spaces) that then
+    blow up latin-1 header encoding when we call the gateway. Credentials
+    are always printable ASCII, so this is safe.
+    """
+    return "".join(ch for ch in v if 0x20 <= ord(ch) <= 0x7E).strip()
+
+
 def _mask(secret: str | None) -> str | None:
     """Last 4 chars; None if not set; full mask if shorter than 4."""
     if not secret:
@@ -120,7 +131,7 @@ async def upsert_gateway(
 
     if "publishable_key" in payload:
         v = payload.get("publishable_key")
-        row.publishable_key = (str(v).strip()[:255] or None) if v else None
+        row.publishable_key = (_clean_credential(str(v))[:255] or None) if v else None
 
     if "secret_key" in payload:
         v = payload.get("secret_key")
@@ -128,14 +139,14 @@ async def upsert_gateway(
         if v is None:
             row.secret_key = None
         else:
-            row.secret_key = str(v)[:512]
+            row.secret_key = _clean_credential(str(v))[:512]
 
     if "webhook_secret" in payload:
         v = payload.get("webhook_secret")
         if v is None:
             row.webhook_secret = None
         else:
-            row.webhook_secret = str(v)[:512]
+            row.webhook_secret = _clean_credential(str(v))[:512]
 
     if "is_test_mode" in payload:
         row.is_test_mode = bool(payload.get("is_test_mode"))
