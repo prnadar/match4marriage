@@ -23,6 +23,7 @@ class PaymentGatewayName(str, enum.Enum):
     RAZORPAY = "razorpay"
     STRIPE = "stripe"
     UPI = "upi"
+    PAYPAL = "paypal"
 
 
 class PaymentGatewayConfig(TenantModel):

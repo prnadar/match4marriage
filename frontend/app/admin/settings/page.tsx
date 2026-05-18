@@ -1376,7 +1376,7 @@ function AppearanceTab() {
 
 interface GatewayConfig {
   id: string;
-  gateway: "razorpay" | "stripe" | "upi";
+  gateway: "razorpay" | "stripe" | "upi" | "paypal";
   publishable_key: string | null;
   secret_configured: boolean;
   secret_tail: string | null;
@@ -1387,17 +1387,38 @@ interface GatewayConfig {
   updated_at: string | null;
 }
 
-const GATEWAY_OPTIONS: Array<{ key: "razorpay" | "stripe" | "upi"; label: string; description: string }> = [
+const GATEWAY_OPTIONS: Array<{ key: "razorpay" | "stripe" | "upi" | "paypal"; label: string; description: string }> = [
   { key: "razorpay", label: "Razorpay", description: "Indian cards, UPI, netbanking, wallets" },
   { key: "stripe",   label: "Stripe",   description: "International cards, wallets" },
   { key: "upi",      label: "UPI",      description: "Direct UPI VPA / collect-request flow" },
+  { key: "paypal",   label: "PayPal",   description: "PayPal balance & cards. Use Test mode for sandbox." },
 ];
+
+// Per-gateway field labels. PayPal's three slots map to Client ID /
+// Client Secret / Webhook ID rather than the generic key names.
+function gatewayFieldLabels(g: string) {
+  if (g === "paypal") {
+    return {
+      publishable: "Client ID",
+      secret: "Client Secret",
+      webhook: "Webhook ID",
+      publishablePlaceholder: "PayPal REST app Client ID",
+    };
+  }
+  return {
+    publishable: "Publishable / public key",
+    secret: "Secret key",
+    webhook: "Webhook secret",
+    publishablePlaceholder:
+      g === "razorpay" ? "rzp_test_…" : g === "stripe" ? "pk_test_…" : "vpa@bank",
+  };
+}
 
 function PaymentGatewayTab() {
   const { toast } = useToast();
   const [configs, setConfigs] = useState<GatewayConfig[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<"razorpay" | "stripe" | "upi">("razorpay");
+  const [selected, setSelected] = useState<"razorpay" | "stripe" | "upi" | "paypal">("razorpay");
   const [draft, setDraft] = useState<{
     publishable_key: string;
     secret_key: string;
@@ -1423,7 +1444,7 @@ function PaymentGatewayTab() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, []);
 
-  const hydrateDraft = (key: "razorpay" | "stripe" | "upi", list: GatewayConfig[] = configs) => {
+  const hydrateDraft = (key: "razorpay" | "stripe" | "upi" | "paypal", list: GatewayConfig[] = configs) => {
     const existing = list.find((c) => c.gateway === key);
     setDraft({
       publishable_key: existing?.publishable_key || "",
@@ -1435,12 +1456,13 @@ function PaymentGatewayTab() {
     });
   };
 
-  const switchTo = (key: "razorpay" | "stripe" | "upi") => {
+  const switchTo = (key: "razorpay" | "stripe" | "upi" | "paypal") => {
     setSelected(key);
     hydrateDraft(key);
   };
 
   const existing = configs.find((c) => c.gateway === selected);
+  const labels = gatewayFieldLabels(selected);
 
   const save = async () => {
     if (saving) return;
@@ -1539,17 +1561,17 @@ function PaymentGatewayTab() {
 
       <GlassCard>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <Field label="Publishable / public key">
+          <Field label={labels.publishable}>
             <input
               value={draft.publishable_key}
               onChange={(e) => setDraft({ ...draft, publishable_key: e.target.value })}
-              placeholder={selected === "razorpay" ? "rzp_test_…" : selected === "stripe" ? "pk_test_…" : "vpa@bank"}
+              placeholder={labels.publishablePlaceholder}
               style={{ ...inputStyle, fontFamily: "monospace", fontSize: 12.5 }}
             />
           </Field>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Field label="Secret key">
+            <Field label={labels.secret}>
               <input
                 type="password"
                 value={draft.secret_key}
@@ -1573,7 +1595,7 @@ function PaymentGatewayTab() {
                 </button>
               )}
             </Field>
-            <Field label="Webhook secret">
+            <Field label={labels.webhook}>
               <input
                 type="password"
                 value={draft.webhook_secret}

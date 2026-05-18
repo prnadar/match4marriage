@@ -22,12 +22,15 @@ import { PartnerPrefsVisual } from "./_components/PartnerPrefsVisual";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+// Tamil nakshatra names in English transliteration, in the canonical
+// 1–27 order (Ashwini → Revathi). Matches how Tamil families refer to
+// their star, just written in English.
 const NAKSHATRAS = [
-  "Ashwini", "Bharani", "Krittika", "Rohini", "Mrigashirsha", "Ardra",
-  "Punarvasu", "Pushya", "Ashlesha", "Magha", "Purva Phalguni",
-  "Uttara Phalguni", "Hasta", "Chitra", "Swati", "Vishakha", "Anuradha",
-  "Jyeshtha", "Moola", "Purva Ashadha", "Uttara Ashadha", "Shravana",
-  "Dhanishtha", "Shatabhisha", "Purva Bhadrapada", "Uttara Bhadrapada", "Revati",
+  "Ashwini", "Bharani", "Karthigai", "Rohini", "Mrigasirisham", "Thiruvathirai",
+  "Punarpoosam", "Poosam", "Ayilyam", "Magam", "Pooram",
+  "Uthiram", "Astham", "Chithirai", "Swathi", "Visakam", "Anusham",
+  "Kettai", "Moolam", "Pooradam", "Uthiradam", "Thiruvonam",
+  "Avittam", "Sadayam", "Pooratathi", "Uthirattathi", "Revathi",
 ];
 
 const HEIGHTS = [

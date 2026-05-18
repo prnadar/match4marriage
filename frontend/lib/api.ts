@@ -432,14 +432,14 @@ export const adminApi = {
 
   // Payment gateways
   listPaymentGateways: () => api.get("/api/v1/admin/payment-gateways"),
-  upsertPaymentGateway: (gateway: "razorpay" | "stripe" | "upi", body: Partial<{
+  upsertPaymentGateway: (gateway: "razorpay" | "stripe" | "upi" | "paypal", body: Partial<{
     publishable_key: string | null;
     secret_key: string | null;
     webhook_secret: string | null;
     is_test_mode: boolean;
     is_active: boolean;
   }>) => api.put(`/api/v1/admin/payment-gateways/${gateway}`, body),
-  deletePaymentGateway: (gateway: "razorpay" | "stripe" | "upi") =>
+  deletePaymentGateway: (gateway: "razorpay" | "stripe" | "upi" | "paypal") =>
     api.delete(`/api/v1/admin/payment-gateways/${gateway}`),
 
   // Verifications (alias of existing profile admin endpoints)

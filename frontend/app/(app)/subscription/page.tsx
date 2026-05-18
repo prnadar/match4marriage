@@ -6,7 +6,7 @@ import {
   Crown, Check, Shield, ArrowRight, AlertCircle, Loader2, Sparkles,
   Lock, Mail,
 } from "lucide-react";
-import { pricingApi, ApiError } from "@/lib/api";
+import { pricingApi, api, ApiError } from "@/lib/api";
 
 /**
  * Subscription page.
@@ -70,6 +70,74 @@ export default function SubscriptionPage() {
   const [plans, setPlans] = useState<RemotePlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [payingTier, setPayingTier] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ kind: "success" | "error" | "info"; text: string } | null>(null);
+
+  // Start a PayPal checkout: create the order server-side, then send the
+  // member to PayPal's approval page.
+  const payWithPayPal = async (tier: string) => {
+    if (payingTier) return;
+    setBanner(null);
+    setPayingTier(tier);
+    try {
+      const res = await api.post("/api/v1/subscriptions/create-checkout", {
+        plan: tier,
+        currency: "GBP",
+        gateway: "paypal",
+      });
+      const d = (res.data as any)?.data ?? res.data;
+      if (d?.checkout_url) {
+        window.location.href = d.checkout_url;
+        return;
+      }
+      throw new Error("Could not start PayPal checkout");
+    } catch (err: unknown) {
+      const msg = err instanceof ApiError ? err.message
+        : err instanceof Error ? err.message : "Could not start PayPal checkout";
+      setBanner({ kind: "error", text: msg });
+      setPayingTier(null);
+    }
+  };
+
+  // PayPal redirects back to /subscription?paypal=return&token=<orderID>.
+  // Capture the order, then surface the result.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const flow = params.get("paypal");
+    if (!flow) return;
+
+    // Clean the query string so a refresh doesn't re-trigger.
+    const clean = () => window.history.replaceState({}, "", window.location.pathname);
+
+    if (flow === "cancel") {
+      setBanner({ kind: "info", text: "Payment cancelled. You have not been charged." });
+      clean();
+      return;
+    }
+    if (flow === "return") {
+      const orderId = params.get("token");
+      if (!orderId) { clean(); return; }
+      setBanner({ kind: "info", text: "Confirming your payment with PayPal…" });
+      (async () => {
+        try {
+          const res = await api.post("/api/v1/subscriptions/paypal/capture", { order_id: orderId });
+          const d = (res.data as any)?.data ?? res.data;
+          const ok = (res.data as any)?.success !== false;
+          if (ok) {
+            setBanner({ kind: "success", text: `Payment received. Your ${String(d?.plan ?? "").toUpperCase() || "membership"} plan is now active.` });
+          } else {
+            setBanner({ kind: "error", text: "Payment was not completed. If you were charged, contact us and we'll sort it out." });
+          }
+        } catch (err: unknown) {
+          const msg = err instanceof ApiError ? err.message
+            : err instanceof Error ? err.message : "We could not confirm the payment";
+          setBanner({ kind: "error", text: msg });
+        } finally {
+          clean();
+        }
+      })();
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +178,24 @@ export default function SubscriptionPage() {
             Higher tiers unlock additional curation and discreet support.
           </p>
         </header>
+
+        {banner && (
+          <div
+            className={
+              "fade-in-up mb-6 flex items-start gap-3 rounded-2xl border p-4 text-[13px] " +
+              (banner.kind === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : banner.kind === "error"
+                ? "border-rose-200 bg-rose-50 text-rose-800"
+                : "border-amber-200 bg-amber-50 text-amber-800")
+            }
+          >
+            {banner.kind === "success"
+              ? <Check className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              : <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />}
+            <span>{banner.text}</span>
+          </div>
+        )}
 
         {/* Current plan strip — backend hasn't exposed subscription state yet */}
         <section
@@ -244,17 +330,37 @@ export default function SubscriptionPage() {
                     ))}
                   </ul>
 
-                  <Link
-                    href="/contact"
-                    className={
-                      "mt-6 flex w-full items-center justify-center gap-1.5 rounded-2xl px-5 py-3 text-[13.5px] font-semibold transition-all " +
-                      (popular
-                        ? "bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white shadow-[0_8px_22px_rgba(220,30,60,0.32)] hover:shadow-[0_12px_28px_rgba(220,30,60,0.40)]"
-                        : "border border-rose-100 bg-white text-[#1a0a14] hover:border-rose-200 hover:text-rose-700")
-                    }
-                  >
-                    Choose {p.name} <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
+                  {["silver", "gold", "platinum"].includes(p.tier) ? (
+                    <button
+                      type="button"
+                      onClick={() => payWithPayPal(p.tier)}
+                      disabled={payingTier !== null}
+                      className={
+                        "mt-6 flex w-full items-center justify-center gap-1.5 rounded-2xl px-5 py-3 text-[13.5px] font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed " +
+                        (popular
+                          ? "bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white shadow-[0_8px_22px_rgba(220,30,60,0.32)] hover:shadow-[0_12px_28px_rgba(220,30,60,0.40)]"
+                          : "border border-rose-100 bg-white text-[#1a0a14] hover:border-rose-200 hover:text-rose-700")
+                      }
+                    >
+                      {payingTier === p.tier ? (
+                        <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Redirecting to PayPal…</>
+                      ) : (
+                        <>Pay with PayPal <ArrowRight className="h-3.5 w-3.5" /></>
+                      )}
+                    </button>
+                  ) : (
+                    <Link
+                      href="/contact"
+                      className={
+                        "mt-6 flex w-full items-center justify-center gap-1.5 rounded-2xl px-5 py-3 text-[13.5px] font-semibold transition-all " +
+                        (popular
+                          ? "bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white shadow-[0_8px_22px_rgba(220,30,60,0.32)] hover:shadow-[0_12px_28px_rgba(220,30,60,0.40)]"
+                          : "border border-rose-100 bg-white text-[#1a0a14] hover:border-rose-200 hover:text-rose-700")
+                      }
+                    >
+                      Enquire about {p.name} <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
                 </div>
               );
             })}
@@ -267,12 +373,12 @@ export default function SubscriptionPage() {
             <Lock className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700" />
             <div>
               <p className="font-display text-[15px] font-semibold text-[#1a0a14]">
-                Online billing is being finalised
+                Secure payment with PayPal
               </p>
               <p className="mt-1 text-[13px] leading-relaxed text-[#6a5560]">
-                Payments are processed via secure invoice while we complete our integration
-                with Razorpay and Stripe. Your advisor will share a payment link after your
-                consultation. Billing history and receipts will appear here once online billing is live.
+                Choose a plan and pay securely through PayPal using your PayPal balance
+                or any card. Your membership activates as soon as the payment is confirmed.
+                For the VIP Concierge tier, speak to an advisor first.
               </p>
             </div>
           </div>
