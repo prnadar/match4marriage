@@ -114,7 +114,7 @@ export default function AboutPage() {
         ref={heroRef}
         style={{
           position: "relative",
-          padding: "clamp(64px, 10vw, 128px) 24px clamp(56px, 8vw, 96px)",
+          padding: "clamp(36px, 5vw, 64px) 24px clamp(32px, 4vw, 56px)",
           background: "linear-gradient(180deg, #fdf9f4 0%, #faf3eb 100%)",
           overflow: "hidden",
         }}
@@ -151,7 +151,7 @@ export default function AboutPage() {
           }}
         />
 
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20 items-center" style={{ position: "relative" }}>
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20 items-stretch" style={{ position: "relative" }}>
           {/* Left: copy */}
           <div className="lg:col-span-7">
             <span
@@ -171,11 +171,11 @@ export default function AboutPage() {
             <h1
               className="font-display"
               style={{
-                fontSize: "clamp(28px, 4vw, 52px)",
+                fontSize: "clamp(23px, 2.8vw, 36px)",
                 fontWeight: 500,
-                lineHeight: 1.02,
+                lineHeight: 1.05,
                 letterSpacing: "-0.025em",
-                marginTop: 24,
+                marginTop: 14,
                 color: "#1a0a14",
               }}
             >
@@ -193,9 +193,9 @@ export default function AboutPage() {
             </h1>
             <div
               style={{
-                marginTop: 28,
-                fontSize: "clamp(16px, 1.4vw, 19px)",
-                lineHeight: 1.7,
+                marginTop: 16,
+                fontSize: "clamp(13px, 0.9vw, 15px)",
+                lineHeight: 1.55,
                 color: "#4a3a40",
                 maxWidth: 600,
               }}
@@ -206,27 +206,27 @@ export default function AboutPage() {
                 thoughtful guidance. That is why we have made a deliberate choice:
                 to remain small, selective, and genuinely personal.
               </p>
-              <p style={{ marginTop: 18 }}>
+              <p style={{ marginTop: 10 }}>
                 Established in the United Kingdom, we are a boutique matrimonial
                 service with over 100 hand-picked, individually verified profiles.
                 Every member has been personally reviewed, not just registered. We
                 have already had the privilege of celebrating successful
                 marriages, and we take immense pride in each one.
               </p>
-              <p style={{ marginTop: 18 }}>
+              <p style={{ marginTop: 10 }}>
                 Built in the United Kingdom for the global Indian community. We
                 serve Indians across London, Birmingham, Manchester, Leicester,
                 and the wider UK, as well as those rooted in India, USA, Canada,
                 UAE, Australia, and beyond. Wherever you are in the world, if you
                 are seeking a meaningful Indian match, Match4Marriage is for you.
               </p>
-              <p style={{ marginTop: 18 }}>
+              <p style={{ marginTop: 10 }}>
                 We are not trying to be the biggest. We are committed to being the
                 best, for the right people.
               </p>
             </div>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 28, marginTop: 36, alignItems: "center" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 24, marginTop: 22, alignItems: "center" }}>
               <Link
                 href={cta.href}
                 style={{
@@ -266,17 +266,31 @@ export default function AboutPage() {
             </div>
           </div>
 
-          {/* Right: portrait */}
+          {/* Right: portrait — stretches to the copy column's height on lg so
+              the two columns stay balanced regardless of copy length; keeps a
+              fixed 4:5 frame when stacked on mobile. */}
           <div className="lg:col-span-5">
             <div
+              className="about-hero-media"
               style={{
                 position: "relative",
-                aspectRatio: "4 / 5",
                 borderRadius: 8,
                 overflow: "hidden",
                 boxShadow: "0 30px 80px -40px rgba(26,10,20,0.45)",
               }}
             >
+              <style jsx>{`
+                .about-hero-media {
+                  aspect-ratio: 4 / 5;
+                }
+                @media (min-width: 1024px) {
+                  .about-hero-media {
+                    aspect-ratio: auto;
+                    height: 100%;
+                    min-height: 440px;
+                  }
+                }
+              `}</style>
               <img
                 src="/images/about-hero.jpg"
                 alt=""
