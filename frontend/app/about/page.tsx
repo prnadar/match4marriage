@@ -171,11 +171,11 @@ export default function AboutPage() {
             <h1
               className="font-display"
               style={{
-                fontSize: "clamp(23px, 2.8vw, 36px)",
+                fontSize: "clamp(26px, 3.1vw, 40px)",
                 fontWeight: 500,
-                lineHeight: 1.05,
+                lineHeight: 1.08,
                 letterSpacing: "-0.025em",
-                marginTop: 14,
+                marginTop: 16,
                 color: "#1a0a14",
               }}
             >
@@ -193,9 +193,9 @@ export default function AboutPage() {
             </h1>
             <div
               style={{
-                marginTop: 16,
-                fontSize: "clamp(13px, 0.9vw, 15px)",
-                lineHeight: 1.55,
+                marginTop: 18,
+                fontSize: "clamp(15px, 1.05vw, 16.5px)",
+                lineHeight: 1.6,
                 color: "#4a3a40",
                 maxWidth: 600,
               }}
@@ -206,21 +206,21 @@ export default function AboutPage() {
                 thoughtful guidance. That is why we have made a deliberate choice:
                 to remain small, selective, and genuinely personal.
               </p>
-              <p style={{ marginTop: 10 }}>
+              <p style={{ marginTop: 13 }}>
                 Established in the United Kingdom, we are a boutique matrimonial
                 service with over 100 hand-picked, individually verified profiles.
                 Every member has been personally reviewed, not just registered. We
                 have already had the privilege of celebrating successful
                 marriages, and we take immense pride in each one.
               </p>
-              <p style={{ marginTop: 10 }}>
+              <p style={{ marginTop: 13 }}>
                 Built in the United Kingdom for the global Indian community. We
                 serve Indians across London, Birmingham, Manchester, Leicester,
                 and the wider UK, as well as those rooted in India, USA, Canada,
                 UAE, Australia, and beyond. Wherever you are in the world, if you
                 are seeking a meaningful Indian match, Match4Marriage is for you.
               </p>
-              <p style={{ marginTop: 10 }}>
+              <p style={{ marginTop: 13 }}>
                 We are not trying to be the biggest. We are committed to being the
                 best, for the right people.
               </p>
