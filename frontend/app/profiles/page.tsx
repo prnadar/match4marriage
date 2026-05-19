@@ -27,18 +27,26 @@ export default function ProfilesPage() {
     <div style={{ minHeight: "100vh", background: "#fdfbf9", fontFamily: "var(--font-poppins, sans-serif)" }}>
       <PublicHeader />
 
-      {/* Hero */}
-      <div style={{ background: "linear-gradient(135deg, #dc1e3c 0%, #a0153c 50%, #3b3fa0 100%)", padding: "72px 24px 56px", textAlign: "center" }}>
-        <span style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.75)", letterSpacing: "0.1em", display: "block", marginBottom: "12px" }}>
+      {/* Hero — editorial cream, matching the other marketing pages */}
+      <div style={{ background: "linear-gradient(180deg, #fdf9f4 0%, #faf3eb 100%)", padding: "clamp(64px, 9vw, 120px) 24px clamp(48px, 6vw, 72px)", textAlign: "center" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f", marginBottom: 24 }}>
+          <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
           Verified Profiles
+          <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
         </span>
-        <h1 style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "clamp(28px,4vw,52px)", fontWeight: 700, color: "#fff", margin: "0 0 16px" }}>
-          Browse Profiles
+        <h1
+          className="font-display"
+          style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "clamp(28px, 4vw, 52px)", fontWeight: 500, lineHeight: 1.04, letterSpacing: "-0.025em", color: "#1a0a14", margin: "0 0 20px" }}
+        >
+          Browse{" "}
+          <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#dc1e3c" }}>
+            profiles.
+          </span>
         </h1>
-        <p style={{ fontSize: "15px", color: "rgba(255,255,255,0.85)", maxWidth: "480px", margin: "0 auto 32px" }}>
+        <p style={{ fontSize: "clamp(15px, 1.4vw, 18px)", lineHeight: 1.7, color: "#4a3a40", maxWidth: 560, margin: "0 auto 32px" }}>
           Every profile on Match4Marriage is hand-picked and personally verified. Register to view full profiles and connect.
         </p>
-        <Link href={cta.href} style={{ display: "inline-block", padding: "12px 32px", borderRadius: "9999px", background: "linear-gradient(135deg,#dc1e3c,#a0153c)", color: "#fff", fontWeight: 700, fontSize: "14px", textDecoration: "none", boxShadow: "0 4px 20px rgba(220,30,60,0.35)" }}>
+        <Link href={cta.href} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "13px 32px", borderRadius: "9999px", background: "linear-gradient(135deg,#dc1e3c,#a0153c)", color: "#fff", fontWeight: 600, fontSize: "14px", textDecoration: "none", boxShadow: "0 6px 18px rgba(220,30,60,0.32)" }}>
           {cta.label}
         </Link>
       </div>
