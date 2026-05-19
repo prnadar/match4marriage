@@ -206,8 +206,6 @@ export default function PricingPage() {
                   href={plan.ctaHref}
                   target={plan.ctaHref.startsWith("http") ? "_blank" : undefined}
                   rel={plan.ctaHref.startsWith("http") ? "noopener noreferrer" : undefined}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "#FF4D72"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "#FF6B8A"; }}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -220,10 +218,19 @@ export default function PricingPage() {
                     fontWeight: 600,
                     textDecoration: "none",
                     letterSpacing: "0.02em",
-                    background: "#FF6B8A",
+                    background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
                     color: "#ffffff",
                     border: "1px solid transparent",
-                    transition: "background 0.18s ease",
+                    boxShadow: "0 6px 18px rgba(220,30,60,0.32)",
+                    transition: "transform 0.25s cubic-bezier(.2,.7,.2,1), box-shadow 0.25s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-1.5px)";
+                    e.currentTarget.style.boxShadow = "0 14px 32px rgba(220,30,60,0.42)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "0 6px 18px rgba(220,30,60,0.32)";
                   }}
                 >
                   {plan.cta}
