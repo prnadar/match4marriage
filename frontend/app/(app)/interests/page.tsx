@@ -145,9 +145,9 @@ export default function InterestsPage() {
   ];
 
   return (
-    <div style={{ background: "#fdfbf9", minHeight: "100vh", padding: "32px", maxWidth: "720px" }}>
+    <div className="px-4 py-6 sm:px-8 sm:py-8" style={{ background: "#fdfbf9", minHeight: "100vh", maxWidth: "720px" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: "24px" }}>
         <div>
           <h1 style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "30px", fontWeight: 300, color: "#1a0a14", margin: 0, lineHeight: 1.2 }}>
             Interests
@@ -233,6 +233,7 @@ export default function InterestsPage() {
                       background: "#fff", border: "1px solid rgba(220,30,60,0.08)",
                       borderRadius: "16px", padding: "16px",
                       display: "flex", alignItems: "center", gap: "16px",
+                      flexWrap: "wrap",
                       boxShadow: "0 2px 12px rgba(220,30,60,0.05)",
                     }}
                   >
@@ -248,7 +249,7 @@ export default function InterestsPage() {
                       </span>
                     </div>
 
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ flex: 1, minWidth: "140px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                         <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "15px", fontWeight: 600, color: "#1a0a14" }}>
                           {profile.name}
@@ -364,6 +365,7 @@ export default function InterestsPage() {
                       background: "#fff", border: "1px solid rgba(220,30,60,0.08)",
                       borderRadius: "16px", padding: "16px",
                       display: "flex", alignItems: "center", gap: "16px",
+                      flexWrap: "wrap",
                       boxShadow: "0 2px 12px rgba(220,30,60,0.05)",
                     }}
                   >
@@ -379,8 +381,8 @@ export default function InterestsPage() {
                       </span>
                     </div>
 
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div style={{ flex: 1, minWidth: "140px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                         <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "15px", fontWeight: 600, color: "#1a0a14" }}>
                           {profile.name}
                         </span>
@@ -464,6 +466,7 @@ export default function InterestsPage() {
                     background: "#fff", border: "1px solid rgba(220,30,60,0.12)",
                     borderRadius: "16px", padding: "16px",
                     display: "flex", alignItems: "center", gap: "16px",
+                    flexWrap: "wrap",
                     boxShadow: "0 4px 16px rgba(220,30,60,0.08)",
                   }}
                 >
@@ -491,7 +494,7 @@ export default function InterestsPage() {
                     </div>
                   </div>
 
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: "140px" }}>
                     <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "15px", fontWeight: 600, color: "#1a0a14" }}>
                       {profile.name}
                     </span>

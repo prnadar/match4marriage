@@ -106,6 +106,15 @@ export default function AdminSettingsPage() {
           {tab === "payment-gateway" && <PaymentGatewayTab />}
         </motion.div>
       </AnimatePresence>
+
+      {/* Paired/triple form fields stack on phones so inputs stay usable. */}
+      <style jsx>{`
+        @media (max-width: 640px) {
+          :global(.m4m-form-grid) {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </PageShell>
   );
 }
@@ -218,7 +227,7 @@ function SiteTab() {
 
       <GlassCard>
         <SectionTitle icon={Globe} title="Brand" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div className="m4m-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Site name">
             <input
               value={draft.site_name}
@@ -240,7 +249,7 @@ function SiteTab() {
 
       <GlassCard>
         <SectionTitle icon={Mail} title="Support contact" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div className="m4m-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Support email">
             <input
               type="email"
@@ -263,7 +272,7 @@ function SiteTab() {
 
       <GlassCard>
         <SectionTitle icon={Globe} title="Locale & defaults" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div className="m4m-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
           <Field label="Timezone">
             <select
               value={draft.timezone}
@@ -1116,7 +1125,7 @@ function SeoTab() {
               </div>
             </Field>
 
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+            <div className="m4m-form-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
               <Field label="Open Graph image URL">
                 <input
                   value={draft.og_image_url}
@@ -1247,7 +1256,7 @@ function AppearanceTab() {
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <GlassCard>
         <SectionTitle icon={Palette} title="Logo & favicon" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div className="m4m-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Logo URL">
             <input
               value={draft.logo_url || ""}
@@ -1285,7 +1294,7 @@ function AppearanceTab() {
 
       <GlassCard>
         <SectionTitle icon={Palette} title="Brand colors" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div className="m4m-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Primary (#RRGGBB or #RRGGBBAA)">
             <div style={{ display: "flex", gap: 8 }}>
               <input
@@ -1567,7 +1576,7 @@ function PaymentGatewayTab() {
             />
           </Field>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="m4m-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label={labels.secret}>
               <input
                 type="password"

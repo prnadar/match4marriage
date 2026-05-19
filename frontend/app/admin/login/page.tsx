@@ -362,6 +362,7 @@ export default function AdminLoginPage() {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.55, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+        className="m4m-login-form"
         style={{
           display: "flex", alignItems: "center", justifyContent: "center",
           padding: "48px 44px", background: "#fdfbf9",
@@ -872,6 +873,15 @@ function GlobalStyles() {
           opacity: 0.45 !important;
           width: 80% !important;
           right: -20% !important;
+        }
+      }
+      @media (max-width: 480px) {
+        .m4m-login-hero {
+          padding: 32px 22px !important;
+          min-height: 460px;
+        }
+        .m4m-login-form {
+          padding: 36px 22px !important;
         }
       }
 

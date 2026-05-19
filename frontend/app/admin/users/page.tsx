@@ -191,9 +191,12 @@ export default function AdminUsersPage() {
         </div>
       </motion.div>
 
-      {/* Table */}
+      {/* Table — horizontal scroll on small screens keeps the page fixed
+          while the wide grid stays readable inside the card. */}
       <motion.div variants={fadeUp}>
         <GlassCard padding={0}>
+          <div style={{ overflowX: "auto" }}>
+          <div style={{ minWidth: 760 }}>
           <div style={tableHeadStyle}>
             <div style={{ display: "grid", placeItems: "center" }}>
               <input
@@ -239,6 +242,8 @@ export default function AdminUsersPage() {
               />
             ))
           )}
+          </div>
+          </div>
         </GlassCard>
       </motion.div>
 

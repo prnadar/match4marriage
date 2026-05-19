@@ -21,9 +21,12 @@ export function PageShell({ title, subtitle, actions, children }: {
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          className="m4m-pageshell-header"
           style={{
             position: "sticky", top: 0, zIndex: 20,
-            padding: "20px 28px",
+            // Horizontal padding tightens on mobile (see <style jsx> below);
+            // desktop keeps the original 20px 28px.
+            padding: "16px 14px",
             background: "rgba(253,251,249,0.75)",
             backdropFilter: "saturate(140%) blur(18px)",
             WebkitBackdropFilter: "saturate(140%) blur(18px)",
@@ -37,9 +40,10 @@ export function PageShell({ title, subtitle, actions, children }: {
               initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.4, delay: 0.05 }}
+              className="m4m-pageshell-title"
               style={{
                 fontFamily: "var(--font-playfair, serif)",
-                fontSize: 28, fontWeight: 600, color: "#1a0a14",
+                fontSize: 22, fontWeight: 600, color: "#1a0a14",
                 margin: 0, letterSpacing: "-0.01em",
               }}
             >
@@ -72,11 +76,27 @@ export function PageShell({ title, subtitle, actions, children }: {
           variants={stagger(0.06, 0.05)}
           initial="hidden"
           animate="show"
-          style={{ padding: 28, maxWidth: 1400, margin: "0 auto" }}
+          className="m4m-pageshell-body"
+          style={{ padding: 14, maxWidth: 1400, margin: "0 auto" }}
         >
           {children}
         </motion.div>
       </div>
+
+      {/* Mobile-first → scale up to the original desktop spacing at sm (640px). */}
+      <style jsx>{`
+        @media (min-width: 640px) {
+          :global(.m4m-pageshell-header) {
+            padding: 20px 28px !important;
+          }
+          :global(.m4m-pageshell-title) {
+            font-size: 28px !important;
+          }
+          :global(.m4m-pageshell-body) {
+            padding: 28px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -152,13 +172,18 @@ export function StatCard({ label, value, hint, tone = "neutral" }: {
       <div style={{ fontSize: 11, fontWeight: 600, color: "#888", textTransform: "uppercase", letterSpacing: "0.08em" }}>
         {label}
       </div>
-      <div style={{
-        fontSize: 30, fontWeight: 700, color: c.fg, marginTop: 6,
+      <div className="m4m-statcard-value" style={{
+        fontSize: 26, fontWeight: 700, color: c.fg, marginTop: 6,
         fontFamily: "var(--font-playfair, serif)", fontVariantNumeric: "tabular-nums",
         letterSpacing: "-0.015em",
       }}>
         {display}
       </div>
+      <style jsx>{`
+        @media (min-width: 640px) {
+          :global(.m4m-statcard-value) { font-size: 30px !important; }
+        }
+      `}</style>
       {hint && <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>{hint}</div>}
     </motion.div>
   );

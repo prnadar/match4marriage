@@ -166,9 +166,10 @@ export default function DataTable<T extends Record<string, any>>({
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table — scrolls horizontally inside the card on small screens so the
+          page itself never overflows; min-width keeps columns readable. */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full min-w-[720px]">
           <thead>
             <tr className="border-b border-gold/10 bg-blush/50">
               {bulkActions && (

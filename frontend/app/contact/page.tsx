@@ -102,6 +102,10 @@ export default function ContactPage() {
       <style dangerouslySetInnerHTML={{ __html: `
         .m4m-contact-input::placeholder,
         .m4m-contact-input::-webkit-input-placeholder { color: rgba(253,249,244,0.35); }
+        /* 16px on phones stops iOS Safari auto-zooming the form on focus. */
+        @media (max-width: 640px) {
+          .m4m-contact-input { font-size: 16px !important; }
+        }
         .m4m-contact-input:focus {
           border-color: rgba(220,30,60,0.55) !important;
           background: rgba(253,249,244,0.07) !important;

@@ -860,7 +860,7 @@ function Step1VerifyEmail({
       </p>
 
       <form onSubmit={handleSubmit} style={{ marginTop: 26 }}>
-        <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
+        <div className="m4m-onb-otp-boxes" style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
           {digits.map((d, i) => (
             <input
               key={i}
@@ -1699,12 +1699,31 @@ function GlobalStyles() {
         }
       }
       @media (max-width: 640px) {
+        .m4m-onb-root {
+          grid-template-columns: 1fr !important;
+        }
         .m4m-onb-row {
           flex-direction: column !important;
         }
         .m4m-onb-hero {
           aspect-ratio: unset;
           min-height: 280px;
+        }
+        .m4m-onb-form {
+          padding: 32px 20px !important;
+        }
+        /* 16px stops iOS Safari zooming the form on input focus. */
+        .m4m-onb-root input,
+        .m4m-onb-root select,
+        .m4m-onb-root textarea {
+          font-size: 16px !important;
+        }
+        /* Email-OTP digit boxes are fixed 46px wide × 6 — too wide for a
+           360px screen. Let them flex down so the row never overflows. */
+        .m4m-onb-otp-boxes input {
+          width: 100% !important;
+          min-width: 0 !important;
+          height: 52px !important;
         }
       }
       @media (prefers-reduced-motion: reduce) {

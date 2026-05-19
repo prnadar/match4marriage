@@ -5,9 +5,11 @@ export default function PublicFooter() {
   return (
     <footer style={{ backgroundColor: "#1a0a14", padding: "48px 24px 24px" }}>
       <div style={{ maxWidth: "1152px", margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: "32px", marginBottom: "32px" }}>
+        {/* Brand spans full row on mobile; link columns sit 2-up on phones,
+            opening to the original 2fr/1fr/1fr/1fr at lg. */}
+        <div className="grid grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr] gap-8 mb-8">
           {/* Brand */}
-          <div>
+          <div className="col-span-2 lg:col-span-1">
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
               <Heart style={{ width: "18px", height: "18px", color: "#dc1e3c" }} />
               <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "20px", fontWeight: 700, color: "#fff" }}>Match<span style={{ color: "#dc1e3c" }}>4</span>Marriage</span>
@@ -56,7 +58,7 @@ export default function PublicFooter() {
         </div>
 
         {/* Bottom bar */}
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between" style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "20px", flexWrap: "wrap", gap: "8px" }}>
           <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)" }}>
             © {new Date().getFullYear()} Match4Marriage. All rights reserved. · United Kingdom
           </p>

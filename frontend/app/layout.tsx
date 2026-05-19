@@ -36,7 +36,10 @@ export const viewport: Viewport = {
   themeColor: "#dc1e3c",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // Allow pinch-zoom up to 5× — disabling user scaling fails WCAG 1.4.4
+  // and hurts low-vision users on small screens.
+  maximumScale: 5,
+  userScalable: true,
 };
 
 export default function RootLayout({

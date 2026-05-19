@@ -83,6 +83,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  // Mobile off-canvas drawer state. Desktop ignores this entirely (the
+  // sidebar is always visible at lg+); on phones/tablets the sidebar is
+  // hidden off-screen until `mobileOpen` is true.
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarName, setSidebarName] = useState("");
   const [sidebarInitial, setSidebarInitial] = useState("");
   const [sidebarPlan, setSidebarPlan] = useState<string>("Basic");
@@ -147,13 +151,46 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     loadSidebar();
   }, [pathname]);
 
-  const sidebarWidth = collapsed ? "72px" : "256px";
+  // Close the mobile drawer whenever the route changes (nav-item tap or any
+  // programmatic navigation) so it never lingers over the new page.
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+  // The collapsed (icon-only) rail is a desktop-only affordance. Below lg the
+  // sidebar is a full-width drawer, so collapse must never apply there —
+  // otherwise a desktop→mobile resize leaves an icon-only drawer.
+  const [isDesktop, setIsDesktop] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const apply = () => setIsDesktop(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+  const effectiveCollapsed = isDesktop && collapsed;
+
+  // Desktop margin tracks the rail width; on mobile the CSS below zeroes it.
+  const sidebarWidth = effectiveCollapsed ? "72px" : "256px";
 
   return (
     <div className="min-h-screen flex" style={{ background: "#fdfbf9" }}>
-      {/* ── Sidebar ── */}
+      {/* ── Mobile backdrop ── (only renders <lg; click to dismiss) */}
+      {mobileOpen && (
+        <div
+          onClick={() => setMobileOpen(false)}
+          className="lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+          aria-hidden
+        />
+      )}
+
+      {/* ── Sidebar ──
+          <lg: off-canvas drawer — fixed, full-height, slid out of view via
+          -translate-x-full until `mobileOpen`. lg+: unchanged collapsible
+          rail (256px / 72px) that's always on screen. */}
       <aside
-        className="fixed top-0 left-0 h-full z-40 flex flex-col transition-all duration-300"
+        className={
+          "m4m-app-sidebar fixed top-0 left-0 h-full z-50 flex flex-col transition-transform duration-300 lg:transition-all lg:translate-x-0 " +
+          (mobileOpen ? "translate-x-0" : "-translate-x-full")
+        }
         style={{
           width: sidebarWidth,
           background:
@@ -183,9 +220,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         />
         {/* Burger / Close toggle — replaces logo */}
         <div className="flex items-center px-4 border-b" style={{ borderColor: "rgba(255,255,255,0.08)", height: "60px", flexShrink: 0 }}>
+          {/* Desktop: collapse/expand the rail (unchanged affordance). */}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="flex items-center justify-center rounded-xl transition-colors"
+            className="hidden lg:flex items-center justify-center rounded-xl transition-colors"
             style={{
               width: "36px", height: "36px", flexShrink: 0,
               color: "rgba(255,255,255,0.7)",
@@ -197,6 +235,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             {collapsed ? <Menu className="w-5 h-5" /> : <X className="w-5 h-5" />}
           </button>
+          {/* Mobile: close the drawer. */}
+          <button
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close menu"
+            className="lg:hidden flex items-center justify-center rounded-xl transition-colors"
+            style={{
+              width: "36px", height: "36px", flexShrink: 0,
+              color: "rgba(255,255,255,0.7)",
+              background: "transparent",
+              border: "none", cursor: "pointer",
+            }}
+          >
+            <X className="w-5 h-5" />
+          </button>
           {/* Brand wordmark removed from the sidebar — the shared
               PublicHeader at the top of the page now owns the brand bar
               across every page (public and authenticated). The burger
@@ -204,7 +256,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Profile mini */}
-        {!collapsed && (
+        {!effectiveCollapsed && (
           <div className="px-4 py-4 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
             <Link href="/profile/me" className="flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-colors" style={{ minHeight: "auto" }}
               onMouseEnter={(e) => (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.06)"}
@@ -234,7 +286,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Collapsed avatar */}
-        {collapsed && (
+        {effectiveCollapsed && (
           <div className="flex justify-center py-3 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
             <div
               className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm"
@@ -251,7 +303,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Current plan badge — reflects the user's actual subscription_tier
             (Basic, Premium, Elite, VIP). The Basic tier is the default for
             new accounts (free for the first 3 months per /pricing). */}
-        {!collapsed && (
+        {!effectiveCollapsed && (
           <div className="px-4 pt-3">
             <div
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
@@ -273,15 +325,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Link
                 key={href}
                 href={href}
-                title={collapsed ? label : undefined}
+                title={effectiveCollapsed ? label : undefined}
                 className="relative group"
                 style={{
                   minHeight: "auto",
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: collapsed ? "center" : "flex-start",
+                  justifyContent: effectiveCollapsed ? "center" : "flex-start",
                   gap: "12px",
-                  padding: collapsed ? "10px" : "10px 12px",
+                  padding: effectiveCollapsed ? "10px" : "10px 12px",
                   borderRadius: "12px",
                   fontSize: "13.5px",
                   fontWeight: 500,
@@ -300,7 +352,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; }}
               >
                 {/* Active-state vertical accent on the left edge */}
-                {active && !collapsed && (
+                {active && !effectiveCollapsed && (
                   <span
                     aria-hidden
                     style={{
@@ -316,8 +368,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   className="w-4 h-4 flex-shrink-0 transition-colors"
                   style={{ color: active ? "#ffd6dd" : "rgba(255,255,255,0.55)" }}
                 />
-                {!collapsed && <span className="flex-1 truncate">{label}</span>}
-                {!collapsed && badge !== undefined && (
+                {!effectiveCollapsed && <span className="flex-1 truncate">{label}</span>}
+                {!effectiveCollapsed && badge !== undefined && (
                   <span
                     className="text-[10px] font-bold text-white rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0"
                     style={{
@@ -346,14 +398,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Link
                 key={href}
                 href={href}
-                title={collapsed ? label : undefined}
+                title={effectiveCollapsed ? label : undefined}
                 style={{
                   minHeight: "auto",
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: collapsed ? "center" : "flex-start",
+                  justifyContent: effectiveCollapsed ? "center" : "flex-start",
                   gap: "12px",
-                  padding: collapsed ? "10px" : "10px 12px",
+                  padding: effectiveCollapsed ? "10px" : "10px 12px",
                   borderRadius: "12px",
                   fontSize: "14px",
                   fontWeight: "500",
@@ -366,8 +418,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; }}
               >
                 <Icon className="w-4 h-4" />
-                {!collapsed && <span className="flex-1">{label}</span>}
-                {!collapsed && badge !== undefined && (
+                {!effectiveCollapsed && <span className="flex-1">{label}</span>}
+                {!effectiveCollapsed && badge !== undefined && (
                   <span className="text-[10px] font-bold text-white rounded-full w-5 h-5 flex items-center justify-center" style={{ background: "#dc1e3c" }}>
                     {badge}
                   </span>
@@ -384,12 +436,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               // entirely, not switch accounts.
               window.location.href = "/";
             }}
-            title={collapsed ? "Sign Out" : undefined}
+            title={effectiveCollapsed ? "Sign Out" : undefined}
             className="w-full flex items-center rounded-xl text-sm transition-colors"
             style={{
-              justifyContent: collapsed ? "center" : "flex-start",
+              justifyContent: effectiveCollapsed ? "center" : "flex-start",
               gap: "12px",
-              padding: collapsed ? "10px" : "10px 12px",
+              padding: effectiveCollapsed ? "10px" : "10px 12px",
               color: "rgba(255,100,100,0.7)",
               background: "transparent",
               border: "none", cursor: "pointer",
@@ -398,16 +450,49 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,100,100,0.7)"; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
           >
             <LogOut className="w-4 h-4 flex-shrink-0" />
-            {!collapsed && <span>Sign Out</span>}
+            {!effectiveCollapsed && <span>Sign Out</span>}
           </button>
         </div>
       </aside>
 
-      {/* ── Main ── */}
+      {/* ── Main ──
+          Desktop keeps the inline marginLeft (matches the rail width). On
+          <lg the rail is an overlay drawer, so the content must be full
+          width — `m4m-app-main` zeroes the inline margin below 1024px. */}
       <main
-        className="flex-1 min-h-screen flex flex-col transition-all duration-300"
+        className="m4m-app-main flex-1 min-h-screen flex flex-col transition-all duration-300 w-full min-w-0"
         style={{ marginLeft: sidebarWidth, background: "#fdfbf9" }}
       >
+        <style jsx global>{`
+          @media (max-width: 1023px) {
+            .m4m-app-main { margin-left: 0 !important; }
+            /* Force a comfortable drawer width on phones/tablets even if the
+               desktop "collapsed" rail width (72px) was carried over. */
+            .m4m-app-sidebar { width: min(280px, 82vw) !important; }
+          }
+        `}</style>
+
+        {/* Mobile drawer opener — a fixed floating control rather than a
+            sticky bar: PublicHeader's own nav is `position:sticky; top:0`,
+            so a second sticky bar would collide with it after any scroll and
+            get covered. A pinned FAB stays reachable at every scroll position
+            and never fights the header. Hidden at lg+ (rail is always shown).
+            z below the drawer backdrop (z-40) so the open drawer covers it. */}
+        <button
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open menu"
+          className="lg:hidden fixed left-4 z-30 inline-flex items-center gap-2 rounded-full pl-3 pr-4 h-12 shadow-lg active:scale-95 transition-transform"
+          style={{
+            bottom: "calc(1.25rem + env(safe-area-inset-bottom, 0px))",
+            background: "linear-gradient(135deg, #dc1e3c 0%, #a0153c 100%)",
+            color: "#fff",
+            boxShadow: "0 8px 24px rgba(220,30,60,0.4)",
+          }}
+        >
+          <Menu className="w-5 h-5" strokeWidth={2.2} />
+          <span className="text-sm font-semibold">Menu</span>
+        </button>
+
         {/* Shared brand bar — same component the public site uses. It detects
             Firebase auth state and renders Bell / Messages / Avatar in place
             of the Log In / Register CTAs, so authenticated and anonymous
@@ -423,13 +508,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* ── Footer ── */}
-        <footer style={{
-          borderTop: "1px solid rgba(220,30,60,0.10)",
-          background: "#1a0a14",
-          padding: "32px",
-        }}>
+        <footer
+          className="px-5 py-8 sm:px-8 sm:py-8"
+          style={{
+            borderTop: "1px solid rgba(220,30,60,0.10)",
+            background: "#1a0a14",
+          }}
+        >
           <div style={{ maxWidth: "960px", margin: "0 auto" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "24px", marginBottom: "24px" }}>
+            {/* 1 col on phones, 3 across from sm+ — keeps the desktop layout. */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
                   <Heart className="w-4 h-4" style={{ color: "#dc1e3c" }} />
@@ -470,7 +558,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </a>
               </div>
             </div>
-            <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div
+              className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+              style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "16px" }}
+            >
               <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)" }}>
                 © {new Date().getFullYear()} Match4Marriage. All rights reserved.
               </p>

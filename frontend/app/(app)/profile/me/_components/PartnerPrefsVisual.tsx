@@ -146,7 +146,7 @@ export function PartnerPrefsVisual({ form, update, onSave, saving }: Props) {
       </Card>
 
       <Card title="Education, occupation & language">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
           <SimpleField label="Mother tongue">
             <select
               value={form.motherTongue || ""}
@@ -335,7 +335,8 @@ function SimpleField({ label, children }: { label: string; children: React.React
 const selectStyle: React.CSSProperties = {
   width: "100%", boxSizing: "border-box",
   padding: "9px 12px", border: "1px solid rgba(220,30,60,0.18)", borderRadius: 8,
-  fontSize: 13.5, fontFamily: "inherit", outline: "none", background: "#fff",
+  // 16px keeps iOS Safari from auto-zooming on focus of these inputs/selects.
+  fontSize: 16, fontFamily: "inherit", outline: "none", background: "#fff",
   color: "#1a0a14",
 };
 

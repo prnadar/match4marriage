@@ -101,13 +101,14 @@ export default function PublicHeader({ transparent = false, transparentUntil }: 
 
   return (
     <>
-      {/* ── Top Announcement Bar — kept intentionally quiet: just the
-              direct enquiry line, right-aligned. The brand identity already
-              sits in the nav below, so the bar above doesn't need to repeat
-              it. ─── */}
+      {/* ── Top Announcement Bar — brand provenance line on the left, direct
+              enquiry line on the right. Plain text only: no emoji/flag glyphs
+              (they render inconsistently across platforms and read as noisy
+              on a premium brand bar). Shared by every public + member page. ─── */}
       <div className={`m4m-top-bar${transparent ? " m4m-top-bar--overlay" : ""}${floating ? " is-floating" : ""}`}>
         <span className="m4m-top-bar__shine" aria-hidden />
-        <div className="m4m-top-bar__row m4m-top-bar__row--mail-only max-w-7xl mx-auto">
+        <div className="m4m-top-bar__row max-w-7xl mx-auto">
+          <span className="m4m-top-bar__brand">Elite Indian Matrimony, Established in the UK</span>
           <a
             href="mailto:enquiry@match4marriage.com"
             className="m4m-top-bar__mail"

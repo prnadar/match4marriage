@@ -99,7 +99,9 @@ interface Employment  { company: string; designation: string; location: string; 
 const BASE_INPUT: React.CSSProperties = {
   width: "100%",
   fontFamily: "var(--font-poppins, sans-serif)",
-  fontSize: "0.875rem",
+  // 16px (1rem) so iOS Safari doesn't auto-zoom on focus across this
+  // long form; the prior 0.875rem is visually all-but-identical.
+  fontSize: "1rem",
   color: "#1a0a14",
   border: "1px solid rgba(220,30,60,0.15)",
   borderRadius: 10,
@@ -595,7 +597,7 @@ export default function MyProfilePage() {
     }));
 
   return (
-    <div style={{ padding: "2rem", background: "#fdfbf9", minHeight: "100%" }}>
+    <div className="p-4 sm:p-8" style={{ background: "#fdfbf9", minHeight: "100%" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: "1.5rem" }}>
         <h1 style={{
           fontFamily: "var(--font-playfair, serif)",
@@ -765,12 +767,8 @@ export default function MyProfilePage() {
         refreshKey={`${verifStatus}:${savedTick}`}
       />
 
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "280px 1fr",
-        gap: "1.5rem",
-        alignItems: "start",
-      }}>
+      {/* Single column on phones/tablets; 280px info rail + form from lg+. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr] lg:items-start">
         {/* ── Left Sidebar ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <PhotoCard name={general.name || "Your Name"} photoUrl={primaryPhotoUrl} />
@@ -1158,7 +1156,7 @@ function EducationTab({
               key={i}
               onRemove={schools.length > 1 ? () => setSchools(schools.filter((_, idx) => idx !== i)) : undefined}
             >
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[2fr_1fr_1fr]">
                 <Field label="School Name">
                   <FInput
                     value={s.name}
@@ -1194,7 +1192,7 @@ function EducationTab({
               key={i}
               onRemove={colleges.length > 1 ? () => setColleges(colleges.filter((_, idx) => idx !== i)) : undefined}
             >
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr", gap: 10 }}>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-[2fr_2fr_1fr_1fr]">
                 <Field label="College Name">
                   <FInput
                     value={c.name}
@@ -1239,7 +1237,7 @@ function EducationTab({
               key={i}
               onRemove={employment.length > 1 ? () => setEmployment(employment.filter((_, idx) => idx !== i)) : undefined}
             >
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr", gap: 10 }}>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[2fr_2fr_1fr]">
                 <Field label="Company Name">
                   <FInput
                     value={e.company}

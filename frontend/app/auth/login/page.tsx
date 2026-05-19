@@ -766,6 +766,16 @@ function GlobalStyles() {
         box-shadow: 0 0 0 4px rgba(220, 30, 60, 0.07) !important;
       }
 
+      /* Inputs/selects to 16px on phones so iOS Safari doesn't zoom the
+         form on focus. Desktop keeps the original 13–14px sizing. */
+      @media (max-width: 640px) {
+        .m4m-login input,
+        .m4m-login select,
+        .m4m-login textarea {
+          font-size: 16px !important;
+        }
+      }
+
       /* Responsive — stack below 1024px */
       @media (max-width: 1024px) {
         .m4m-login {

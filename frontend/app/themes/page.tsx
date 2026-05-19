@@ -331,7 +331,7 @@ function ThemePreview({ theme: t }: { theme: (typeof themes)[0] }) {
       </div>
 
       {/* Feature cards strip */}
-      <div style={{ background: t.bg, padding: "32px 28px 40px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" style={{ background: t.bg, padding: "32px 28px 40px" }}>
         {[
           { icon: Shield, title: "Government-Grade Trust", desc: "Aadhaar + PAN + photo liveness verification" },
           { icon: Brain, title: "AI Compatibility Engine", desc: "5-dimension psychometric matching daily" },

@@ -185,9 +185,12 @@ export default function AdminPaymentsPage() {
         />
       </motion.div>
 
-      {/* Table */}
+      {/* Table — horizontal scroll on small screens keeps the page fixed
+          while the wide grid stays readable inside the card. */}
       <motion.div variants={fadeUp}>
         <GlassCard padding={0}>
+          <div style={{ overflowX: "auto" }}>
+          <div style={{ minWidth: 720 }}>
           <div style={tableHeadStyle}>
             <div>User</div>
             <div>Description</div>
@@ -216,6 +219,8 @@ export default function AdminPaymentsPage() {
           ) : (
             items.map((tx, i) => <TxRow key={tx.id} tx={tx} index={i} />)
           )}
+          </div>
+          </div>
         </GlassCard>
       </motion.div>
 

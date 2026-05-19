@@ -159,7 +159,7 @@ export default function AdminPricingPage() {
       ) : (
         <motion.div
           variants={fadeUp}
-          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))", gap: 14 }}
         >
           {plans.map((p, i) => {
             const meta = TIERS.find((t) => t.key === p.tier) || TIERS[0];
@@ -412,7 +412,7 @@ function PlanEditor({
           )}
 
           <div style={{ display: "grid", gap: 14 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div className="m4m-pe-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <Field label="Display name">
                 <input
                   value={draft.name}
@@ -432,7 +432,7 @@ function PlanEditor({
               </Field>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div className="m4m-pe-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <Field label="Tier">
                 <select
                   value={draft.tier}
@@ -453,7 +453,7 @@ function PlanEditor({
               </Field>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div className="m4m-pe-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <Field label={`Price (${draft.currency})`}>
                 <input
                   type="number"
@@ -544,6 +544,15 @@ function PlanEditor({
               {saving ? "Saving…" : isNew ? "Create plan" : "Save changes"}
             </Button>
           </div>
+
+          {/* Paired fields stack on very narrow phones so inputs stay usable. */}
+          <style jsx>{`
+            @media (max-width: 420px) {
+              :global(.m4m-pe-row) {
+                grid-template-columns: 1fr !important;
+              }
+            }
+          `}</style>
         </motion.div>
       </motion.div>
     </AnimatePresence>

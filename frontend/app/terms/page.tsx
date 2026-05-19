@@ -121,7 +121,7 @@ export default function TermsPage() {
       <PublicHeader />
 
       {/* Hero */}
-      <div style={{ background: "linear-gradient(135deg, #1a0a14 0%, #2d0f20 100%)", padding: "72px 24px 56px" }}>
+      <div className="pt-12 pb-10 sm:pt-[72px] sm:pb-14" style={{ background: "linear-gradient(135deg, #1a0a14 0%, #2d0f20 100%)", paddingLeft: 24, paddingRight: 24 }}>
         <div style={{ maxWidth: "800px", margin: "0 auto", textAlign: "center" }}>
           <span style={{ fontSize: "11px", fontWeight: 700, color: "#dc1e3c", letterSpacing: "0.1em", display: "block", marginBottom: "16px" }}>
             Legal
@@ -136,7 +136,9 @@ export default function TermsPage() {
       </div>
 
       {/* Content */}
-      <div style={{ maxWidth: "1152px", margin: "0 auto", padding: "64px 24px", display: "grid", gridTemplateColumns: "240px 1fr", gap: "64px", alignItems: "start" }}>
+      {/* Single column on mobile/tablet — the TOC sidebar is hidden below lg,
+          so reserving 240px there would push the content off-screen. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-12 lg:gap-16 items-start py-14 lg:py-16" style={{ maxWidth: "1152px", margin: "0 auto", paddingLeft: 24, paddingRight: 24 }}>
 
         {/* Sticky sidebar TOC */}
         <aside style={{ position: "sticky", top: "88px" }} className="hidden lg:block">

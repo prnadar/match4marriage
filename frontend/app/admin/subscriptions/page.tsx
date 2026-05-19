@@ -196,9 +196,12 @@ export default function AdminSubscriptionsPage() {
         </div>
       </motion.div>
 
-      {/* Table */}
+      {/* Table — horizontal scroll on small screens keeps the page fixed
+          while the wide grid stays readable inside the card. */}
       <motion.div variants={fadeUp}>
         <GlassCard padding={0}>
+          <div style={{ overflowX: "auto" }}>
+          <div style={{ minWidth: 740 }}>
           <div style={tableHeadStyle}>
             <div>User</div>
             <div>Plan</div>
@@ -227,6 +230,8 @@ export default function AdminSubscriptionsPage() {
           ) : (
             items.map((s, i) => <SubRow key={s.id} sub={s} index={i} />)
           )}
+          </div>
+          </div>
         </GlassCard>
       </motion.div>
 

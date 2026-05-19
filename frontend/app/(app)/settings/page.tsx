@@ -234,13 +234,15 @@ export default function SettingsPage() {
   const togglePrivacy = (key: keyof typeof privacy)  => setPrivacy((p) => ({ ...p, [key]: !p[key] }));
   const togglePrefs   = (key: keyof typeof prefs)    => setPrefs((p)   => ({ ...p, [key]: !p[key] }));
 
+  // 16px font keeps iOS Safari from auto-zooming the viewport when these
+  // controls are focused; visually near-identical to the prior 14px.
   const selectStyle = {
     background: "rgba(255,255,255,0.9)",
     border: "1px solid rgba(220,30,60,0.15)",
     borderRadius: 10,
     padding: "6px 12px",
     fontFamily: "var(--font-poppins, sans-serif)",
-    fontSize: 14,
+    fontSize: 16,
     color: "#1a0a14",
     outline: "none",
   };
@@ -251,7 +253,7 @@ export default function SettingsPage() {
     borderRadius: 10,
     padding: "6px 8px",
     fontFamily: "var(--font-poppins, sans-serif)",
-    fontSize: 14,
+    fontSize: 16,
     color: "#1a0a14",
     outline: "none",
     width: 64,
@@ -259,7 +261,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div style={{ background: "#fdfbf9", minHeight: "100vh", padding: "32px" }}>
+    <div className="px-4 py-6 sm:px-8 sm:py-8" style={{ background: "#fdfbf9", minHeight: "100vh" }}>
       <div style={{ maxWidth: 896 }}>
         <h1
           style={{
@@ -274,9 +276,10 @@ export default function SettingsPage() {
           Settings
         </h1>
 
-        <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 24 }}>
-          {/* Nav */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {/* Stacks to a single column on phones; 200px rail + content from md+. */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-[200px_1fr]">
+          {/* Nav — horizontal scroll on mobile, vertical rail on md+ */}
+          <div className="flex flex-row gap-1 overflow-x-auto md:flex-col md:gap-1 md:overflow-visible">
             {NAV.map((n) => (
               <button
                 key={n.key}
@@ -293,6 +296,8 @@ export default function SettingsPage() {
                   fontSize: 14,
                   fontWeight: 500,
                   textAlign: "left",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
                   background: section === n.key ? "rgba(220,30,60,0.08)" : "transparent",
                   color: section === n.key ? "#dc1e3c" : "rgba(26,10,20,0.55)",
                   transition: "background 0.15s, color 0.15s",
@@ -305,7 +310,9 @@ export default function SettingsPage() {
               </button>
             ))}
 
-            <div style={{ borderTop: "1px solid rgba(220,30,60,0.1)", marginTop: 16, paddingTop: 16 }}>
+            {/* Divider only makes sense in the vertical (md+) rail. On the
+                mobile horizontal strip it's just another scrollable item. */}
+            <div className="flex-shrink-0 md:mt-4 md:pt-4 md:border-t md:border-[rgba(220,30,60,0.1)]">
               <button
                 style={{
                   display: "flex",
@@ -319,6 +326,7 @@ export default function SettingsPage() {
                   fontSize: 14,
                   fontWeight: 500,
                   textAlign: "left",
+                  whiteSpace: "nowrap",
                   background: "transparent",
                   color: "#f87171",
                   width: "100%",

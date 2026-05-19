@@ -129,11 +129,13 @@ export default function NotificationsPage() {
     <div style={{ background: "#fdfbf9", minHeight: "100vh" }}>
       {/* Header strip */}
       <div
+        className="px-4 py-5 sm:px-8 sm:py-6"
         style={{
-          padding: "24px 32px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
           background: "linear-gradient(135deg, #dc1e3c 0%, #a0153c 100%)",
         }}
       >
@@ -193,7 +195,7 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      <div style={{ padding: "24px 32px", maxWidth: 672 }}>
+      <div className="px-4 py-5 sm:px-8 sm:py-6" style={{ maxWidth: 672 }}>
         {/* Filter tabs */}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
           {filters.map((f) => {
