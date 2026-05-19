@@ -32,7 +32,7 @@ class ProfileCreate(BaseSchema):
     last_name: str
     date_of_birth: date | None = None
     gender: Gender | None = None
-    marital_status: MaritalStatus = MaritalStatus.NEVER_MARRIED
+    marital_status: MaritalStatus | None = None
     city: str | None = None
     state: str | None = None
     country: str = "India"
@@ -94,7 +94,7 @@ class ProfileRead(TimestampedSchema):
     last_name: str
     date_of_birth: date | None
     gender: Gender | None
-    marital_status: MaritalStatus
+    marital_status: MaritalStatus | None
     city: str | None
     state: str | None
     country: str

@@ -51,6 +51,11 @@ async def _ensure_verification_columns() -> None:
     """Idempotent: add verification workflow columns if missing (Vercel can't run alembic)."""
     from sqlalchemy import text
     stmts = [
+        # Marital status is now member-selected, not auto-defaulted to
+        # 'never_married'. Drop the column default + NOT NULL on existing
+        # databases (idempotent — a no-op once already applied).
+        "ALTER TABLE profiles ALTER COLUMN marital_status DROP DEFAULT",
+        "ALTER TABLE profiles ALTER COLUMN marital_status DROP NOT NULL",
         # Verification workflow
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'draft'",
         "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS rejection_reason TEXT",

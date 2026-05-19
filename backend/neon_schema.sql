@@ -189,7 +189,7 @@ CREATE TABLE profiles (
     last_name VARCHAR(100) NOT NULL, 
     date_of_birth DATE, 
     gender gender, 
-    marital_status maritalstatus NOT NULL, 
+    marital_status maritalstatus,
     city VARCHAR(100), 
     state VARCHAR(100), 
     country VARCHAR(100) NOT NULL, 

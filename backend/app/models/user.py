@@ -131,8 +131,12 @@ class UserProfile(TenantModel):
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
     gender: Mapped[Gender | None] = mapped_column(Enum(Gender), nullable=True)
-    marital_status: Mapped[MaritalStatus] = mapped_column(
-        Enum(MaritalStatus), nullable=False, default=MaritalStatus.NEVER_MARRIED
+    # No default: the member must actively select their marital status
+    # rather than being silently stamped "Never Married". Nullable until
+    # chosen — the profile-completeness gate requires it before a profile
+    # can go live (see routers/profile.py: need(p.marital_status is not None)).
+    marital_status: Mapped[MaritalStatus | None] = mapped_column(
+        Enum(MaritalStatus), nullable=True
     )
 
     # Location
