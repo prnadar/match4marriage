@@ -65,14 +65,8 @@ class Settings(BaseSettings):
     CLOUDINARY_API_SECRET: str = ""
     CLOUDINARY_UPLOAD_FOLDER: str = "match4marriage"
 
-    # ── Razorpay ─────────────────────────────────────────────────────────
-    RAZORPAY_KEY_ID: str = ""
-    RAZORPAY_KEY_SECRET: str = ""
-    RAZORPAY_WEBHOOK_SECRET: str = ""
-
-    # ── Stripe (diaspora / international) ────────────────────────────────
-    STRIPE_SECRET_KEY: str = ""
-    STRIPE_WEBHOOK_SECRET: str = ""
+    # Payments: PayPal only. Credentials are admin-managed per tenant in
+    # payment_gateway_configs (not env vars), so nothing lives here.
 
     # ── Twilio ───────────────────────────────────────────────────────────
     TWILIO_ACCOUNT_SID: str = ""
@@ -125,16 +119,11 @@ class Settings(BaseSettings):
     #   silver   → "Basic Plan"     → £100 / 6 months    (~₹10,500)
     #   gold     → "Premium Plan"   → £300 / 6 months    (~₹31,500)
     #   platinum → "Elite Plan"     → £1,000 / 6 months  (~₹105,000)
+    # Fallback prices (pence) used only if a plan has no active DB row.
+    # The source of truth is the admin-managed pricing_plans table.
     SILVER_PRICE_GBP: int = 10000     # £100.00
     GOLD_PRICE_GBP: int = 30000       # £300.00
     PLATINUM_PRICE_GBP: int = 100000  # £1,000.00
-
-    SILVER_PRICE_INR: int = 1050000     # ₹10,500.00
-    GOLD_PRICE_INR: int = 3150000       # ₹31,500.00
-    PLATINUM_PRICE_INR: int = 10500000  # ₹105,000.00
-
-    # Stripe publishable key (returned to frontend for Razorpay-style flows if needed)
-    STRIPE_PUBLISHABLE_KEY: str = ""
 
     # ── Production safety ────────────────────────────────────────────────
     # Refuses to start the API with truly catastrophic defaults when

@@ -1376,7 +1376,7 @@ function AppearanceTab() {
 
 interface GatewayConfig {
   id: string;
-  gateway: "razorpay" | "stripe" | "upi" | "paypal";
+  gateway: "paypal";
   publishable_key: string | null;
   secret_configured: boolean;
   secret_tail: string | null;
@@ -1387,10 +1387,7 @@ interface GatewayConfig {
   updated_at: string | null;
 }
 
-const GATEWAY_OPTIONS: Array<{ key: "razorpay" | "stripe" | "upi" | "paypal"; label: string; description: string }> = [
-  { key: "razorpay", label: "Razorpay", description: "Indian cards, UPI, netbanking, wallets" },
-  { key: "stripe",   label: "Stripe",   description: "International cards, wallets" },
-  { key: "upi",      label: "UPI",      description: "Direct UPI VPA / collect-request flow" },
+const GATEWAY_OPTIONS: Array<{ key: "paypal"; label: string; description: string }> = [
   { key: "paypal",   label: "PayPal",   description: "PayPal balance & cards. Use Test mode for sandbox." },
 ];
 
@@ -1418,7 +1415,7 @@ function PaymentGatewayTab() {
   const { toast } = useToast();
   const [configs, setConfigs] = useState<GatewayConfig[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<"razorpay" | "stripe" | "upi" | "paypal">("razorpay");
+  const [selected, setSelected] = useState<"paypal">("paypal");
   const [draft, setDraft] = useState<{
     publishable_key: string;
     secret_key: string;
@@ -1444,7 +1441,7 @@ function PaymentGatewayTab() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, []);
 
-  const hydrateDraft = (key: "razorpay" | "stripe" | "upi" | "paypal", list: GatewayConfig[] = configs) => {
+  const hydrateDraft = (key: "paypal", list: GatewayConfig[] = configs) => {
     const existing = list.find((c) => c.gateway === key);
     setDraft({
       publishable_key: existing?.publishable_key || "",
@@ -1456,7 +1453,7 @@ function PaymentGatewayTab() {
     });
   };
 
-  const switchTo = (key: "razorpay" | "stripe" | "upi" | "paypal") => {
+  const switchTo = (key: "paypal") => {
     setSelected(key);
     hydrateDraft(key);
   };

@@ -1,47 +1,8 @@
 """
-Subscription and payment schemas.
+Subscription schemas. Payments are PayPal-only; gateway-specific
+request/response models were removed.
 """
-import uuid
-from datetime import datetime
-
-from app.models.subscription import PaymentGateway, SubscriptionStatus
-from app.schemas.common import BaseSchema, TimestampedSchema
-
-
-class CreateSubscriptionRequest(BaseSchema):
-    plan: str  # silver | gold | platinum
-    gateway: PaymentGateway = PaymentGateway.RAZORPAY
-    currency: str = "INR"
-
-
-class SubscriptionRead(TimestampedSchema):
-    user_id: uuid.UUID
-    plan: str
-    status: SubscriptionStatus
-    gateway: PaymentGateway
-    amount_paise: int
-    currency: str
-    current_period_start: datetime
-    current_period_end: datetime
-    monthly_interests: int
-    monthly_contacts: int
-    monthly_video_calls: int
-
-
-class RazorpayOrderResponse(BaseSchema):
-    order_id: str
-    amount: int
-    currency: str
-    key_id: str
-
-
-class StripeCheckoutResponse(BaseSchema):
-    session_id: str
-    checkout_url: str
-
-
-class CreditPackRequest(BaseSchema):
-    pack_size: int  # 5 | 10 | 25 contacts
+from app.schemas.common import BaseSchema
 
 
 class FeatureLimits(BaseSchema):

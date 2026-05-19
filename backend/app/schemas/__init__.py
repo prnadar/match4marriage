@@ -5,7 +5,4 @@ from app.schemas.match import (
     MatchRead, DailyMatchFeed, SendInterestRequest, InterestRead,
     ChatThreadRead, SendMessageRequest, MessageRead, QuizSubmitRequest, CompatibilityScoreRead,
 )
-from app.schemas.subscription import (
-    CreateSubscriptionRequest, SubscriptionRead,
-    RazorpayOrderResponse, StripeCheckoutResponse, FeatureLimits,
-)
+from app.schemas.subscription import FeatureLimits

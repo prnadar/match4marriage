@@ -14,6 +14,7 @@ import {
 } from "firebase/auth";
 import { firebaseAuth, rememberSessionUid } from "@/lib/firebase";
 import { profileApi } from "@/lib/api";
+import { featuredStories } from "@/lib/featured-stories";
 import {
   Heart, Phone, Mail, Eye, EyeOff, ArrowRight, AlertCircle,
   CheckCircle2, Loader2, ArrowLeft,
@@ -31,40 +32,17 @@ type Mode = "email" | "phone";
 // wedding photos typically place the couple's faces in the upper third, so the
 // default is `center 28%`. Override per-story if a particular shot needs a
 // different anchor (e.g. a wide ceremony shot).
-const STORIES = [
-  {
-    src: "/couples/couple-hero.jpg",
-    focal: "center 22%",
-    quote: "From the first conversation I knew. Match4Marriage made the family part feel easy, and everything else just followed.",
-    couple: "Meera & Rahul",
-    location: "London",
-    year: 2025,
-  },
-  {
-    src: "/couples/wedding-swing.jpg",
-    focal: "center 30%",
-    quote: "Our parents met on a video call after just two weeks. Two months later, we were engaged.",
-    couple: "Divya & Karthik",
-    location: "Bangalore",
-    year: 2025,
-  },
-  {
-    src: "/couples/heritage-villa.jpg",
-    focal: "center 35%",
-    quote: "Verified profiles, thoughtful matches. For the biggest decision of our lives, that mattered.",
-    couple: "Sneha & Arjun",
-    location: "Chennai",
-    year: 2024,
-  },
-  {
-    src: "/couples/mandapam.jpg",
-    focal: "center 30%",
-    quote: "We both wanted tradition and respect. The platform quietly aligned everything else.",
-    couple: "Lakshmi & Vivek",
-    location: "Hyderabad",
-    year: 2025,
-  },
-];
+// Sourced from the shared featured-stories list so the login slideshow,
+// the landing page, onboarding, and /success-stories all show the same
+// real couples.
+const STORIES = featuredStories.map((s) => ({
+  src: s.img,
+  focal: "center 30%",
+  quote: s.quote,
+  couple: s.names,
+  location: s.location,
+  year: s.yearNumber,
+}));
 
 export default function LoginPage() {
   const router = useRouter();
