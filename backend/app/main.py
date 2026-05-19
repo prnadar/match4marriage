@@ -84,6 +84,8 @@ async def _ensure_verification_columns() -> None:
         "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
         # Identity unification — firebase_uids list column (new in identity rework)
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uids JSONB NOT NULL DEFAULT '[]'::jsonb",
+        # Promo "was" price on pricing plans (inaugural offer strike-through)
+        "ALTER TABLE pricing_plans ADD COLUMN IF NOT EXISTS original_price_paise BIGINT",
         # Membership number — assigned after onboarding completes
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS membership_number VARCHAR(20)",
         "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_tenant_membership_number ON users (tenant_id, membership_number)",

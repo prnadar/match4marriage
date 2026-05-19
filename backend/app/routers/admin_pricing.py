@@ -46,6 +46,7 @@ def _serialize(p: PricingPlan) -> dict[str, Any]:
         "name": p.name,
         "tier": p.tier,
         "price_paise": int(p.price_paise),
+        "original_price_paise": int(p.original_price_paise) if p.original_price_paise is not None else None,
         "currency": p.currency,
         "period": p.period.value if p.period else "monthly",
         "features": list(p.features or []),

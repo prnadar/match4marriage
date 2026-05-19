@@ -36,6 +36,9 @@ class PricingPlan(TenantModel):
     tier: Mapped[str] = mapped_column(String(32), nullable=False)
 
     price_paise: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    # Optional "was" price. When set and greater than price_paise, the UI
+    # shows it struck through next to the live price (promo / inaugural offer).
+    original_price_paise: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
 
     period: Mapped[PricingPeriod] = mapped_column(

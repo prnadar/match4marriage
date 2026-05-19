@@ -30,6 +30,7 @@ interface RemotePlan {
   name: string;
   tier: "silver" | "gold" | "platinum" | string;
   price_paise: number;
+  original_price_paise?: number | null;
   currency: string;
   period: "monthly" | "quarterly" | "yearly" | string;
   features?: string[];
@@ -37,18 +38,27 @@ interface RemotePlan {
   sort_order?: number;
 }
 
-function formatPrice(p: RemotePlan): string {
-  const major = p.price_paise / 100;
-  // Use the plan's currency (GBP for the UK roll-out, INR for India, etc.)
+function fmtMoney(minor: number, currency: string): string {
+  const major = minor / 100;
   try {
     return new Intl.NumberFormat("en-GB", {
       style: "currency",
-      currency: p.currency || "GBP",
+      currency: currency || "GBP",
       maximumFractionDigits: major >= 100 ? 0 : 2,
     }).format(major);
   } catch {
-    return `${p.currency || ""} ${major}`.trim();
+    return `${currency || ""} ${major}`.trim();
   }
+}
+
+function formatPrice(p: RemotePlan): string {
+  return fmtMoney(p.price_paise, p.currency);
+}
+
+// A promo applies when there's a higher "was" price than the live price.
+function hasPromo(p: RemotePlan): boolean {
+  return typeof p.original_price_paise === "number"
+    && p.original_price_paise > p.price_paise;
 }
 
 function periodLabel(p: RemotePlan): string {
@@ -314,12 +324,22 @@ export default function SubscriptionPage() {
                   <h2 className="font-display mt-3 text-[22px] font-semibold text-[#1a0a14]">
                     {p.name}
                   </h2>
-                  <div className="mt-1 flex items-baseline gap-1.5">
+                  <div className="mt-1 flex items-baseline gap-2">
+                    {hasPromo(p) && (
+                      <span className="font-display text-[19px] font-medium text-[#b9a3aa] line-through decoration-[#dc1e3c]/60">
+                        {fmtMoney(p.original_price_paise as number, p.currency)}
+                      </span>
+                    )}
                     <span className="font-display text-[32px] font-semibold text-[#1a0a14]">
-                      {formatPrice(p)}
+                      {p.price_paise <= 0 ? "Free" : formatPrice(p)}
                     </span>
                     <span className="text-[12.5px] text-[#6a5560]">{periodLabel(p)}</span>
                   </div>
+                  {hasPromo(p) && (
+                    <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-white shadow-[0_3px_12px_rgba(220,30,60,0.25)]">
+                      <Sparkles className="h-3 w-3" /> Inaugural offer
+                    </span>
+                  )}
 
                   <ul className="mt-5 space-y-2">
                     {(p.features ?? []).map((f, idx) => (
@@ -330,37 +350,43 @@ export default function SubscriptionPage() {
                     ))}
                   </ul>
 
-                  {["silver", "gold", "platinum"].includes(p.tier) ? (
-                    <button
-                      type="button"
-                      onClick={() => payWithPayPal(p.tier)}
-                      disabled={payingTier !== null}
-                      className={
-                        "mt-6 flex w-full items-center justify-center gap-1.5 rounded-2xl px-5 py-3 text-[13.5px] font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed " +
-                        (popular
-                          ? "bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white shadow-[0_8px_22px_rgba(220,30,60,0.32)] hover:shadow-[0_12px_28px_rgba(220,30,60,0.40)]"
-                          : "border border-rose-100 bg-white text-[#1a0a14] hover:border-rose-200 hover:text-rose-700")
-                      }
-                    >
-                      {payingTier === p.tier ? (
-                        <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Redirecting to PayPal…</>
-                      ) : (
-                        <>Pay with PayPal <ArrowRight className="h-3.5 w-3.5" /></>
-                      )}
-                    </button>
-                  ) : (
-                    <Link
-                      href="/contact"
-                      className={
-                        "mt-6 flex w-full items-center justify-center gap-1.5 rounded-2xl px-5 py-3 text-[13.5px] font-semibold transition-all " +
-                        (popular
-                          ? "bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white shadow-[0_8px_22px_rgba(220,30,60,0.32)] hover:shadow-[0_12px_28px_rgba(220,30,60,0.40)]"
-                          : "border border-rose-100 bg-white text-[#1a0a14] hover:border-rose-200 hover:text-rose-700")
-                      }
-                    >
-                      Enquire about {p.name} <ArrowRight className="h-3.5 w-3.5" />
-                    </Link>
-                  )}
+                  {(() => {
+                    const btn = "mt-6 flex w-full items-center justify-center gap-1.5 rounded-2xl px-5 py-3 text-[13.5px] font-semibold transition-all " +
+                      (popular
+                        ? "bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white shadow-[0_8px_22px_rgba(220,30,60,0.32)] hover:shadow-[0_12px_28px_rgba(220,30,60,0.40)]"
+                        : "border border-rose-100 bg-white text-[#1a0a14] hover:border-rose-200 hover:text-rose-700");
+                    const isPaidTier = ["silver", "gold", "platinum"].includes(p.tier);
+                    if (isPaidTier && p.price_paise > 0) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => payWithPayPal(p.tier)}
+                          disabled={payingTier !== null}
+                          className={btn + " disabled:opacity-60 disabled:cursor-not-allowed"}
+                        >
+                          {payingTier === p.tier ? (
+                            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Redirecting to PayPal…</>
+                          ) : (
+                            <>Pay with PayPal <ArrowRight className="h-3.5 w-3.5" /></>
+                          )}
+                        </button>
+                      );
+                    }
+                    if (isPaidTier && p.price_paise <= 0) {
+                      // Free / inaugural-offer plan — no payment, just sign up.
+                      return (
+                        <Link href="/auth/register" className={btn}>
+                          {hasPromo(p) ? "Claim inaugural offer" : "Get started free"}
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
+                      );
+                    }
+                    return (
+                      <Link href="/contact" className={btn}>
+                        Enquire about {p.name} <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    );
+                  })()}
                 </div>
               );
             })}
