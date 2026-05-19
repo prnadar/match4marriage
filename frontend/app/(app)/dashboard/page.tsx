@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Shield, Heart, Clock, Sparkles, Search, ArrowRight, AlertCircle,
-  Check, Plus,
+  Check, Plus, Crown,
 } from "lucide-react";
 import { matchApi, profileApi, api, ApiError } from "@/lib/api";
 import { ProfileCard, type ProfileCardData } from "@/components/ui/profile-card";
@@ -62,6 +62,7 @@ export default function DashboardPage() {
   const [matches, setMatches] = useState<ProfileCardData[]>([]);
   const [completion, setCompletion] = useState<CompletionInfo | null>(null);
   const [membershipNumber, setMembershipNumber] = useState<string | null>(null);
+  const [plan, setPlan] = useState<string>("free");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,15 +70,21 @@ export default function DashboardPage() {
     async function load() {
       setLoading(true); setError(null);
       try {
-        const [matchRes, completionRes, meRes] = await Promise.allSettled([
+        const [matchRes, completionRes, meRes, limitsRes] = await Promise.allSettled([
           matchApi.getDailyMatches(),
           profileApi.getCompletion(),
           api.get("/api/v1/auth/me"),
+          api.get("/api/v1/subscriptions/limits"),
         ]);
 
         if (meRes.status === "fulfilled") {
           const d = (meRes.value.data as any)?.data ?? meRes.value.data;
           setMembershipNumber(d?.membership_number ?? null);
+        }
+
+        if (limitsRes.status === "fulfilled") {
+          const d = (limitsRes.value.data as any)?.data ?? limitsRes.value.data;
+          if (d?.plan) setPlan(String(d.plan).toLowerCase());
         }
 
         // Backend envelope: APIResponse{success, data: T} for singular,
@@ -183,6 +190,57 @@ export default function DashboardPage() {
             </div>
           </div>
         </section>
+
+        {/* ── Membership / upgrade ───────────────────────────────────── */}
+        {(() => {
+          const PLAN_LABEL: Record<string, string> = {
+            free: "Free", silver: "Basic", gold: "Premium", platinum: "Elite",
+          };
+          const label = PLAN_LABEL[plan] ?? "Free";
+          const isTopTier = plan === "platinum";
+          return (
+            <section
+              className="fade-in-up mt-7 flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-rose-100/70 bg-gradient-to-br from-white to-rose-50/40 p-5 shadow-[0_2px_14px_rgba(220,30,60,0.05)]"
+              style={{ animationDelay: "40ms" }}
+            >
+              <div className="flex items-center gap-4 min-w-[240px]">
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 text-rose-700 ring-1 ring-rose-100">
+                  <Crown className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700/70">
+                    Your membership
+                  </p>
+                  <p className="font-display text-[20px] font-semibold text-[#1a0a14] leading-tight">
+                    {label} plan
+                  </p>
+                </div>
+              </div>
+
+              {isTopTier ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                  <Check className="h-3.5 w-3.5" /> You're on our highest tier
+                </span>
+              ) : (
+                <div className="flex flex-1 flex-wrap items-center justify-end gap-4">
+                  <p className="text-[13px] leading-snug text-[#6a5560] max-w-sm">
+                    {plan === "free"
+                      ? "Unlock direct messaging, contact access and priority introductions."
+                      : "Upgrade for more contacts, priority placement and concierge support."}
+                  </p>
+                  <Link
+                    href="/subscription"
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-[13.5px] font-semibold text-white shadow-[0_6px_18px_rgba(220,30,60,0.32)] transition-all hover:shadow-[0_12px_28px_rgba(220,30,60,0.42)]"
+                    style={{ background: "linear-gradient(135deg, #dc1e3c, #a0153c)" }}
+                  >
+                    {plan === "free" ? "Upgrade your plan" : "See higher tiers"}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              )}
+            </section>
+          );
+        })()}
 
         {/* ── Profile completeness ───────────────────────────────────── */}
         <section
