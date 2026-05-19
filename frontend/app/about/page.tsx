@@ -179,7 +179,7 @@ export default function AboutPage() {
                 color: "#1a0a14",
               }}
             >
-              A quieter way to{" "}
+              Built for the Global{" "}
               <span
                 style={{
                   fontFamily: "var(--font-display-alt, 'Cormorant', serif)",
@@ -188,10 +188,10 @@ export default function AboutPage() {
                   color: "#dc1e3c",
                 }}
               >
-                find one another.
+                Elite Indian Community
               </span>
             </h1>
-            <p
+            <div
               style={{
                 marginTop: 28,
                 fontSize: "clamp(16px, 1.4vw, 19px)",
@@ -200,12 +200,31 @@ export default function AboutPage() {
                 maxWidth: 600,
               }}
             >
-              Match4Marriage is a small, advisor-led matrimonial service for the
-              British Indian community and the wider diaspora. We do not run a
-              dating app. We hand-pick a limited number of profiles, verify each
-              one personally, and accompany families through every stage of an
-              introduction: the call, the meeting, the conversation that follows.
-            </p>
+              <p>
+                At Match4Marriage, we understand that choosing a life partner is
+                a deeply significant journey, deserving of trust, discretion, and
+                thoughtful guidance. That is why we have made a deliberate choice:
+                to remain small, selective, and genuinely personal.
+              </p>
+              <p style={{ marginTop: 18 }}>
+                Established in the United Kingdom, we are a boutique matrimonial
+                service with over 100 hand-picked, individually verified profiles.
+                Every member has been personally reviewed, not just registered. We
+                have already had the privilege of celebrating successful
+                marriages, and we take immense pride in each one.
+              </p>
+              <p style={{ marginTop: 18 }}>
+                Built in the United Kingdom for the global Indian community. We
+                serve Indians across London, Birmingham, Manchester, Leicester,
+                and the wider UK, as well as those rooted in India, USA, Canada,
+                UAE, Australia, and beyond. Wherever you are in the world, if you
+                are seeking a meaningful Indian match, Match4Marriage is for you.
+              </p>
+              <p style={{ marginTop: 18 }}>
+                We are not trying to be the biggest. We are committed to being the
+                best, for the right people.
+              </p>
+            </div>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 28, marginTop: 36, alignItems: "center" }}>
               <Link
