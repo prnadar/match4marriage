@@ -110,6 +110,19 @@ async def public_create_enquiry(
     await db.flush()
     await db.refresh(e)
     logger.info("public_enquiry_created", id=str(e.id), source=source.value, has_email=bool(email))
+
+    # Notify the team inbox. Never let a mail hiccup fail the submission.
+    try:
+        from app.services.email import send_enquiry_notification_email
+        await send_enquiry_notification_email(
+            name=name,
+            sender_email=email,
+            phone=phone,
+            subject=subject,
+            message=message,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("enquiry_email_failed", id=str(e.id), error=str(exc))
     # Public response intentionally narrow — we don't expose internal fields.
     return APIResponse(success=True, data={"id": str(e.id), "status": e.status.value})
 

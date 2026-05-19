@@ -31,6 +31,7 @@ def _resend_post(
     subject: str,
     html_content: str,
     plain_content: str = "",
+    extra: dict[str, Any] | None = None,
 ) -> bool:
     """
     Synchronous call to Resend emails.send.
@@ -51,6 +52,8 @@ def _resend_post(
         "html": html_content,
         "text": plain_content or _html_to_plain(html_content),
     }
+    if extra and extra.get("reply_to"):
+        params["reply_to"] = extra["reply_to"]
 
     try:
         email = resend.Emails.send(params)
@@ -359,6 +362,70 @@ async def send_membership_welcome_email(
 
     return await asyncio.to_thread(
         _resend_post, email, user_name, subject, html, plain
+    )
+
+
+ENQUIRY_INBOX = "enquiry@match4marriage.com"
+
+
+async def send_enquiry_notification_email(
+    *,
+    name: str,
+    sender_email: str | None,
+    phone: str | None,
+    subject: str | None,
+    message: str,
+) -> bool:
+    """
+    Notify the team inbox (enquiry@match4marriage.com) of a new contact-form
+    submission. Reply-To is set to the enquirer so a reply goes straight back
+    to them.
+    """
+    subj = f"New enquiry: {subject}" if subject else f"New enquiry from {name}"
+
+    def esc(s: str) -> str:
+        return (
+            s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        )
+
+    rows = [
+        ("Name", name),
+        ("Email", sender_email or "—"),
+        ("Phone", phone or "—"),
+        ("Subject", subject or "—"),
+    ]
+    rows_html = "".join(
+        f'<tr><td style="padding:6px 14px;color:#888;font-size:13px;'
+        f'white-space:nowrap;vertical-align:top;">{k}</td>'
+        f'<td style="padding:6px 14px;color:#1a0a14;font-size:14px;">{esc(v)}</td></tr>'
+        for k, v in rows
+    )
+    html = f"""
+<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;background:#f9f6f1;margin:0;padding:32px 0;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+      <tr><td style="background:#1a0a14;padding:24px 32px;">
+        <h1 style="color:#fff;margin:0;font-size:18px;letter-spacing:1px;">Match4Marriage — New enquiry</h1>
+      </td></tr>
+      <tr><td style="padding:24px 18px 8px;">
+        <table width="100%" cellpadding="0" cellspacing="0">{rows_html}</table>
+      </td></tr>
+      <tr><td style="padding:8px 32px 28px;">
+        <p style="margin:0 0 6px;color:#888;font-size:13px;">Message</p>
+        <div style="background:#fdf8f4;border:1px solid #f0e0e5;border-radius:8px;padding:16px;color:#1a0a14;font-size:14px;line-height:1.6;white-space:pre-wrap;">{esc(message)}</div>
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body></html>
+"""
+    plain = (
+        f"New enquiry\n\nName: {name}\nEmail: {sender_email or '—'}\n"
+        f"Phone: {phone or '—'}\nSubject: {subject or '—'}\n\nMessage:\n{message}\n"
+    )
+
+    extra = {"reply_to": sender_email} if sender_email else None
+    return await asyncio.to_thread(
+        _resend_post, ENQUIRY_INBOX, "Match4Marriage Enquiries", subj, html, plain, extra
     )
 
 

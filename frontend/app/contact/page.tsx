@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Mail, MapPin, MessageCircle, ArrowRight, Check,
 } from "lucide-react";
+import { api } from "@/lib/api";
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
 
@@ -24,6 +25,8 @@ export default function ContactPage() {
     message: "",
   });
   const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     const els = document.querySelectorAll<HTMLElement>(".editorial-reveal");
@@ -43,9 +46,31 @@ export default function ContactPage() {
     return () => io.disconnect();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSent(true);
+    if (submitting) return;
+    setSubmitError(null);
+    setSubmitting(true);
+    const fullName = `${form.firstName} ${form.lastName}`.trim();
+    try {
+      await api.post("/api/v1/enquiries", {
+        name: fullName,
+        email: form.email.trim() || undefined,
+        phone: form.phone.trim() || undefined,
+        subject: form.subject || undefined,
+        message: form.message.trim(),
+        source: "contact_form",
+      });
+      setSent(true);
+    } catch (err: unknown) {
+      setSubmitError(
+        err instanceof Error
+          ? err.message
+          : "Could not send your enquiry. Please try again or email us directly.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const labelStyle: React.CSSProperties = {
@@ -341,9 +366,15 @@ export default function ContactPage() {
                     />
                   </div>
 
+                  {submitError && (
+                    <p style={{ fontSize: 13, color: "#ff9fb0", margin: 0, textAlign: "center" }}>
+                      {submitError}
+                    </p>
+                  )}
                   <button
                     type="submit"
                     className="m4m-contact-submit"
+                    disabled={submitting}
                     style={{
                       width: "100%",
                       display: "inline-flex",
@@ -357,13 +388,14 @@ export default function ContactPage() {
                       fontSize: 15,
                       fontWeight: 600,
                       border: 0,
-                      cursor: "pointer",
+                      cursor: submitting ? "not-allowed" : "pointer",
+                      opacity: submitting ? 0.65 : 1,
                       letterSpacing: "0.01em",
                       marginTop: 6,
                       transition: "background 0.2s ease, transform 0.2s ease",
                     }}
                   >
-                    Send Message <ArrowRight size={16} strokeWidth={2} />
+                    {submitting ? "Sending…" : <>Send Message <ArrowRight size={16} strokeWidth={2} /></>}
                   </button>
 
                   <p style={{ fontSize: 12, color: "rgba(253,249,244,0.55)", margin: 0, letterSpacing: "0.02em", textAlign: "center" }}>
