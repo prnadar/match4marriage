@@ -65,6 +65,7 @@ export default function DashboardPage() {
   const [plan, setPlan] = useState<string>("free");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [interestError, setInterestError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -111,6 +112,7 @@ export default function DashboardPage() {
 
   const sendInterest = async (id: string) => {
     setInterests((p) => ({ ...p, [id]: "sent" }));
+    setInterestError(null);
     try {
       await matchApi.sendInterest(id);
     } catch (err) {
@@ -119,6 +121,13 @@ export default function DashboardPage() {
       // failure rolls back so the user can retry.
       if (err instanceof ApiError && err.status === 409) return;
       setInterests((p) => { const n = { ...p }; delete n[id]; return n; });
+      if (err instanceof ApiError && err.status === 403) {
+        // Basic plan quota exhausted — surface the server's message.
+        setInterestError(
+          err.message?.replace(/^\d+:\s*/, "") ||
+            "You've reached your Basic plan limit — upgrade to Premium for unlimited expressions of interest.",
+        );
+      }
     }
   };
 
@@ -309,6 +318,22 @@ export default function DashboardPage() {
             </Link>
           </LuxeButton>
         </section>
+
+        {/* ── Interest quota notice ──────────────────────────────────── */}
+        {interestError && (
+          <div className="fade-in-up mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-[13px] text-rose-800">
+            <span className="flex items-center gap-2">
+              <Heart className="h-4 w-4 flex-shrink-0 text-rose-700" />
+              {interestError}
+            </span>
+            <Link
+              href="/subscription"
+              className="inline-flex items-center gap-1 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-[0_4px_14px_rgba(220,30,60,0.25)]"
+            >
+              Upgrade to Premium <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        )}
 
         {/* ── Sent interest strip ────────────────────────────────────── */}
         {sent.length > 0 && (

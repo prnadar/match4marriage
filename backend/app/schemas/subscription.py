@@ -16,3 +16,9 @@ class FeatureLimits(BaseSchema):
     can_view_contact: bool
     can_incognito_browse: bool
     can_send_voice_note: bool
+    # Core tier gates (mirror app/core/entitlements.py) — used by the client
+    # to lock/unlock features and show upgrade prompts.
+    can_message: bool
+    can_view_photos: bool
+    can_view_premium_photos: bool
+    can_use_advanced_filters: bool

@@ -69,6 +69,67 @@ const plans: Plan[] = [
   },
 ];
 
+// ── Full feature matrix ────────────────────────────────────────────────
+// One row per benefit, mapped across the four tiers in `plans` order
+// (Basic, Premium, Elite, VIP Concierge). "elite" renders as
+// "Included via Elite" — the VIP tier inherits everything Elite offers.
+type Cover = "yes" | "no" | "elite";
+
+const comparisonRows: { feature: string; cover: [Cover, Cover, Cover, Cover] }[] = [
+  { feature: "Curated match suggestions",        cover: ["yes", "yes", "yes", "elite"] },
+  { feature: "View profiles",                    cover: ["yes", "yes", "yes", "elite"] },
+  { feature: "Compatibility insights",           cover: ["yes", "yes", "yes", "elite"] },
+  { feature: "Standard search filters",          cover: ["yes", "yes", "yes", "elite"] },
+  { feature: "Unlimited expressions of interest",cover: ["no",  "yes", "yes", "elite"] },
+  { feature: "Direct messaging",                 cover: ["no",  "yes", "yes", "elite"] },
+  { feature: "Photo access",                     cover: ["yes", "yes", "yes", "elite"] },
+  { feature: "Premium (private) photos",         cover: ["no",  "yes", "yes", "elite"] },
+  { feature: "Advanced search filters",          cover: ["no",  "yes", "yes", "elite"] },
+  { feature: "Priority placement",               cover: ["no",  "yes", "yes", "elite"] },
+  { feature: "Dedicated relationship advisor",   cover: ["no",  "no",  "yes", "elite"] },
+  { feature: "Background verification",          cover: ["no",  "no",  "yes", "elite"] },
+  { feature: "Privacy shield",                   cover: ["yes", "no",  "yes", "elite"] },
+  { feature: "WhatsApp support",                 cover: ["no",  "no",  "yes", "elite"] },
+  { feature: "Featured placement",               cover: ["no",  "no",  "yes", "elite"] },
+  { feature: "Profile boosting (4× / month)",    cover: ["no",  "no",  "yes", "elite"] },
+  { feature: "Horoscope matching",               cover: ["no",  "no",  "yes", "elite"] },
+  { feature: "Family background check",          cover: ["no",  "no",  "yes", "elite"] },
+  { feature: "Preferential-based match",         cover: ["no",  "no",  "yes", "elite"] },
+  { feature: "Personal matchmaker assigned",     cover: ["no",  "no",  "no",  "yes"] },
+  { feature: "Hand-curated profiles",            cover: ["no",  "no",  "no",  "yes"] },
+  { feature: "1-on-1 strategy call",             cover: ["no",  "no",  "no",  "yes"] },
+  { feature: "Profile photography consultation", cover: ["no",  "no",  "no",  "yes"] },
+  { feature: "Family liaison service",           cover: ["no",  "no",  "no",  "yes"] },
+  { feature: "Legal, visit & visa service",      cover: ["no",  "no",  "no",  "yes"] },
+  { feature: "Financial due diligence",          cover: ["no",  "no",  "no",  "yes"] },
+  { feature: "24 / 7 WhatsApp concierge",        cover: ["no",  "no",  "no",  "yes"] },
+];
+
+function CoverCell({ c, col }: { c: Cover; col: number }) {
+  if (c === "yes") {
+    return (
+      <Check
+        size={16}
+        strokeWidth={2.6}
+        style={{ color: col === 3 ? "#c9954a" : "#dc1e3c" }}
+        aria-label="Included"
+      />
+    );
+  }
+  if (c === "elite") {
+    return (
+      <span style={{ fontSize: 11, fontStyle: "italic", color: "#9a6b00", lineHeight: 1.3 }}>
+        Included via Elite
+      </span>
+    );
+  }
+  return (
+    <span aria-label="Not included" title="Not included" style={{ color: "#c9b9bf", fontSize: 16 }}>
+      –
+    </span>
+  );
+}
+
 export default function PricingPage() {
   useEffect(() => {
     const els = document.querySelectorAll<HTMLElement>(".editorial-reveal");
@@ -245,6 +306,101 @@ export default function PricingPage() {
           <Lock size={13} strokeWidth={1.8} />
           Secure payment · Cancel anytime · GDPR compliant
         </p>
+      </section>
+
+      {/* ── Full feature comparison matrix ────────────────────── */}
+      <section className="editorial-reveal" style={{ padding: "clamp(48px, 6vw, 80px) 24px", background: "#faf3eb" }}>
+        <div className="max-w-6xl mx-auto">
+          <div style={{ textAlign: "center", marginBottom: 36 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 12, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: "#a78a8f", marginBottom: 16 }}>
+              <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
+              Compare
+              <span style={{ width: 28, height: 1, background: "rgba(220,30,60,0.4)" }} />
+            </span>
+            <h2 className="font-display" style={{ fontSize: "clamp(26px, 3.6vw, 44px)", fontWeight: 500, lineHeight: 1.08, letterSpacing: "-0.025em" }}>
+              Every feature,{" "}
+              <span style={{ fontFamily: "var(--font-display-alt, 'Cormorant', serif)", fontStyle: "italic", color: "#dc1e3c" }}>
+                side by side.
+              </span>
+            </h2>
+          </div>
+
+          {/* Wide matrix — scrolls horizontally inside its card on small
+              screens so the page itself never overflows. */}
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 14, border: "1px solid rgba(26,10,20,0.12)", background: "#fffdfb" }}>
+            <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", padding: "16px 18px", fontFamily: "var(--font-nav, sans-serif)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "#88787f", textTransform: "uppercase", borderBottom: "1px solid rgba(26,10,20,0.12)" }}>
+                    Feature / Benefit
+                  </th>
+                  {plans.map((p, i) => (
+                    <th
+                      key={p.name}
+                      style={{
+                        padding: "16px 14px", textAlign: "center", verticalAlign: "top",
+                        borderBottom: "1px solid rgba(26,10,20,0.12)",
+                        borderLeft: "1px solid rgba(26,10,20,0.08)",
+                        background: p.recommended ? "rgba(220,30,60,0.05)" : "transparent",
+                        minWidth: 132,
+                      }}
+                    >
+                      <div className="font-display" style={{ fontSize: 17, fontWeight: 600, color: "#1a0a14" }}>{p.name}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: i === 3 ? "#9a6b00" : "#dc1e3c", marginTop: 4 }}>{p.price}</div>
+                      <div style={{ fontSize: 11, color: "#88787f", marginTop: 2 }}>{p.period}</div>
+                      {p.recommended && (
+                        <div style={{ display: "inline-block", marginTop: 8, background: "#dc1e3c", color: "#fff", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 999 }}>
+                          MOST CHOSEN
+                        </div>
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {comparisonRows.map((row, ri) => (
+                  <tr key={row.feature} style={{ background: ri % 2 ? "rgba(26,10,20,0.018)" : "transparent" }}>
+                    <th scope="row" style={{ textAlign: "left", padding: "12px 18px", fontWeight: 500, color: "#3a2a30", borderBottom: "1px solid rgba(26,10,20,0.05)" }}>
+                      {row.feature}
+                    </th>
+                    {row.cover.map((c, ci) => (
+                      <td
+                        key={ci}
+                        style={{
+                          padding: "12px 14px", textAlign: "center",
+                          borderBottom: "1px solid rgba(26,10,20,0.05)",
+                          borderLeft: "1px solid rgba(26,10,20,0.05)",
+                          background: ci === 1 && plans[1]?.recommended ? "rgba(220,30,60,0.03)" : "transparent",
+                        }}
+                      >
+                        <CoverCell c={c} col={ci} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                <tr>
+                  <th scope="row" style={{ textAlign: "left", padding: "15px 18px", fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "#88787f", borderTop: "1px solid rgba(26,10,20,0.12)" }}>
+                    Best for
+                  </th>
+                  {plans.map((p, i) => (
+                    <td
+                      key={p.name}
+                      style={{
+                        padding: "15px 14px", textAlign: "center",
+                        borderTop: "1px solid rgba(26,10,20,0.12)",
+                        borderLeft: "1px solid rgba(26,10,20,0.05)",
+                        fontSize: 12.5, fontWeight: 600, color: "#1a0a14",
+                        background: i === 1 && p.recommended ? "rgba(220,30,60,0.03)" : "transparent",
+                      }}
+                    >
+                      {p.bestFor}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       {/* ── Closing note ──────────────────────────────────────── */}

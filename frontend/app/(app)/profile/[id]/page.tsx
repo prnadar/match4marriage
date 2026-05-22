@@ -12,6 +12,8 @@ import { profileApi, matchApi, ApiError } from "@/lib/api";
 import { Portrait } from "@/components/ui/portrait";
 import { LuxeButton } from "@/components/ui/luxe-button";
 import { RevealText } from "@/components/ui/reveal-text";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { UpgradeOverlay } from "@/components/ui/upgrade-lock";
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 
@@ -39,7 +41,7 @@ interface RemoteProfile {
   annual_income_inr?: number | null;
   bio?: string | null;
   about_family?: string | null;
-  photos?: Array<{ url?: string; key?: string; is_primary?: boolean }>;
+  photos?: Array<{ url?: string | null; key?: string; is_primary?: boolean; is_premium?: boolean; locked?: boolean }>;
   completeness_score?: number;
   is_manglik?: boolean | null;
   birth_time?: string | null;
@@ -88,11 +90,14 @@ function titleCase(s?: string | null): string | undefined {
 /* ── Page ──────────────────────────────────────────────────────────── */
 
 export default function ProfilePage({ params }: { params: { id: string } }) {
+  const { entitlements, isLoading: entLoading } = useEntitlements();
+
   const [profile, setProfile] = useState<RemoteProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
   const [interestSent, setInterestSent] = useState(false);
   const [interestPending, setInterestPending] = useState(false);
+  const [interestError, setInterestError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -116,11 +121,25 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
   const sendInterest = async () => {
     if (!profile || interestPending || interestSent) return;
     setInterestPending(true);
+    setInterestError(null);
     try {
       await matchApi.sendInterest(profile.user_id);
       setInterestSent(true);
-    } catch {
-      // silently revert on failure; user can retry
+    } catch (err) {
+      // 409: an interest already exists — treat as sent rather than an error.
+      if (err instanceof ApiError && err.status === 409) {
+        setInterestSent(true);
+      } else if (err instanceof ApiError && err.status === 403) {
+        // Basic plan quota exhausted — surface the server's message.
+        setInterestError(
+          err.message?.replace(/^\d+:\s*/, "") ||
+            "You've reached your Basic plan limit — upgrade to Premium for unlimited expressions of interest.",
+        );
+      } else {
+        setInterestError(
+          err instanceof Error ? err.message : "Could not send interest. Please try again.",
+        );
+      }
     } finally {
       setInterestPending(false);
     }
@@ -186,9 +205,28 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
   const height    = cmToFeetInches(profile.height_cm);
   const income    = lakhsFromInr(profile.annual_income_inr);
   const isVerified = profile.verification_status === "approved";
-  const photoUrl  = profile.photos?.find((p) => p.is_primary)?.url
-                 ?? profile.photos?.[0]?.url
-                 ?? null;
+
+  // A photo is locked when the backend masks it from this viewer: either an
+  // explicit `locked` flag, or a premium photo returned without a url.
+  const isLockedPhoto = (p: { url?: string | null; is_premium?: boolean; locked?: boolean }) =>
+    p.locked === true || (!!p.is_premium && !p.url);
+
+  const allPhotos = profile.photos ?? [];
+  // The hero/primary is always a main photo with a real url → always shown.
+  const photoUrl  = allPhotos.find((p) => p.is_primary && p.url)?.url
+        ?? allPhotos.find((p) => !p.is_premium && p.url)?.url
+        ?? allPhotos.find((p) => p.url)?.url
+        ?? null;
+  // Remaining photos for the thumbnail strip — keep locked entries so we can
+  // render a per-photo upgrade overlay rather than dropping them.
+  const galleryItems = allPhotos
+    .filter((p) => p.url !== photoUrl || isLockedPhoto(p))
+    .map((p) => ({ url: p.url ?? null, locked: isLockedPhoto(p) }))
+    .filter((g) => g.locked || !!g.url)
+    .slice(0, 6);
+  const lockedCount = galleryItems.filter((g) => g.locked).length;
+  // Don't flash a lock to paid members while entitlements are still loading.
+  const showUpgradeHint = !entLoading && !entitlements.canViewPremiumPhotos && lockedCount > 0;
 
   const educationLine = [profile.education_level, profile.education_field, profile.college]
     .filter(Boolean).join(" · ") || undefined;
@@ -295,12 +333,59 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
                   </LuxeButton>
                 </div>
 
+                {interestError && (
+                  <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-3.5 py-2.5 text-[12px] leading-relaxed text-rose-800">
+                    {interestError}
+                    <Link
+                      href="/subscription"
+                      className="mt-1 inline-flex items-center gap-1 font-semibold text-rose-700 hover:text-rose-800"
+                    >
+                      View plans <Sparkles className="h-3 w-3" />
+                    </Link>
+                  </div>
+                )}
+
                 <p className="mt-3 flex items-center gap-1.5 text-[11px] text-[#6a5560]">
                   <Lock className="h-3 w-3" />
                   Contact details are revealed only after mutual consent.
                 </p>
               </div>
             </div>
+
+            {/* Thumbnail strip — main photos render normally; premium photos
+                the viewer can't see render a per-photo upgrade overlay. */}
+            {galleryItems.length > 0 && (
+              <>
+                <div className="grid grid-cols-3 gap-2">
+                  {galleryItems.map((g, i) =>
+                    g.locked ? (
+                      <div
+                        key={i}
+                        className="relative aspect-square overflow-hidden rounded-2xl border border-rose-100/70"
+                        style={{ background: "linear-gradient(135deg, rgba(220,30,60,0.10), rgba(220,30,60,0.04))" }}
+                      >
+                        <UpgradeOverlay label="Premium" message="Upgrade to view premium photos" />
+                      </div>
+                    ) : (
+                      <Portrait
+                        key={i}
+                        src={g.url ?? undefined}
+                        name={fullName}
+                        seed={`${profile.user_id}-${i}`}
+                        rounded="card"
+                        className="aspect-square w-full border border-rose-100/70"
+                      />
+                    )
+                  )}
+                </div>
+                {showUpgradeHint && (
+                  <p className="flex items-center gap-1.5 text-[12px] font-medium text-rose-700/80">
+                    <Lock className="h-3 w-3" />
+                    {lockedCount} premium photo{lockedCount === 1 ? "" : "s"} — upgrade to view
+                  </p>
+                )}
+              </>
+            )}
           </aside>
 
           {/* ── Right ────────────────────────────────────────────── */}

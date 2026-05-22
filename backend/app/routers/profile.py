@@ -186,6 +186,17 @@ async def browse_profiles(
     except (ValueError, AttributeError):
         raise HTTPException(status_code=401, detail="Invalid user identity in token")
 
+    # Tier gating: advanced filters (education / marital status / has-photo)
+    # are Premium+ only — silently drop them for Basic (free) callers. Main
+    # photos remain visible to everyone (only owner-flagged Premium photos are
+    # paid-only, and those are never used as the public card thumbnail).
+    from app.core.entitlements import can_use_advanced_filters, get_user_plan
+    caller_plan = await get_user_plan(db, caller_id)
+    if not can_use_advanced_filters(caller_plan):
+        education = None
+        marital_status = None
+        has_photo = None
+
     offset = (page - 1) * limit
     base_q = (
         select(UserProfile, User)
@@ -246,10 +257,12 @@ async def browse_profiles(
         return today_.year - dob.year - ((today_.month, today_.day) < (dob.month, dob.day))
 
     def _primary_photo(photos: list[dict]) -> str | None:
-        for p in photos:
+        # Premium photos are never the public card thumbnail.
+        main = [p for p in photos if not p.get("is_premium")]
+        for p in main:
             if p.get("is_primary"):
                 return p.get("url")
-        return photos[0].get("url") if photos else None
+        return main[0].get("url") if main else None
 
     cards: list[ProfileCard] = []
     for profile_row, user_row in rows:
@@ -522,18 +535,23 @@ async def add_my_photo(
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
-    """Append a photo {url, key, is_primary?} to the current user's profile."""
+    """Append a photo {url, key, is_primary?, is_premium?} to the current
+    user's profile. Premium photos are visible only to Premium+ members and
+    are never the primary (public) photo."""
     url = payload.get("url")
     key = payload.get("key")
     if not url or not key:
         raise HTTPException(status_code=400, detail="url and key required")
     profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
     photos = [dict(p) for p in (profile.photos or [])]
-    is_primary = bool(payload.get("is_primary")) or len(photos) == 0
+    is_premium = bool(payload.get("is_premium"))
+    # A premium photo is never primary. Primary defaults to the first main photo.
+    has_main = any(not p.get("is_premium") for p in photos)
+    is_primary = (not is_premium) and (bool(payload.get("is_primary")) or not has_main)
     if is_primary:
         for p in photos:
             p["is_primary"] = False
-    photos.append({"url": url, "key": key, "is_primary": is_primary})
+    photos.append({"url": url, "key": key, "is_primary": is_primary, "is_premium": is_premium})
     profile.photos = photos
     flag_modified(profile, "photos")
     profile.completeness_score = compute_profile_completeness(profile)
@@ -638,6 +656,47 @@ async def set_primary_photo(
         raise HTTPException(status_code=404, detail="Photo not found")
     profile.photos = photos
     flag_modified(profile, "photos")
+    await db.flush()
+    await db.refresh(profile)
+    return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+
+
+@router.post("/me/photos/premium", response_model=APIResponse[ProfileRead])
+async def set_photo_premium(
+    payload: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    """Mark / unmark a photo as **Premium** (visible only to Premium+ members).
+    Body: {"key": "...", "is_premium": true|false}. Premium photos can never be
+    the primary (public) photo; toggling one premium reassigns the primary to a
+    remaining main photo so the profile always has a public avatar."""
+    key = payload.get("key")
+    if not key:
+        raise HTTPException(status_code=400, detail="key required")
+    want_premium = bool(payload.get("is_premium"))
+    profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+    photos = [dict(p) for p in (profile.photos or [])]
+    found = False
+    for p in photos:
+        if p.get("key") == key:
+            p["is_premium"] = want_premium
+            if want_premium:
+                p["is_primary"] = False
+            found = True
+    if not found:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    # Guarantee a primary among the main (non-premium) photos.
+    main_photos = [p for p in photos if not p.get("is_premium")]
+    if main_photos and not any(p.get("is_primary") for p in main_photos):
+        for p in photos:
+            if not p.get("is_premium"):
+                p["is_primary"] = True
+                break
+    profile.photos = photos
+    flag_modified(profile, "photos")
+    profile.completeness_score = compute_profile_completeness(profile)
     await db.flush()
     await db.refresh(profile)
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
@@ -963,7 +1022,18 @@ async def get_profile(
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
-    return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
+    data = ProfileRead.model_validate(profile, from_attributes=True)
+    # Main photos are visible to everyone. Photos the owner marked "Premium"
+    # are visible only to Premium+ viewers — for Basic viewers we keep the
+    # entry but null its URL and flag it `locked` so the client renders an
+    # upgrade placeholder instead of the image.
+    from app.core.entitlements import can_view_premium_photos, get_user_plan
+    if not can_view_premium_photos(await get_user_plan(db, current_user.get("sub"))):
+        data.photos = [
+            ({**p, "url": None, "locked": True} if p.get("is_premium") else p)
+            for p in (data.photos or [])
+        ]
+    return APIResponse(success=True, data=data)
 
 
 @router.put("/{user_id}", response_model=APIResponse[ProfileRead])

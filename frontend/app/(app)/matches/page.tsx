@@ -9,6 +9,7 @@ import { matchApi, ApiError } from "@/lib/api";
 import { ProfileCard, type ProfileCardData } from "@/components/ui/profile-card";
 import { LuxeButton } from "@/components/ui/luxe-button";
 import { RevealText } from "@/components/ui/reveal-text";
+import { useEntitlements } from "@/lib/useEntitlements";
 
 /* ── Types & helpers ────────────────────────────────────────────────── */
 
@@ -68,6 +69,9 @@ export default function MatchesPage() {
   const [profiles, setProfiles] = useState<ProfileCardData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [interestError, setInterestError] = useState<string | null>(null);
+
+  const { entitlements } = useEntitlements();
 
   const fetchProfiles = useCallback(async () => {
     setLoading(true); setError(null);
@@ -90,8 +94,18 @@ export default function MatchesPage() {
 
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
 
+  const QUOTA_MESSAGE =
+    "You've reached your Basic plan limit — upgrade to Premium for unlimited expressions of interest.";
+
   const handleLike = async (id: string) => {
     const wasLiked = liked.has(id);
+    // Proactive gate: a Basic member with 0 remaining (not unlimited) shouldn't
+    // even fire the request — show the upgrade prompt up front. -1 = unlimited.
+    if (!wasLiked && entitlements.interestsRemaining === 0) {
+      setInterestError(QUOTA_MESSAGE);
+      return;
+    }
+    setInterestError(null);
     setLiked((prev) => {
       const s = new Set(prev);
       if (wasLiked) s.delete(id); else s.add(id);
@@ -102,11 +116,16 @@ export default function MatchesPage() {
         await matchApi.sendInterest(id);
       } catch (err) {
         // 409 means an interest already exists between these users — treat
-        // the heart as already-sent rather than yanking it back. Anything
-        // else: revert the optimistic like and surface the error.
+        // the heart as already-sent rather than yanking it back.
         if (err instanceof ApiError && err.status === 409) return;
+        // Revert the optimistic like for any real failure.
         setLiked((prev) => { const s = new Set(prev); s.delete(id); return s; });
-        setError(err instanceof Error ? err.message : "Could not send interest");
+        if (err instanceof ApiError && err.status === 403) {
+          // Quota exhausted — surface the server's message with an upgrade path.
+          setInterestError(err.message?.replace(/^\d+:\s*/, "") || QUOTA_MESSAGE);
+        } else {
+          setError(err instanceof Error ? err.message : "Could not send interest");
+        }
       }
     }
   };
@@ -249,6 +268,31 @@ export default function MatchesPage() {
             >
               <Loader2 className="h-3.5 w-3.5" /> Retry
             </button>
+          </div>
+        )}
+
+        {/* ── Interest quota notice ──────────────────────────────────── */}
+        {interestError && (
+          <div className="fade-in-up mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-[13px] text-rose-800">
+            <span className="flex items-center gap-2">
+              <Heart className="h-4 w-4 flex-shrink-0 text-rose-700" />
+              {interestError}
+            </span>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/subscription"
+                className="inline-flex items-center gap-1 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-[0_4px_14px_rgba(220,30,60,0.25)]"
+              >
+                Upgrade to Premium
+              </Link>
+              <button
+                onClick={() => setInterestError(null)}
+                className="text-rose-700/60 hover:text-rose-700"
+                aria-label="Dismiss"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
 

@@ -134,6 +134,28 @@ async def send_interest(
 
     tenant_uuid = await _resolve_tenant(db, tenant_slug)
 
+    # Expressions-of-interest quota — Basic (free) is capped; Premium+ is
+    # unlimited. Enforced server-side so it can't be bypassed by the client.
+    from app.core.entitlements import get_user_plan, interest_limit
+    plan = await get_user_plan(db, sender_id)
+    limit = interest_limit(plan)
+    if limit is not None:
+        sent_count = (await db.execute(
+            select(func.count()).select_from(Interest).where(
+                Interest.sender_id == sender_id,
+                Interest.tenant_id == tenant_uuid,
+                Interest.deleted_at.is_(None),
+            )
+        )).scalar_one()
+        if sent_count >= limit:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"You've reached the Basic plan limit of {limit} expressions "
+                    "of interest. Upgrade to Premium for unlimited."
+                ),
+            )
+
     # Check for existing interest
     existing = await db.execute(
         select(Interest).where(

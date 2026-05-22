@@ -211,6 +211,9 @@ export const profileApi = {
     api.put("/api/v1/profile/me/photos/reorder", { keys }),
   setPrimaryPhoto: (key: string) =>
     api.post("/api/v1/profile/me/photos/primary", { key }),
+  // Mark / unmark a photo as Premium (visible only to Premium+ members).
+  setPhotoPremium: (key: string, isPremium: boolean) =>
+    api.post("/api/v1/profile/me/photos/premium", { key, is_premium: isPremium }),
 };
 
 /* ── Chat / Messaging ─────────────────────────────────────────────────

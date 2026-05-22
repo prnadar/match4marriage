@@ -93,7 +93,14 @@ async def websocket_chat(
                 ChatThread.deleted_at.is_(None),
             )
         )).scalar_one_or_none()
+        # Direct messaging is a Premium+ feature — reject Basic (free) members
+        # at connect so they can neither send nor receive on the socket.
+        from app.core.entitlements import can_message, get_user_plan
+        sender_plan = await get_user_plan(db, user_uuid)
     if thread is None or user_uuid not in (thread.user_a_id, thread.user_b_id):
+        await websocket.close(code=4003)
+        return
+    if not can_message(sender_plan):
         await websocket.close(code=4003)
         return
 
@@ -169,6 +176,11 @@ async def _persist_message(thread_id: str, sender_id: str, payload: dict) -> Mes
             )
         )).scalar_one_or_none()
         if thread is None or sender_uuid not in (thread.user_a_id, thread.user_b_id):
+            return None
+        # Defense in depth — Premium+ only. The WS connect already blocks free
+        # members, but never persist a message from an out-of-tier sender.
+        from app.core.entitlements import can_message, get_user_plan
+        if not can_message(await get_user_plan(db, sender_uuid)):
             return None
         msg = Message(
             tenant_id=thread.tenant_id,

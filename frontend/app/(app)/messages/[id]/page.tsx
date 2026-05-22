@@ -8,6 +8,8 @@ import {
 import { chatApi, openChatSocket, ApiError } from "@/lib/api";
 import { firebaseAuth } from "@/lib/firebase";
 import { Portrait } from "@/components/ui/portrait";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { UpgradePanel } from "@/components/ui/upgrade-lock";
 
 interface Message {
   id: string;
@@ -45,6 +47,9 @@ function fmtTime(iso: string): string {
 }
 
 export default function ChatPage({ params }: { params: { id: string } }) {
+  const { entitlements, isLoading: entLoading } = useEntitlements();
+  const messagingLocked = !entLoading && !entitlements.canMessage;
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [other, setOther] = useState<OtherProfile | null>(null);
   const [meId, setMeId] = useState<string | null>(null);
@@ -93,11 +98,19 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     }
   }, [params.id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    // Members who can't message hit the upgrade panel — don't fetch the
+    // thread/history. Wait until entitlements resolve before deciding.
+    if (entLoading) return;
+    if (messagingLocked) { setLoading(false); return; }
+    load();
+  }, [load, entLoading, messagingLocked]);
 
   /* ── Connect WebSocket for live updates + sending ──────────────── */
   useEffect(() => {
     if (!params.id || !meId) return;
+    // Never open the chat socket for a member who can't message.
+    if (entLoading || messagingLocked) return;
     let cancelled = false;
     let socket: WebSocket | null = null;
 
@@ -138,7 +151,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
       if (socket && socket.readyState <= WebSocket.OPEN) socket.close();
       socketRef.current = null;
     };
-  }, [params.id, meId]);
+  }, [params.id, meId, entLoading, messagingLocked]);
 
   /* ── Auto-scroll on new message ────────────────────────────────── */
   useEffect(() => {
@@ -207,13 +220,23 @@ export default function ChatPage({ params }: { params: { id: string } }) {
         {!other && !loading && (
           <div className="flex-1">
             <p className="font-display text-[15px] font-semibold text-[#1a0a14]">Conversation</p>
-            <p className="text-[11px] text-[#6a5560]">{wsConnected ? "Connected" : "Connecting…"}</p>
+            <p className="text-[11px] text-[#6a5560]">
+              {messagingLocked ? "Premium feature" : wsConnected ? "Connected" : "Connecting…"}
+            </p>
           </div>
         )}
       </header>
 
       {/* Body */}
-      {loading ? (
+      {messagingLocked ? (
+        <div className="flex flex-1 items-center justify-center px-6 py-10">
+          <UpgradePanel
+            feature="Premium"
+            title="Direct messaging is a Premium feature"
+            message="Upgrade to Premium to message your matches and reply to their interests."
+          />
+        </div>
+      ) : loading ? (
         <div className="flex flex-1 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-rose-700" />
         </div>

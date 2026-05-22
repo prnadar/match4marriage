@@ -400,6 +400,13 @@ async def get_feature_limits(
 
     limits = PLAN_FEATURE_MAP.get(plan, PLAN_FEATURE_MAP["free"])
 
+    from app.core.entitlements import (
+        can_message,
+        can_use_advanced_filters,
+        can_view_photos,
+        can_view_premium_photos,
+    )
+
     return APIResponse(
         success=True,
         data=FeatureLimits(
@@ -411,5 +418,9 @@ async def get_feature_limits(
             can_view_contact=plan in ("silver", "gold", "platinum"),
             can_incognito_browse=plan in ("gold", "platinum"),
             can_send_voice_note=True,
+            can_message=can_message(plan),
+            can_view_photos=can_view_photos(plan),
+            can_view_premium_photos=can_view_premium_photos(plan),
+            can_use_advanced_filters=can_use_advanced_filters(plan),
         ),
     )

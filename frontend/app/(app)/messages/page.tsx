@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { chatApi } from "@/lib/api";
 import { Portrait } from "@/components/ui/portrait";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { UpgradePanel } from "@/components/ui/upgrade-lock";
 
 interface ChatThread {
   id: string;
@@ -39,6 +41,9 @@ function relativeTime(iso?: string | null): string {
 }
 
 export default function MessagesPage() {
+  const { entitlements, isLoading: entLoading } = useEntitlements();
+  const messagingLocked = !entLoading && !entitlements.canMessage;
+
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +62,13 @@ export default function MessagesPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    // Don't fetch threads for members who can't message — they hit the
+    // upgrade panel, not a request. Wait until entitlements resolve.
+    if (entLoading) return;
+    if (messagingLocked) { setLoading(false); return; }
+    load();
+  }, [load, entLoading, messagingLocked]);
 
   const filtered = threads.filter((t) => {
     if (!search) return true;
@@ -85,6 +96,17 @@ export default function MessagesPage() {
           </p>
         </header>
 
+        {/* Premium gate — replaces the conversation list for Basic members */}
+        {messagingLocked ? (
+          <div className="fade-in-up mt-6">
+            <UpgradePanel
+              feature="Premium"
+              title="Direct messaging is a Premium feature"
+              message="Upgrade to Premium to message your matches and reply to their interests."
+            />
+          </div>
+        ) : (
+        <>
         {/* Search */}
         <div className="fade-in-up mb-5 flex items-center gap-2 rounded-2xl border border-rose-100 bg-white px-4 shadow-[0_2px_10px_rgba(220,30,60,0.04)] focus-within:border-rose-300 focus-within:shadow-[0_4px_16px_rgba(220,30,60,0.10)]" style={{ animationDelay: "60ms" }}>
           <Search className="h-4 w-4 text-rose-700/60" />
@@ -239,6 +261,8 @@ export default function MessagesPage() {
               )}
             </div>
           </>
+        )}
+        </>
         )}
       </div>
     </div>
