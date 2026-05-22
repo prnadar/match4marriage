@@ -995,7 +995,10 @@ function Step2Profile({
     recaptchaRef.current = null;
   }, []);
 
-  const canSendOtp = dob && gender && religion && caste.trim() && motherTongue && education.trim() && profession.trim()
+  // Only DOB, Gender, Mother Tongue, Country + a phone number are mandatory at
+  // onboarding. Religion, caste, education and profession are optional here and
+  // can be completed later on the full profile page.
+  const canSendOtp = dob && gender && motherTongue && country
     && phone.replace(/\D/g, "").length >= 6;
 
   const handleSendOtp = async () => {
@@ -1118,10 +1121,10 @@ function Step2Profile({
         style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 28 }}
       >
         <Row>
-          <Field label="Date of birth">
+          <Field label="Date of birth" required>
             <input type="date" value={dob} onChange={(e) => setDob(e.target.value)} required style={inputStyle} />
           </Field>
-          <Field label="Gender">
+          <Field label="Gender" required>
             <Segmented
               value={gender}
               onChange={setGender}
@@ -1131,27 +1134,27 @@ function Step2Profile({
         </Row>
 
         <Row>
-          <Field label="Religion">
-            <select value={religion} onChange={(e) => setReligion(e.target.value)} required style={selectStyle}>
+          <Field label="Religion" optional>
+            <select value={religion} onChange={(e) => setReligion(e.target.value)} style={selectStyle}>
               <option value="">Select religion</option>
               {RELIGION_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </Field>
-          <Field label="Caste / community">
+          <Field label="Caste / community" optional>
             <input
               type="text" value={caste} onChange={(e) => setCaste(e.target.value)}
-              placeholder="e.g. Nair, Iyer" required style={inputStyle}
+              placeholder="e.g. Nair, Iyer" style={inputStyle}
             />
           </Field>
         </Row>
 
         <Row>
-          <Field label="Country">
+          <Field label="Country" required>
             <select value={country} onChange={(e) => setCountry(e.target.value)} required style={selectStyle}>
               {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </Field>
-          <Field label="Mother tongue">
+          <Field label="Mother tongue" required>
             <select value={motherTongue} onChange={(e) => setMotherTongue(e.target.value)} required style={selectStyle}>
               <option value="">Select language</option>
               {MOTHER_TONGUE_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -1160,23 +1163,23 @@ function Step2Profile({
         </Row>
 
         <Row>
-          <Field label="Education">
+          <Field label="Education" optional>
             <input
               type="text" value={education} onChange={(e) => setEducation(e.target.value)}
-              placeholder="e.g. BSc Computer Science" required style={inputStyle}
+              placeholder="e.g. BSc Computer Science" style={inputStyle}
             />
           </Field>
-          <Field label="Profession">
+          <Field label="Profession" optional>
             <input
               type="text" value={profession} onChange={(e) => setProfession(e.target.value)}
-              placeholder="e.g. Software Engineer" required style={inputStyle}
+              placeholder="e.g. Software Engineer" style={inputStyle}
             />
           </Field>
         </Row>
 
         <div style={{ height: 1, background: "rgba(0,0,0,0.06)", margin: "8px 0" }} />
 
-        <Field icon={Phone} label="Mobile number (for SMS verification)">
+        <Field icon={Phone} label="Mobile number (for SMS verification)" required>
           <div style={phoneShell}>
             <select value={countryCode} onChange={(e) => setCountryCode(e.target.value)} style={countrySelectStyle}>
               {COUNTRY_CODES.map((c, i) => (
@@ -1454,14 +1457,19 @@ function Sub({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Field({ icon: Icon, label, children }: {
+function Field({ icon: Icon, label, children, required, optional }: {
   icon?: any; label: string; children: React.ReactNode;
+  required?: boolean; optional?: boolean;
 }) {
   return (
     <label style={{ display: "block", position: "relative", flex: 1 }}>
       <div style={{
         fontSize: 10.5, fontWeight: 700, color: "#555", letterSpacing: "0.12em", marginBottom: 7,
-      }}>{label}</div>
+      }}>
+        {label}
+        {required && <span style={{ color: "#dc1e3c", marginLeft: 3 }}>*</span>}
+        {optional && <span style={{ color: "#aaa", fontWeight: 600, marginLeft: 5 }}>(optional)</span>}
+      </div>
       <div style={{ position: "relative" }}>
         {Icon && (
           <Icon style={{
