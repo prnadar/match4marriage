@@ -104,6 +104,14 @@ class Settings(BaseSettings):
     # Production validator below explicitly forbids this in production.
     DEMO_MODE: bool = False
 
+    # ── Bootstrap admin emails ────────────────────────────────────────────
+    # Comma-separated list of email addresses that get auto-promoted to admin
+    # the first time they sign in. Saves having to hand-run SQL on a fresh
+    # production deploy. Auto-marks email + phone verified so the (app) gate
+    # doesn't bounce the bootstrap admin to /onboarding either.
+    # Example: BOOTSTRAP_ADMIN_EMAILS=founder@m4m.com,ops@m4m.com
+    BOOTSTRAP_ADMIN_EMAILS: str = ""
+
     # ── Celery ───────────────────────────────────────────────────────────
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"

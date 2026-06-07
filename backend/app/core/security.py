@@ -222,6 +222,25 @@ async def get_current_user(
             detail="Account is disabled",
         )
 
+    # Bootstrap-admin promotion. Set BOOTSTRAP_ADMIN_EMAILS in env as a
+    # comma-separated list (e.g. "founder@yourdomain.com,ops@yourdomain.com")
+    # to auto-promote those accounts to admin the first time they sign in.
+    # Removes the need to hand-run SQL on a fresh deploy. Idempotent: skips
+    # the UPDATE if the user is already admin. Case-insensitive on email.
+    try:
+        from app.core.config import get_settings as _get_settings
+        bootstrap_raw = (_get_settings().BOOTSTRAP_ADMIN_EMAILS or "")
+        bootstrap_set = {e.strip().lower() for e in bootstrap_raw.split(",") if e.strip()}
+        if existing is not None and email and email.lower() in bootstrap_set and not existing.is_admin:
+            existing.is_admin = True
+            # Verified flags too — bootstrap admins skip onboarding gates.
+            existing.is_email_verified = True
+            existing.is_phone_verified = True
+            await db.commit()
+            logger.info("bootstrap_admin_promoted", email=email.lower())
+    except Exception as exc:  # never block sign-in on this
+        logger.warning("bootstrap_admin_promote_failed", error=str(exc))
+
     claims["user_id"] = str(user_uuid)
     claims["sub"] = str(user_uuid)
     claims["phone"] = _normalize_phone(phone)
