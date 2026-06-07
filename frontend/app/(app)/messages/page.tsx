@@ -92,7 +92,7 @@ export default function MessagesPage() {
           </h1>
           <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-[#6a5560]">
             <Shield className="h-3.5 w-3.5 text-rose-700" />
-            End-to-end encrypted · Private and secure
+            Private and secure
           </p>
         </header>
 

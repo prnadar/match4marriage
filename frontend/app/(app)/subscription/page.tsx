@@ -7,6 +7,7 @@ import {
   Lock, Mail,
 } from "lucide-react";
 import { pricingApi, api, ApiError } from "@/lib/api";
+import { useEntitlements } from "@/lib/useEntitlements";
 
 /**
  * Subscription page.
@@ -77,11 +78,20 @@ const TIER_META: Record<string, { kicker: string; icon: React.ReactNode; popular
 };
 
 export default function SubscriptionPage() {
+  const { entitlements, isLoading: entitlementsLoading } = useEntitlements();
   const [plans, setPlans] = useState<RemotePlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payingTier, setPayingTier] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ kind: "success" | "error" | "info"; text: string } | null>(null);
+
+  // "free" → Basic preview; every other tier is a paid plan and gets the
+  // active-pill treatment so members can tell at a glance whether they're
+  // already on a paid tier.
+  const isPaidPlan = !entitlementsLoading && entitlements.plan !== "free";
+  const currentPlanLabel = entitlementsLoading
+    ? "Loading…"
+    : entitlements.planLabel || "Basic";
 
   // Start a PayPal checkout: create the order server-side, then send the
   // member to PayPal's approval page.
@@ -219,12 +229,21 @@ export default function SubscriptionPage() {
             <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-rose-700/70">
               Your current plan
             </p>
-            <p className="font-display mt-0.5 text-[18px] font-semibold text-[#1a0a14]">
-              Free preview
-            </p>
+            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+              <p className="font-display text-[18px] font-semibold text-[#1a0a14] m-0">
+                {currentPlanLabel}
+              </p>
+              {isPaidPlan && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-emerald-700 ring-1 ring-emerald-100">
+                  <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Active
+                </span>
+              )}
+            </div>
             <p className="mt-0.5 text-[12.5px] text-[#6a5560]">
-              You have access to your daily curated matches. Upgrade for unlimited browsing,
-              messaging, and dedicated advisor support.
+              {isPaidPlan
+                ? "Your membership is active. You can upgrade or change plans below."
+                : "You have access to your daily curated matches. Upgrade for unlimited browsing, messaging, and dedicated advisor support."}
             </p>
           </div>
           <Link

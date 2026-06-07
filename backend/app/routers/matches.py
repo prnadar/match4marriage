@@ -19,7 +19,7 @@ from app.core.database import get_db
 from app.core.logging import get_logger
 from app.core.security import get_current_user
 from app.core.tenancy import get_current_tenant_slug
-from app.models.match import Interest, InterestStatus, Match, MatchStatus
+from app.models.match import ChatThread, Interest, InterestStatus, Match, MatchStatus
 from app.models.personality import PersonalityScore
 from app.schemas.common import APIResponse, PaginatedResponse
 from app.schemas.match import (
@@ -134,25 +134,32 @@ async def send_interest(
 
     tenant_uuid = await _resolve_tenant(db, tenant_slug)
 
-    # Expressions-of-interest quota — Basic (free) is capped; Premium+ is
-    # unlimited. Enforced server-side so it can't be bypassed by the client.
+    # Expressions-of-interest quota — Basic (free) is capped per CALENDAR
+    # MONTH; Premium+ is unlimited. The earlier implementation counted
+    # lifetime interests, which permanently blocked a Basic member after
+    # 10 interests (even after upgrading + downgrading). Server-enforced so
+    # the client can't bypass.
+    from datetime import datetime, timezone
     from app.core.entitlements import get_user_plan, interest_limit
     plan = await get_user_plan(db, sender_id)
     limit = interest_limit(plan)
     if limit is not None:
+        now = datetime.now(timezone.utc)
+        period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         sent_count = (await db.execute(
             select(func.count()).select_from(Interest).where(
                 Interest.sender_id == sender_id,
                 Interest.tenant_id == tenant_uuid,
                 Interest.deleted_at.is_(None),
+                Interest.created_at >= period_start,
             )
         )).scalar_one()
         if sent_count >= limit:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
-                    f"You've reached the Basic plan limit of {limit} expressions "
-                    "of interest. Upgrade to Premium for unlimited."
+                    f"You've reached this month's Basic plan limit of {limit} "
+                    "expressions of interest. Upgrade to Premium for unlimited."
                 ),
             )
 
@@ -192,13 +199,91 @@ async def send_interest(
             Interest.deleted_at.is_(None),
         )
     )
-    if reverse.scalar_one_or_none():
+    reverse_row = reverse.scalar_one_or_none()
+    if reverse_row:
         interest.status = InterestStatus.ACCEPTED
-        logger.info("mutual_interest", user_a=str(sender_id), user_b=str(receiver_id))
-        # TODO Sprint 3: create ChatThread + send push notification
+        reverse_row.status = InterestStatus.ACCEPTED
+        # Create the ChatThread that unlocks messaging for the pair (skip if
+        # one already exists — the unique constraint guarantees a single
+        # row per (tenant, ordered pair)). Without this, the messaging UI
+        # was a dead end even for Premium members because /chats always
+        # returned an empty list.
+        a_id, b_id = sorted([sender_id, receiver_id], key=str)
+        existing_thread = await db.execute(
+            select(ChatThread).where(
+                ChatThread.tenant_id == tenant_uuid,
+                ChatThread.user_a_id == a_id,
+                ChatThread.user_b_id == b_id,
+                ChatThread.deleted_at.is_(None),
+            )
+        )
+        if existing_thread.scalar_one_or_none() is None:
+            db.add(ChatThread(
+                tenant_id=tenant_uuid,
+                user_a_id=a_id,
+                user_b_id=b_id,
+                match_id=payload.match_id,
+            ))
+            await db.flush()
+        logger.info("mutual_interest_chat_unlocked", user_a=str(sender_id), user_b=str(receiver_id))
 
     logger.info("interest_sent", sender=str(sender_id), receiver=str(receiver_id))
     return APIResponse(success=True, data=InterestRead.model_validate(interest))
+
+
+async def _hydrate_profile_cards(
+    db: AsyncSession,
+    user_ids: list[uuid.UUID],
+    tenant_uuid: uuid.UUID,
+) -> dict[uuid.UUID, dict]:
+    """Look up a minimal profile card for each user id and return a dict
+    keyed by user_id. Used by the interest endpoints so the frontend can
+    render the other party's name/age/city without N+1 round-trips —
+    without this the UI used to show "Unknown / age 0" for every row."""
+    if not user_ids:
+        return {}
+    from app.models.user import UserProfile
+
+    unique_ids = list({uid for uid in user_ids if uid})
+    rows = (await db.execute(
+        select(UserProfile).where(
+            UserProfile.user_id.in_(unique_ids),
+            UserProfile.tenant_id == tenant_uuid,
+            UserProfile.deleted_at.is_(None),
+        )
+    )).scalars().all()
+
+    today = date.today()
+    out: dict[uuid.UUID, dict] = {}
+    for p in rows:
+        age: int | None = None
+        if p.date_of_birth:
+            age = today.year - p.date_of_birth.year - (
+                (today.month, today.day) < (p.date_of_birth.month, p.date_of_birth.day)
+            )
+        # Pick a non-premium primary photo URL (premium never the card thumb).
+        primary_photo_url: str | None = None
+        photos = p.photos or []
+        main = [ph for ph in photos if not ph.get("is_premium")]
+        for ph in main:
+            if ph.get("is_primary"):
+                primary_photo_url = ph.get("url")
+                break
+        if not primary_photo_url and main:
+            primary_photo_url = main[0].get("url")
+        out[p.user_id] = {
+            "user_id": p.user_id,
+            "first_name": p.first_name,
+            "age": age,
+            "city": p.city,
+            "state": p.state,
+            "occupation": p.occupation,
+            "education_level": p.education_level,
+            "religion": p.religion,
+            "primary_photo_url": primary_photo_url,
+            "completeness_score": p.completeness_score,
+        }
+    return out
 
 
 @router.get("/interests/received", response_model=PaginatedResponse[InterestRead])
@@ -234,9 +319,17 @@ async def get_received_interests(
     )
     interests = result.scalars().all()
 
-    return PaginatedResponse.create(
-        [InterestRead.model_validate(i) for i in interests], total, page, limit
-    )
+    # Hydrate the senders so the UI doesn't render "Unknown".
+    cards = await _hydrate_profile_cards(db, [i.sender_id for i in interests], tenant_uuid)
+    items = []
+    for i in interests:
+        reads = InterestRead.model_validate(i)
+        if i.sender_id in cards:
+            from app.schemas.user import ProfileCard
+            reads.sender_profile = ProfileCard.model_validate(cards[i.sender_id])
+        items.append(reads)
+
+    return PaginatedResponse.create(items, total, page, limit)
 
 
 @router.get("/interests/sent", response_model=PaginatedResponse[InterestRead])
@@ -273,9 +366,16 @@ async def get_sent_interests(
     )
     interests = result.scalars().all()
 
-    return PaginatedResponse.create(
-        [InterestRead.model_validate(i) for i in interests], total, page, limit
-    )
+    cards = await _hydrate_profile_cards(db, [i.receiver_id for i in interests], tenant_uuid)
+    items = []
+    for i in interests:
+        reads = InterestRead.model_validate(i)
+        if i.receiver_id in cards:
+            from app.schemas.user import ProfileCard
+            reads.receiver_profile = ProfileCard.model_validate(cards[i.receiver_id])
+        items.append(reads)
+
+    return PaginatedResponse.create(items, total, page, limit)
 
 
 @router.post("/quiz/submit", response_model=APIResponse[CompatibilityScoreRead])

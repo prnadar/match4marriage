@@ -34,6 +34,9 @@ structlog==24.4.0
 # Rate limiting (in-memory on serverless — best-effort)
 slowapi==0.1.9
 
+# Observability — Sentry is a no-op unless SENTRY_DSN is set.
+sentry-sdk[fastapi]==2.19.2
+
 # Utilities
 python-multipart==0.0.18
 python-dotenv==1.0.1

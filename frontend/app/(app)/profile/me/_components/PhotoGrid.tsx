@@ -125,6 +125,16 @@ export function PhotoGrid() {
         form.append("signature", params.signature);
         form.append("folder", params.folder);
         form.append("public_id", params.public_id);
+        // The backend now signs `max_file_size` + `allowed_formats` alongside
+        // the existing fields — the FormData MUST include every signed value
+        // verbatim or Cloudinary rejects the signature. Both are guarded so
+        // an older backend (dev) that doesn't send them still uploads cleanly.
+        if (params.max_file_size !== undefined && params.max_file_size !== null) {
+          form.append("max_file_size", String(params.max_file_size));
+        }
+        if (params.allowed_formats) {
+          form.append("allowed_formats", String(params.allowed_formats));
+        }
 
         const cldRes = await fetch(params.upload_url, { method: "POST", body: form });
         if (!cldRes.ok) {

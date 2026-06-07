@@ -47,6 +47,9 @@ class InterestRead(TimestampedSchema):
     message: str | None
     responded_at: datetime | None
     sender_profile: ProfileCard | None = None
+    # Populated on /interests/sent so the UI can render the recipient card
+    # the same way it renders the sender on /interests/received.
+    receiver_profile: ProfileCard | None = None
 
 
 class ChatThreadRead(TimestampedSchema):

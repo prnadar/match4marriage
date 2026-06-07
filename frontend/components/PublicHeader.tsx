@@ -20,6 +20,15 @@ interface PublicHeaderProps {
    * full-viewport video hero.
    */
   transparentUntil?: number;
+  /**
+   * `"public"` (default) — full marketing nav (Home, Browse Profiles, Success
+   * Stories, Pricing, About Us, Help).
+   * `"app"` — used inside the logged-in member shell. Drops the marketing
+   * links + the mobile drawer's marketing sections (the sidebar covers
+   * member navigation); only the brand bar, logo, and signed-in actions
+   * (Bell / Messages / Avatar) remain.
+   */
+  variant?: "public" | "app";
 }
 
 type AuthSnapshot =
@@ -27,7 +36,8 @@ type AuthSnapshot =
   | { status: "anonymous" }
   | { status: "signed-in"; initial: string };
 
-export default function PublicHeader({ transparent = false, transparentUntil }: PublicHeaderProps = {}) {
+export default function PublicHeader({ transparent = false, transparentUntil, variant = "public" }: PublicHeaderProps = {}) {
+  const isAppVariant = variant === "app";
   const pathname = usePathname();
   const [helpOpen, setHelpOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -129,7 +139,9 @@ export default function PublicHeader({ transparent = false, transparentUntil }: 
           </Link>
 
           {/* Desktop nav (centre column — auto-centred regardless of side widths).
-              Display + layout owned by the .m4m-nav__center rule in globals.css. */}
+              Display + layout owned by the .m4m-nav__center rule in globals.css.
+              Hidden in the app variant — members have their own sidebar. */}
+          {!isAppVariant && (
           <div className="m4m-nav__center">
             {navLinks.map(({ label, href }) => (
               <Link
@@ -187,6 +199,7 @@ export default function PublicHeader({ transparent = false, transparentUntil }: 
               </AnimatePresence>
             </div>
           </div>
+          )}
 
           {/* Right column — auth-aware: signed-in users get Bell/Messages/Avatar,
               anonymous visitors get Log In + Register CTAs. While auth is
@@ -227,7 +240,11 @@ export default function PublicHeader({ transparent = false, transparentUntil }: 
               </>
             ) : null}
 
-            {/* Burger — visibility owned by .m4m-nav__burger media query in globals.css */}
+            {/* Burger — visibility owned by .m4m-nav__burger media query in globals.css.
+                In the app variant the member sidebar drawer has its own opener
+                (a floating button in (app)/layout.tsx), so we hide this one
+                to avoid a confusing second hamburger on mobile. */}
+            {!isAppVariant && (
             <button
               type="button"
               className="m4m-nav__burger"
@@ -239,12 +256,14 @@ export default function PublicHeader({ transparent = false, transparentUntil }: 
               <span className="m4m-nav__burger-bar" data-state={mobileOpen ? "open-2" : "closed"} />
               <span className="m4m-nav__burger-bar" data-state={mobileOpen ? "open-3" : "closed"} />
             </button>
+            )}
           </div>
         </div>
 
-        {/* Mobile drawer */}
+        {/* Mobile drawer — only the public variant carries marketing links;
+            the app variant suppresses this entirely (members use the sidebar). */}
         <AnimatePresence initial={false}>
-          {mobileOpen && (
+          {!isAppVariant && mobileOpen && (
             <motion.div
               key="mobile-drawer"
               initial={{ opacity: 0, height: 0 }}

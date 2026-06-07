@@ -6,6 +6,7 @@ tenant_id is injected into every request context and stamped on all DB rows.
 Lookup order: X-Tenant-ID header → subdomain → default tenant.
 """
 import contextvars
+import re
 from uuid import UUID
 
 from fastapi import Request
@@ -17,6 +18,20 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 settings = get_settings()
+
+# Cheap structural validation for incoming tenant slugs. The header is
+# unauthenticated input, so we shape-check here BEFORE it goes anywhere
+# near a DB query. Any slug that doesn't match falls through to the
+# default tenant. Real tenant existence is enforced at DB-resolve time
+# (profile._resolve_tenant_uuid no longer auto-provisions on miss).
+_VALID_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
+
+
+def _sanitize_slug(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    slug = raw.strip().lower()
+    return slug if _VALID_SLUG.match(slug) else None
 
 # Request-scoped tenant context
 _current_tenant_id: contextvars.ContextVar[UUID | None] = contextvars.ContextVar(
@@ -63,17 +78,18 @@ class TenantMiddleware(BaseHTTPMiddleware):
             _current_tenant_slug.reset(token_slug)
 
     async def _resolve_tenant_slug(self, request: Request) -> str | None:
-        # 1. Explicit header (for API clients / mobile apps)
-        if header_val := request.headers.get(settings.TENANT_HEADER):
-            return header_val.lower()
+        # 1. Explicit header (for API clients / mobile apps). Shape-validate.
+        header_slug = _sanitize_slug(request.headers.get(settings.TENANT_HEADER))
+        if header_slug:
+            return header_slug
 
         # 2. Subdomain: match4marriage.com → default, bureau-xyz.match4marriage.com → bureau-xyz
         host = request.headers.get("host", "").split(":")[0]
         parts = host.split(".")
         if len(parts) >= 3:
-            subdomain = parts[0].lower()
-            if subdomain not in ("www", "api"):
-                return subdomain
+            sub = _sanitize_slug(parts[0])
+            if sub and sub not in ("www", "api"):
+                return sub
 
         # 3. Fall back to default tenant
         return settings.DEFAULT_TENANT_SLUG

@@ -20,6 +20,8 @@ interface InterestProfile {
   time: string;
   verified: boolean;
   status?: string;
+  /** Cloudinary URL when the backend hydrated sender/receiver_profile. */
+  photoUrl?: string | null;
 }
 
 const GRADIENTS = [
@@ -56,23 +58,50 @@ function timeAgo(dateStr: string): string {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function mapInterest(p: any, idx: number): InterestProfile {
-  const firstName = p.first_name || p.firstName || "";
-  const lastName = p.last_name || p.lastName || "";
-  const name = `${firstName} ${lastName}`.trim() || p.name || "Unknown";
+/**
+ * Normalise a row from /interests/{received,sent}.
+ *
+ * Backend now hydrates `sender_profile` (received) and `receiver_profile`
+ * (sent) on each row with first_name / age / city / primary_photo_url etc.
+ * We prefer that nested profile when present and fall back to top-level
+ * fields for any older row shape so a transient backend mismatch doesn't
+ * render a wall of "Unknown".
+ *
+ * `direction` tells us which side to read:
+ *   - "received" → the OTHER party is the sender
+ *   - "sent"     → the OTHER party is the receiver
+ */
+function mapInterest(p: any, idx: number, direction: "received" | "sent"): InterestProfile {
+  const nested =
+    (direction === "received" ? p.sender_profile : p.receiver_profile) ||
+    p.profile || // legacy / generic fallback
+    null;
+
+  const firstName = nested?.first_name || p.first_name || p.firstName || "";
+  const lastName  = nested?.last_name  || p.last_name  || p.lastName  || "";
+  const name = `${firstName} ${lastName}`.trim() || nested?.name || p.name || "Member";
+
+  const otherUserId =
+    nested?.user_id ||
+    nested?.id ||
+    (direction === "received" ? p.sender_id : p.receiver_id) ||
+    p.id ||
+    String(idx);
+
   return {
-    id: p.id || p.user_id || p.sender_id || p.receiver_id || String(idx),
+    id: otherUserId,
     name,
     initials: getInitials(name),
     grad: GRADIENTS[idx % GRADIENTS.length],
-    age: p.age ?? 0,
-    city: p.city || p.location || "",
-    profession: p.profession || p.occupation || "",
-    company: p.company || "",
-    compatibility: p.compatibility ?? p.match_score ?? 0,
+    age: nested?.age ?? p.age ?? 0,
+    city: nested?.city || nested?.location || p.city || p.location || "",
+    profession: nested?.profession || nested?.occupation || p.profession || p.occupation || "",
+    company: nested?.company || p.company || "",
+    compatibility: nested?.compatibility ?? p.compatibility ?? p.match_score ?? 0,
     time: p.created_at ? timeAgo(p.created_at) : p.time || "",
-    verified: p.is_verified ?? p.verified ?? false,
+    verified: nested?.is_verified ?? p.is_verified ?? p.verified ?? false,
     status: p.status || "pending",
+    photoUrl: nested?.primary_photo_url ?? null,
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -107,12 +136,12 @@ export default function InterestsPage() {
         // PaginatedResponse envelope: items live at `.data.data`.
         if (recRes.status === "fulfilled") {
           const list: any[] = (recRes.value.data as any)?.data ?? [];
-          setReceivedList(list.map(mapInterest));
+          setReceivedList(list.map((row, i) => mapInterest(row, i, "received")));
         }
 
         if (sentRes.status === "fulfilled") {
           const list: any[] = (sentRes.value.data as any)?.data ?? [];
-          setSentList(list.map(mapInterest));
+          setSentList(list.map((row, i) => mapInterest(row, i, "sent")));
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Failed to load interests";
@@ -241,12 +270,17 @@ export default function InterestsPage() {
                       style={{
                         width: "56px", height: "56px", borderRadius: "50%",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        background: profile.grad, flexShrink: 0,
+                        background: profile.photoUrl
+                          ? `url(${profile.photoUrl}) center/cover no-repeat, ${profile.grad}`
+                          : profile.grad,
+                        flexShrink: 0,
                       }}
                     >
-                      <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "17px", fontWeight: 600, color: "#fff" }}>
-                        {profile.initials}
-                      </span>
+                      {!profile.photoUrl && (
+                        <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "17px", fontWeight: 600, color: "#fff" }}>
+                          {profile.initials}
+                        </span>
+                      )}
                     </div>
 
                     <div style={{ flex: 1, minWidth: "140px" }}>
@@ -373,12 +407,17 @@ export default function InterestsPage() {
                       style={{
                         width: "56px", height: "56px", borderRadius: "50%",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        background: profile.grad, flexShrink: 0,
+                        background: profile.photoUrl
+                          ? `url(${profile.photoUrl}) center/cover no-repeat, ${profile.grad}`
+                          : profile.grad,
+                        flexShrink: 0,
                       }}
                     >
-                      <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "17px", fontWeight: 600, color: "#fff" }}>
-                        {profile.initials}
-                      </span>
+                      {!profile.photoUrl && (
+                        <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "17px", fontWeight: 600, color: "#fff" }}>
+                          {profile.initials}
+                        </span>
+                      )}
                     </div>
 
                     <div style={{ flex: 1, minWidth: "140px" }}>
@@ -475,12 +514,16 @@ export default function InterestsPage() {
                       style={{
                         width: "56px", height: "56px", borderRadius: "50%",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        background: profile.grad,
+                        background: profile.photoUrl
+                          ? `url(${profile.photoUrl}) center/cover no-repeat, ${profile.grad}`
+                          : profile.grad,
                       }}
                     >
-                      <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "17px", fontWeight: 600, color: "#fff" }}>
-                        {profile.initials}
-                      </span>
+                      {!profile.photoUrl && (
+                        <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "17px", fontWeight: 600, color: "#fff" }}>
+                          {profile.initials}
+                        </span>
+                      )}
                     </div>
                     <div
                       style={{

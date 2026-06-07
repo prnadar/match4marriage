@@ -25,10 +25,14 @@ interface Plan {
   sort_order: number;
 }
 
-const TIERS: Array<{ key: Tier; label: string; color: string }> = [
-  { key: "silver",   label: "Silver",   color: "#7d8a93" },
-  { key: "gold",     label: "Gold",     color: "#c9954a" },
-  { key: "platinum", label: "Platinum", color: "#5d4b8a" },
+// Tier metadata. `label` is the marketing name members see on /pricing — we
+// surface it everywhere in this admin UI so operators don't have to remember
+// the silver/gold/platinum → Premium/Elite/VIP mapping. `slug` is the raw
+// backend tier value (kept beneath the label as a subtitle for diagnostics).
+const TIERS: Array<{ key: Tier; label: string; slug: string; color: string }> = [
+  { key: "silver",   label: "Premium",       slug: "silver",   color: "#7d8a93" },
+  { key: "gold",     label: "Elite",         slug: "gold",     color: "#c9954a" },
+  { key: "platinum", label: "VIP Concierge", slug: "platinum", color: "#5d4b8a" },
 ];
 
 const PERIODS: Array<{ key: Period; label: string }> = [
@@ -210,15 +214,24 @@ export default function AdminPricingPage() {
                   <GripVertical style={{ width: 14, height: 14 }} />
                 </div>
 
-                {/* Tier chip */}
+                {/* Tier chip — marketing label primary, raw slug muted beneath */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginLeft: 22, marginBottom: 12 }}>
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em",
-                    padding: "3px 10px", borderRadius: 999,
-                    background: `${meta.color}22`, color: meta.color,
-                  }}>
-                    {meta.label}
-                  </span>
+                  <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em",
+                      padding: "3px 10px", borderRadius: 999,
+                      background: `${meta.color}22`, color: meta.color,
+                    }}>
+                      {meta.label}
+                    </span>
+                    <span style={{
+                      fontSize: 9, fontWeight: 600, color: "#a99",
+                      letterSpacing: "0.06em", fontFamily: "monospace",
+                      paddingLeft: 4,
+                    }}>
+                      {meta.slug}
+                    </span>
+                  </div>
                   <span style={{
                     fontSize: 10, fontWeight: 600, color: p.is_active ? "#3F5937" : "#999",
                     display: "inline-flex", alignItems: "center", gap: 4,
@@ -417,7 +430,7 @@ function PlanEditor({
                 <input
                   value={draft.name}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  placeholder="e.g. Gold"
+                  placeholder="e.g. Elite"
                   style={inputStyle}
                 />
               </Field>
@@ -425,7 +438,7 @@ function PlanEditor({
                 <input
                   value={draft.key}
                   onChange={(e) => setDraft({ ...draft, key: e.target.value.toLowerCase() })}
-                  placeholder="e.g. gold-monthly"
+                  placeholder="e.g. elite-monthly"
                   disabled={!isNew}
                   style={{ ...inputStyle, fontFamily: "monospace", opacity: isNew ? 1 : 0.6 }}
                 />
@@ -439,7 +452,9 @@ function PlanEditor({
                   onChange={(e) => setDraft({ ...draft, tier: e.target.value as Tier })}
                   style={inputStyle}
                 >
-                  {TIERS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                  {TIERS.map((t) => (
+                    <option key={t.key} value={t.key}>{t.label} ({t.slug})</option>
+                  ))}
                 </select>
               </Field>
               <Field label="Period">

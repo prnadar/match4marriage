@@ -88,7 +88,7 @@ const comparisonRows: { feature: string; cover: [Cover, Cover, Cover, Cover] }[]
   { feature: "Priority placement",               cover: ["no",  "yes", "yes", "elite"] },
   { feature: "Dedicated relationship advisor",   cover: ["no",  "no",  "yes", "elite"] },
   { feature: "Background verification",          cover: ["no",  "no",  "yes", "elite"] },
-  { feature: "Privacy shield",                   cover: ["yes", "no",  "yes", "elite"] },
+  { feature: "Privacy shield",                   cover: ["no",  "yes", "yes", "elite"] },
   { feature: "WhatsApp support",                 cover: ["no",  "no",  "yes", "elite"] },
   { feature: "Featured placement",               cover: ["no",  "no",  "yes", "elite"] },
   { feature: "Profile boosting (4× / month)",    cover: ["no",  "no",  "yes", "elite"] },

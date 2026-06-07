@@ -1,16 +1,14 @@
 "use client";
 
 /**
- * Onboarding — 3-step sign-up optimised for UK-Indian matrimony market.
+ * Onboarding — 2-step sign-up optimised for UK-Indian matrimony market.
  *
- *   Step 1: Create account  — Email + password + full name.
- *                             Firebase createUserWithEmailAndPassword.
- *   Step 2: About you       — DOB, gender, religion, caste, mother tongue,
- *                             country, education, profession + phone OTP.
- *                             Phone is linked to the existing user via
- *                             linkWithCredential (same Firebase UID,
- *                             multiple auth providers).
- *   Step 3: Verify identity — Unchanged ID upload step.
+ *   Step 1: Create account — Email + password + full name, then a 6-digit
+ *                            email verification OTP.
+ *   Step 2: About you      — Core profile basics + phone OTP. Lands the
+ *                            member on /dashboard. ID verification is now
+ *                            an opt-in step on the profile page rather
+ *                            than a mandatory onboarding gate.
  *
  * After completion the user has both email/password AND phone auth on
  * the same Firebase account. They can sign in with either on /auth/login.
@@ -21,8 +19,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Heart, User as UserIcon, Phone, Shield, Mail, Lock, Eye, EyeOff,
-  ArrowRight, ArrowLeft, Check, AlertCircle, Loader2, Upload, BadgeCheck,
+  Heart, User as UserIcon, Phone, Mail, Lock, Eye, EyeOff,
+  ArrowRight, ArrowLeft, Check, AlertCircle, Loader2,
 } from "lucide-react";
 import {
   createUserWithEmailAndPassword,
@@ -38,9 +36,8 @@ import { api } from "@/lib/api";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { id: 1, label: "Create account",  icon: UserIcon, hint: "Start with your email & password"       },
-  { id: 2, label: "About you",       icon: Phone,    hint: "Profile basics + phone verification"     },
-  { id: 3, label: "Verify identity", icon: Shield,   hint: "A moment of formality for everyone's safety" },
+  { id: 1, label: "Create account", icon: UserIcon, hint: "Start with your email & password"   },
+  { id: 2, label: "About you",      icon: Phone,    hint: "Profile basics + phone verification" },
 ] as const;
 
 const COUNTRY_CODES = [
@@ -130,7 +127,7 @@ function OnboardingHeroSlideshow() {
 export default function OnboardingPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2>(1);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -159,14 +156,14 @@ export default function OnboardingPage() {
         const p = (res.data as any)?.data;
         const hasProfile = !!(p && p.first_name && String(p.first_name).trim());
         const hasPhone   = !!(user.phoneNumber && user.phoneNumber.trim());
-        const idUploaded = p?.visa_status === "id_uploaded";
 
-        if (hasProfile && hasPhone && idUploaded) {
+        // ID verification is no longer part of onboarding — a profile +
+        // a verified phone is enough to enter the app.
+        if (hasProfile && hasPhone) {
           router.replace("/dashboard");
           return;
         }
-        if (hasProfile && hasPhone) { setStep(3); return; }
-        if (hasProfile)             { setStep(2); return; }
+        if (hasProfile) { setStep(2); return; }
         // Signed in but profile bootstrap never finished — back to step 1.
       } catch {
         // Backend unreachable — leave the user on step 1 to retry.
@@ -356,7 +353,13 @@ export default function OnboardingPage() {
         if (payload.gender) localStorage.setItem("user_gender", payload.gender.toLowerCase());
       } catch { /* private mode / quota — non-fatal */ }
 
-      setStep(3);
+      // Onboarding is now 2 steps — go straight to the dashboard. Members
+      // can verify ID later from their profile page.
+      try {
+        localStorage.setItem("onboarding_completed", "true");
+        localStorage.removeItem("onboarding_step");
+      } catch { /* non-fatal */ }
+      router.push("/dashboard");
       return true;
     } catch (e: any) {
       setError(e?.message || "Could not save your profile. Please try again.");
@@ -364,83 +367,7 @@ export default function OnboardingPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  // ─── Step 3 → finish ────────────────────────────────────────────────────
-
-  // Upload one file to Cloudinary via a signed URL. Used by step 3 to
-  // attach the ID front, back (if needed), and the selfie to the
-  // Verification record on the backend. Mirrors the photo upload flow
-  // in PhotoGrid.tsx; the only difference is category=verifications so
-  // the files land in a separate folder than profile photos.
-  const uploadVerificationFile = useCallback(async (file: File): Promise<{ url: string; key: string }> => {
-    const sig = await api.post<{ data: any }>(
-      `/api/v1/profile/photos/upload-url?content_type=${encodeURIComponent(file.type)}&category=verifications`
-    );
-    const params = (sig.data as any)?.data;
-    if (!params?.upload_url) throw new Error("Could not get upload URL");
-    const form = new FormData();
-    form.append("file", file);
-    form.append("api_key", params.api_key);
-    form.append("timestamp", String(params.timestamp));
-    form.append("signature", params.signature);
-    form.append("folder", params.folder);
-    form.append("public_id", params.public_id);
-    const cldRes = await fetch(params.upload_url, { method: "POST", body: form });
-    if (!cldRes.ok) {
-      const txt = await cldRes.text();
-      let msg = `Upload failed (${cldRes.status})`;
-      try { msg = JSON.parse(txt)?.error?.message || msg; } catch {}
-      throw new Error(msg);
-    }
-    const cld = await cldRes.json() as { secure_url: string; public_id: string };
-    return { url: cld.secure_url, key: cld.public_id };
-  }, []);
-
-  const handleFinish = useCallback(async (payload: {
-    docCountry: string;
-    docType: string;
-    docNumber: string;
-    frontFile: File;
-    backFile: File | null;
-    selfieFile: File;
-  }) => {
-    setLoading(true);
-    setError("");
-    try {
-      // 1. Upload each file to Cloudinary (front, optional back, selfie).
-      const [front, selfie, back] = await Promise.all([
-        uploadVerificationFile(payload.frontFile),
-        uploadVerificationFile(payload.selfieFile),
-        payload.backFile ? uploadVerificationFile(payload.backFile) : Promise.resolve(null),
-      ]);
-
-      // 2. Persist a Verification record. The backend also flips
-      //    visa_status to "id_uploaded" so we don't need a separate PATCH.
-      await api.post("/api/v1/profile/me/verifications/submit", {
-        doc_type:    payload.docType,
-        doc_country: payload.docCountry,
-        doc_number:  payload.docNumber.trim(),
-        front_url:   front.url,
-        front_key:   front.key,
-        back_url:    back?.url,
-        back_key:    back?.key,
-        selfie_url:  selfie.url,
-        selfie_key:  selfie.key,
-      });
-
-      // 3. Done — mark onboarding complete and go to the dashboard.
-      try {
-        localStorage.setItem("onboarding_completed", "true");
-        localStorage.removeItem("onboarding_step");
-      } catch { /* private mode / quota — non-fatal */ }
-      router.push("/dashboard");
-    } catch (e: any) {
-      setError(e?.message || "Could not submit your verification. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, [router, uploadVerificationFile]);
+  }, [router]);
 
   const currentStep = STEPS[step - 1];
 
@@ -516,7 +443,6 @@ export default function OnboardingPage() {
           }}>
             {step === 1 && <>Create your account.</>}
             {step === 2 && <>Tell us about you.</>}
-            {step === 3 && <>One last thing.</>}
           </h1>
           <p style={{
             fontSize: 16, lineHeight: 1.6, color: "rgba(255,255,255,0.75)",
@@ -599,14 +525,6 @@ export default function OnboardingPage() {
               setError={setError}
             />
           )}
-          {step === 3 && (
-            <Step3IdVerify
-              key="s3"
-              loading={loading}
-              onSubmit={handleFinish}
-              onBack={() => setStep(2)}
-            />
-          )}
         </AnimatePresence>
 
         <div style={{
@@ -670,7 +588,7 @@ function Step1CreateAccount({
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.35, ease: EASE }}
     >
-      <Eyebrow>Your Details · Step 1 of 3</Eyebrow>
+      <Eyebrow>Your Details · Step 1 of 2</Eyebrow>
       <H2>Create your account</H2>
       <Sub>We&apos;ll use your email for important updates and as your primary sign-in.</Sub>
 
@@ -849,7 +767,7 @@ function Step1VerifyEmail({
         <ArrowLeft style={{ width: 13, height: 13 }} /> Back
       </button>
 
-      <Eyebrow>Verify · Step 2 of 3</Eyebrow>
+      <Eyebrow>Verify · Step 1 of 2</Eyebrow>
       <H2>Check your email</H2>
       <Sub>
         We&apos;ve sent a 6-digit verification code to{" "}
@@ -995,14 +913,35 @@ function Step2Profile({
     recaptchaRef.current = null;
   }, []);
 
+  // UK matrimony compliance: members must be 18+. We check DOB client-side
+  // here AND surface the same message in-line so a too-young DOB blocks
+  // "Send code" rather than letting the user complete phone verification
+  // and only discovering the failure when the profile PATCH gets rejected.
+  const ageFromDob = (() => {
+    if (!dob) return null;
+    const d = new Date(dob);
+    if (isNaN(d.getTime())) return null;
+    const now = new Date();
+    let age = now.getFullYear() - d.getFullYear();
+    const m = now.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+    return age;
+  })();
+  const isUnder18 = ageFromDob !== null && ageFromDob < 18;
+
   // Only DOB, Gender, Mother Tongue, Country + a phone number are mandatory at
   // onboarding. Religion, caste, education and profession are optional here and
   // can be completed later on the full profile page.
-  const canSendOtp = dob && gender && motherTongue && country
+  const canSendOtp = dob && !isUnder18 && gender && motherTongue && country
     && phone.replace(/\D/g, "").length >= 6;
 
   const handleSendOtp = async () => {
     setError("");
+    if (isUnder18) {
+      setError("You must be 18 or over to use Match4Marriage.");
+      setOtpState("idle");
+      return;
+    }
     setOtpState("sending");
     try {
       const user = firebaseAuth.currentUser;
@@ -1070,13 +1009,17 @@ function Step2Profile({
     >
       <div id="recaptcha-onboarding" />
 
-      <Eyebrow>Step 2 of 3</Eyebrow>
+      <Eyebrow>Step 2 of 2</Eyebrow>
       <H2>About you</H2>
       <Sub>Core details that help us find meaningful matches.</Sub>
 
       <form
         onSubmit={async (e) => {
           e.preventDefault();
+          if (isUnder18) {
+            setError("You must be 18 or over to use Match4Marriage.");
+            return;
+          }
           if (!canSubmit || !confirmationRef.current) return;
           setOtpState("verifying");
           // The phone link happens inside confirmPhone (called by the parent
@@ -1122,7 +1065,30 @@ function Step2Profile({
       >
         <Row>
           <Field label="Date of birth" required>
-            <input type="date" value={dob} onChange={(e) => setDob(e.target.value)} required style={inputStyle} />
+            <input
+              type="date"
+              value={dob}
+              onChange={(e) => setDob(e.target.value)}
+              required
+              // Hard cap: today minus 18 years. Browsers honour `max` on date
+              // inputs so the picker won't even offer an under-18 DOB.
+              max={(() => {
+                const d = new Date();
+                d.setFullYear(d.getFullYear() - 18);
+                return d.toISOString().slice(0, 10);
+              })()}
+              style={inputStyle}
+              aria-invalid={isUnder18 || undefined}
+            />
+            {isUnder18 && (
+              <p style={{
+                marginTop: 6, fontSize: 12, color: "#a0153c", lineHeight: 1.45,
+                display: "flex", alignItems: "flex-start", gap: 6,
+              }}>
+                <AlertCircle style={{ width: 12, height: 12, marginTop: 2, flexShrink: 0 }} />
+                You must be 18 or over to use Match4Marriage.
+              </p>
+            )}
           </Field>
           <Field label="Gender" required>
             <Segmented
@@ -1261,159 +1227,6 @@ function Step2Profile({
         </div>
       </form>
     </motion.div>
-  );
-}
-
-// ─── STEP 3 ─────────────────────────────────────────────────────────────────
-
-const DOCUMENTS_BY_COUNTRY: Record<string, string[]> = {
-  "United Kingdom":  ["Passport", "UK Driving Licence", "BRP", "National ID"],
-  "India":           ["Passport", "Driving Licence", "Voter ID", "Aadhaar (masked)"],
-  "United States":   ["Passport", "US Driver's License", "State ID"],
-  "Other":           ["Passport", "National ID", "Driving Licence"],
-};
-
-type Step3Payload = {
-  docCountry: string;
-  docType: string;
-  docNumber: string;
-  frontFile: File;
-  backFile: File | null;
-  selfieFile: File;
-};
-
-function Step3IdVerify({
-  loading, onSubmit, onBack,
-}: {
-  loading: boolean; onSubmit: (payload: Step3Payload) => void; onBack: () => void;
-}) {
-  const [docCountry, setDocCountry] = useState("United Kingdom");
-  const [docType, setDocType] = useState("");
-  const [docNumber, setDocNumber] = useState("");
-  const [frontFile, setFrontFile] = useState<File | null>(null);
-  const [selfieFile, setSelfieFile] = useState<File | null>(null);
-
-  const needsBack = !!docType && docType !== "Passport";
-  const [backFile, setBackFile] = useState<File | null>(null);
-
-  const available = DOCUMENTS_BY_COUNTRY[docCountry] || DOCUMENTS_BY_COUNTRY["Other"];
-  const canSubmit = !!(docCountry && docType && docNumber.trim() && frontFile && selfieFile && (!needsBack || backFile) && !loading);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.35, ease: EASE }}
-    >
-      <Eyebrow>Step 3 of 3</Eyebrow>
-      <H2>Verify your identity</H2>
-      <Sub>Shared only with our review team, never with matches. Encrypted at rest.</Sub>
-
-      <div style={{
-        marginTop: 20, padding: "14px 16px",
-        background: "rgba(92,122,82,0.06)",
-        border: "1px solid rgba(92,122,82,0.18)",
-        borderRadius: 12,
-        display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: "#3F5937",
-      }}>
-        <Shield style={{ width: 16, height: 16, flexShrink: 0, marginTop: 1 }} />
-        <div style={{ lineHeight: 1.55 }}>
-          <strong>Your data is protected.</strong> ID documents are encrypted and only visible to our
-          verification team. Only your{" "}
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, verticalAlign: "middle" }}>
-            verified
-            <BadgeCheck size={13} strokeWidth={2} style={{ color: "#5C7A52" }} />
-          </span>{" "}
-          status is shown on your profile.
-        </div>
-      </div>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!canSubmit || !frontFile || !selfieFile) return;
-          onSubmit({
-            docCountry,
-            docType,
-            docNumber,
-            frontFile,
-            backFile: needsBack ? backFile : null,
-            selfieFile,
-          });
-        }}
-        style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 24 }}
-      >
-        <Row>
-          <Field label="Country">
-            <select value={docCountry} onChange={(e) => { setDocCountry(e.target.value); setDocType(""); }} style={selectStyle}>
-              {Object.keys(DOCUMENTS_BY_COUNTRY).map((c) => <option key={c}>{c}</option>)}
-            </select>
-          </Field>
-          <Field label="Document type">
-            <select value={docType} onChange={(e) => setDocType(e.target.value)} required style={selectStyle}>
-              <option value="">Select</option>
-              {available.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </Field>
-        </Row>
-
-        <Field label="Document number">
-          <input
-            type="text" value={docNumber} onChange={(e) => setDocNumber(e.target.value)}
-            placeholder="Enter number" required style={inputStyle}
-          />
-        </Field>
-
-        <UploadBox label="Front of document" file={frontFile} onChange={setFrontFile} />
-        {needsBack && <UploadBox label="Back of document" file={backFile} onChange={setBackFile} />}
-        <UploadBox label="Selfie holding your document" file={selfieFile} onChange={setSelfieFile} />
-
-        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-          <button type="button" onClick={onBack} style={backBtnStyle}>
-            <ArrowLeft style={{ width: 14, height: 14 }} /> Back
-          </button>
-          <SubmitBtn disabled={!canSubmit} loading={loading} grow>
-            Finish &amp; go to dashboard
-          </SubmitBtn>
-        </div>
-      </form>
-    </motion.div>
-  );
-}
-
-function UploadBox({ label, file, onChange }: { label: string; file: File | null; onChange: (f: File | null) => void }) {
-  return (
-    <div>
-      <div style={{ fontSize: 10.5, fontWeight: 700, color: "#555", letterSpacing: "0.1em", marginBottom: 7 }}>{label}</div>
-      <label style={{
-        display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
-        padding: "20px 16px",
-        border: file ? "1.5px solid rgba(92,122,82,0.4)" : "1.5px dashed rgba(220,30,60,0.2)",
-        borderRadius: 12,
-        background: file ? "rgba(92,122,82,0.04)" : "#fff",
-        cursor: "pointer",
-        transition: "border-color 180ms, background 180ms",
-      }}>
-        <input
-          type="file" accept="image/*,.pdf"
-          style={{ display: "none" }}
-          onChange={(e) => onChange(e.target.files?.[0] || null)}
-        />
-        <Upload style={{ width: 20, height: 20, color: file ? "#5C7A52" : "rgba(220,30,60,0.35)" }} />
-        {file ? (
-          <>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#3F5937" }}>{file.name}</div>
-            <div style={{ fontSize: 11, color: "#5C7A52" }}>Click to change</div>
-          </>
-        ) : (
-          <>
-            <div style={{ fontSize: 13, color: "#555" }}>Click to upload</div>
-            <div style={{ fontSize: 11, color: "#999" }}>JPG, PNG or PDF · Max 10MB</div>
-          </>
-        )}
-      </label>
-    </div>
   );
 }
 

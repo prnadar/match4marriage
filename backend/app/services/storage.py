@@ -89,12 +89,21 @@ def generate_photo_upload_signature(
     public_id = file_id  # just the filename portion; Cloudinary prepends folder/
     full_public_id = f"{folder}/{public_id}"
 
+    # Server-enforced upload constraints. Without these the client could
+    # upload arbitrarily large files / any MIME type and burn through the
+    # Cloudinary quota or stash polyglots. Cloudinary rejects the upload
+    # itself if the file exceeds `max_file_size` or isn't in `allowed_formats`.
+    max_bytes = 10 * 1024 * 1024  # 10 MB hard ceiling
+    allowed_formats = "jpg,jpeg,png,webp"
+
     # Sign ONLY the fields the client will POST. Order doesn't matter;
     # cloudinary.utils.api_sign_request sorts alphabetically internally.
     params_to_sign = {
         "folder": folder,
         "public_id": public_id,
         "timestamp": timestamp,
+        "max_file_size": max_bytes,
+        "allowed_formats": allowed_formats,
     }
     signature = cloudinary.utils.api_sign_request(
         params_to_sign, settings.CLOUDINARY_API_SECRET
@@ -110,6 +119,8 @@ def generate_photo_upload_signature(
         "signature": signature,
         "folder": folder,
         "public_id": public_id,       # short id — client must send this verbatim
+        "max_file_size": max_bytes,
+        "allowed_formats": allowed_formats,
         "cloud_name": settings.CLOUDINARY_CLOUD_NAME,
         "resource_type": "image",
         "url": secure_url,

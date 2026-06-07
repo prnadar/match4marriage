@@ -64,7 +64,7 @@ function VerificationBanner() {
           <AlertTriangle style={{ width: 16, height: 16, color: "#ffd4dc" }} strokeWidth={2} />
         </span>
         <p style={{ margin: 0, color: "#fff", fontSize: "14px", lineHeight: 1.5 }}>
-          <strong>Complete your profile &amp; verify your ID.</strong> You must complete your profile and verify your identity to view other profiles and send interests.{" "}
+          <strong>Complete your profile.</strong> Members with full profiles get far more interest. Finish yours to get noticed.{" "}
           <a href="/profile/me" style={{ color: "#ffd4dc", fontWeight: 700, textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: 3 }}>
             Complete now <ArrowRight size={12} strokeWidth={2.4} />
           </a>
@@ -94,22 +94,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // with the top-bar avatar after a primary-photo change.
   const sidebarPhotoUrl = useProfilePhoto();
 
-  // Auth gate. Only the profile bootstrap (first_name) hard-blocks the
-  // dashboard — a signed-in user with a profile is allowed in. Missing
-  // phone verification or ID upload are surfaced via VerificationBanner
-  // below; bouncing those users back to /onboarding on every sign-in is
-  // hostile and was causing a redirect loop after login.
+  // Auth gate. Onboarding is only "complete" when BOTH steps have shipped:
+  // Step 1 saves `first_name` on the profile; Step 2 links a phone number to
+  // the Firebase user. Allowing dashboard access on `first_name` alone let
+  // members slip past the phone-verify step by clicking the M4M logo (or any
+  // other link) and landing inside the app shell mid-onboarding. The gate
+  // now requires both artefacts and redirects to /onboarding otherwise.
   useEffect(() => {
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
       if (!user) { router.replace("/auth/login"); return; }
       rememberSessionUid(user.uid);
+      const hasPhone = !!(user.phoneNumber && user.phoneNumber.trim());
       try {
         const res = await profileApi.me();
         const p = (res.data as any)?.data;
         const hasProfile = !!(p && p.first_name && p.first_name.trim());
-        if (!hasProfile) { router.replace("/onboarding"); return; }
+        if (!hasProfile || !hasPhone) { router.replace("/onboarding"); return; }
       } catch {
-        // backend unreachable — leave user on page
+        // Backend unreachable — still bounce a phone-less user so they can't
+        // sit on a dashboard they shouldn't yet have reached.
+        if (!hasPhone) { router.replace("/onboarding"); return; }
       }
     });
     return unsub;
@@ -493,11 +497,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <span className="text-sm font-semibold">Menu</span>
         </button>
 
-        {/* Shared brand bar — same component the public site uses. It detects
-            Firebase auth state and renders Bell / Messages / Avatar in place
-            of the Log In / Register CTAs, so authenticated and anonymous
-            visitors see one consistent top bar everywhere. */}
-        <PublicHeader />
+        {/* Shared brand bar — same component the public site uses, but the
+            "app" variant suppresses the marketing nav (Home / Browse Profiles
+            / Pricing / About / Help) since the sidebar already covers member
+            navigation. Logo, top brand bar and signed-in actions remain. */}
+        <PublicHeader variant="app" />
 
         {/* ── ID Verification Warning Banner ── */}
         <VerificationBanner />

@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.logging import get_logger
+from app.core.rate_limit import limiter
 from app.core.redis import get_redis
 from app.core.security import get_current_user
 from app.core.tenancy import get_current_tenant_slug
@@ -28,7 +29,7 @@ from app.models.user import User
 from app.schemas.auth import EmailRegisterRequest, FirebaseVerifyRequest, OTPVerifyRequest, RegisterRequest, TokenResponse
 from app.schemas.common import APIResponse
 from app.services.email import send_verification_email, send_welcome_email
-from app.services.otp import send_otp, verify_otp
+from app.services.otp import OTPSendError, send_otp, verify_otp
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = get_logger(__name__)
@@ -48,7 +49,9 @@ def _generate_email_token() -> str:
 
 
 @router.post("/register", response_model=APIResponse[dict])
+@limiter.limit("3/minute")
 async def register(
+    request: Request,
     payload: RegisterRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
     tenant_slug: str = Depends(get_current_tenant_slug),
@@ -56,14 +59,12 @@ async def register(
     """
     Start registration with phone OTP.
     Creates user record if new. Sends OTP via Twilio.
-    Rate limited to 10/minute per phone number.
+    Rate limited to 3/minute per source IP.
     """
-    sent = await send_otp(payload.phone, payload.country_code, tenant_slug)
-    if not sent:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Could not send OTP. Try again in a moment.",
-        )
+    try:
+        await send_otp(payload.phone, payload.country_code, tenant_slug)
+    except OTPSendError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return APIResponse(
         success=True,
         data={"phone": payload.phone[-4:].rjust(len(payload.phone), "*")},
@@ -295,13 +296,16 @@ async def auth_me(
 
 
 @router.post("/resend-otp", response_model=APIResponse[None])
+@limiter.limit("3/minute")
 async def resend_otp(
+    request: Request,
     payload: RegisterRequest,
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
-    sent = await send_otp(payload.phone, payload.country_code, tenant_slug)
-    if not sent:
-        raise HTTPException(status_code=503, detail="Could not resend OTP")
+    try:
+        await send_otp(payload.phone, payload.country_code, tenant_slug)
+    except OTPSendError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return APIResponse(success=True, message="OTP resent")
 
 
@@ -434,7 +438,9 @@ async def check_email_exists(
 
 
 @router.post("/send-verification-email", response_model=APIResponse[dict])
+@limiter.limit("2/minute")
 async def send_verification_email_endpoint(
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
 ):
@@ -479,10 +485,20 @@ async def send_verification_email_endpoint(
 
     token = _generate_email_token()
 
-    # Store token in Redis: key → user_id
+    # Store token keyed by USER (not by the token itself). The previous shape
+    # (`email_verify:<token>` → user_id) made the entire 6-digit keyspace
+    # brute-forceable across all pending users: an attacker only needed to
+    # guess any valid code anywhere in the system to take over the matching
+    # account. Keying by user means a brute-force attempt is bounded per
+    # target user and is further blocked by the verify-time attempt counter.
     redis = await get_redis()
-    redis_key = f"{_EMAIL_TOKEN_PREFIX}{token}"
-    await redis.setex(redis_key, _EMAIL_TOKEN_TTL_SEC, str(user_uuid))
+    redis_key = f"{_EMAIL_TOKEN_PREFIX}user:{user_uuid}"
+    await redis.setex(redis_key, _EMAIL_TOKEN_TTL_SEC, token)
+    # Reset any prior attempt counter so a new token gives a fresh window.
+    try:
+        await redis.delete(f"{_EMAIL_TOKEN_PREFIX}attempts:{user_uuid}")
+    except Exception:
+        pass
 
     # Derive display name
     display_name = user.email.split("@")[0]
@@ -527,37 +543,61 @@ async def send_verification_email_endpoint(
 
 
 @router.get("/verify-email", response_model=APIResponse[dict])
+@limiter.limit("10/minute")
 async def verify_email_endpoint(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
     token: str = Query(..., min_length=6, max_length=6, description="6-digit verification code"),
-    db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
     """
-    Verify an email address using the 6-character token from the verification email.
+    Verify the authenticated member's email using the 6-digit code that was
+    sent to them. Authentication is REQUIRED — the previous unauthenticated
+    + token-keyed shape let an attacker brute-force any pending verification
+    across the entire user base.
 
     On success:
     - Sets User.is_email_verified = True
     - Deletes the token from Redis (single-use)
     - Sends a welcome email
+
+    Rate-limit: 10 attempts/minute per IP plus a per-user lockout after 5
+    wrong attempts in the token's 10-minute TTL window.
     """
     import uuid
 
+    try:
+        user_uuid = uuid.UUID(str(current_user.get("sub", "")))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+
     redis = await get_redis()
-    redis_key = f"{_EMAIL_TOKEN_PREFIX}{token.upper()}"
+    redis_key = f"{_EMAIL_TOKEN_PREFIX}user:{user_uuid}"
+    attempts_key = f"{_EMAIL_TOKEN_PREFIX}attempts:{user_uuid}"
 
-    user_id_str: str | None = await redis.get(redis_key)
+    # Per-user lockout — bounds brute-force to ~5 guesses per token.
+    try:
+        attempts = int(await redis.get(attempts_key) or 0)
+    except Exception:
+        attempts = 0
+    if attempts >= 5:
+        logger.warning("email_verify_locked", user_id=str(user_uuid))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many attempts. Tap Resend to get a new code.",
+        )
 
-    if not user_id_str:
+    stored = await redis.get(redis_key)
+    # Constant-time compare on the actual code value, after we know we have one.
+    if not stored or not secrets.compare_digest(str(stored), token):
+        try:
+            await redis.incr(attempts_key)
+            await redis.expire(attempts_key, _EMAIL_TOKEN_TTL_SEC)
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired verification token",
-        )
-
-    try:
-        user_uuid = uuid.UUID(user_id_str)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Token data corrupted — please request a new verification email",
         )
 
     result = await db.execute(
@@ -569,7 +609,6 @@ async def verify_email_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     if user.is_email_verified:
-        # Token was already used — delete it and return success
         await redis.delete(redis_key)
         return APIResponse(
             success=True,
@@ -577,12 +616,15 @@ async def verify_email_endpoint(
             message="Email already verified",
         )
 
-    # Mark as verified
     user.is_email_verified = True
     await db.flush()
 
-    # Consume token — single-use
+    # Single-use: clear token + attempts.
     await redis.delete(redis_key)
+    try:
+        await redis.delete(attempts_key)
+    except Exception:
+        pass
 
     logger.info("email_verified", user_id=str(user_uuid))
 

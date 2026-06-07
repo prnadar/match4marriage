@@ -207,7 +207,13 @@ async def browse_profiles(
             User.deleted_at.is_(None),
             User.is_active == True,  # noqa: E712
             UserProfile.user_id != caller_id,
-            UserProfile.verification_status == "approved",
+            # Members are visible by default. The previous strict
+            # `verification_status == "approved"` filter combined with the
+            # removed Step-3 ID-upload onboarding gate made browse return
+            # zero rows for every caller. We now only hide explicitly
+            # REJECTED profiles (admin moderation tool retained); draft +
+            # approved + unset are all browseable.
+            (UserProfile.verification_status != "rejected"),
         )
     )
 
@@ -286,28 +292,15 @@ async def browse_profiles(
 
 
 async def _resolve_tenant_uuid(db: AsyncSession, tenant_slug: str) -> uuid.UUID | None:
-    """Look up a tenant UUID; auto-provision the row if missing (idempotent)."""
-    row = (await db.execute(
-        sa_text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"), {"slug": tenant_slug}
-    )).fetchone()
-    if row:
-        return row[0]
+    """Look up a tenant UUID by slug.
 
-    # Auto-provision. ON CONFLICT makes this safe under concurrent requests.
-    try:
-        await db.execute(
-            sa_text(
-                "INSERT INTO tenants (id, slug, name, branding, features, plan, max_users, is_active, created_at, updated_at) "
-                "VALUES (gen_random_uuid(), :slug, :name, '{}'::jsonb, '{}'::jsonb, 'starter', 10000, true, NOW(), NOW()) "
-                "ON CONFLICT (slug) DO NOTHING"
-            ),
-            {"slug": tenant_slug, "name": tenant_slug.capitalize()},
-        )
-        await db.commit()
-    except Exception as e:
-        await db.rollback()
-        logger.warning("tenant_autoprovision_failed", error=str(e), slug=tenant_slug)
-
+    SECURITY: We used to auto-provision a tenant row for any slug the request
+    arrived with. The X-Tenant-ID header is unauthenticated input, so this
+    let any caller mint arbitrary tenants (DoS + data fragmentation, and
+    "view the right page on the wrong tenant" leaks). Tenant creation is now
+    an admin operation only; resolve-only here. The single bootstrap tenant
+    is auto-created at app startup in main.py if it doesn't exist.
+    """
     row = (await db.execute(
         sa_text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"), {"slug": tenant_slug}
     )).fetchone()
@@ -443,7 +436,7 @@ async def get_my_profile(
         raise
     except Exception as exc:
         logger.error("get_my_profile_failed", error=str(exc), error_type=type(exc).__name__, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
+        raise HTTPException(status_code=500, detail="Could not load your profile")
 
 
 async def _sync_verification_flags(db: AsyncSession, current_user: dict) -> None:
@@ -569,9 +562,22 @@ async def delete_my_photo(
 ):
     from app.services.storage import delete_photo
     profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+    # Verify the key belongs to THIS user's profile before doing anything.
+    # Without this check, any authenticated member could delete an arbitrary
+    # Cloudinary public_id (we used to call delete_photo(key) unconditionally
+    # and only reshape the local array, which left the remote destroy as a
+    # cross-user vandalism vector).
+    existing_keys = {p.get("key") for p in (profile.photos or []) if p.get("key")}
+    if key not in existing_keys:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
     photos = [dict(p) for p in (profile.photos or []) if p.get("key") != key]
     if photos and not any(p.get("is_primary") for p in photos):
-        photos[0]["is_primary"] = True
+        # Promote the first MAIN (non-premium) photo to primary; premium photos
+        # are never the public avatar (see set_photo_premium).
+        for p in photos:
+            if not p.get("is_premium"):
+                p["is_primary"] = True
+                break
     profile.photos = photos
     flag_modified(profile, "photos")
     profile.completeness_score = compute_profile_completeness(profile)
@@ -718,12 +724,14 @@ def _is_profile_complete(p: UserProfile) -> tuple[bool, list[str]]:
         if not cond:
             missing.append(name)
 
-    # Basic identity
+    # Basic identity. marital_status is intentionally OMITTED here: the
+    # column is nullable, the onboarding flow no longer asks for it, and the
+    # member can fill it in later from /profile/me without being blocked
+    # from submitting their profile for review.
     need(bool(p.first_name and p.first_name.strip()), "first_name")
     need(bool(p.last_name and p.last_name.strip()), "last_name")
     need(p.date_of_birth is not None, "date_of_birth")
     need(p.gender is not None, "gender")
-    need(p.marital_status is not None, "marital_status")
 
     # Location
     need(bool(p.city and p.city.strip()), "city")
@@ -1023,6 +1031,16 @@ async def get_profile(
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     data = ProfileRead.model_validate(profile, from_attributes=True)
+
+    # PII redaction for other members. The full profile read used to expose
+    # `kundali_data.contact` (mobile, alt phone, address1/2, postcode),
+    # `family_details`, and free-text employment/education history to any
+    # authenticated viewer — even mutual interest didn't unlock these in code.
+    # We now strip contact-shape fields and reduce free-form blobs to a safe
+    # shape for non-self viewers. (The /me bootstrap path returns above and
+    # bypasses this redaction.)
+    _strip_pii_for_other_viewer(data)
+
     # Main photos are visible to everyone. Photos the owner marked "Premium"
     # are visible only to Premium+ viewers — for Basic viewers we keep the
     # entry but null its URL and flag it `locked` so the client renders an
@@ -1034,6 +1052,61 @@ async def get_profile(
             for p in (data.photos or [])
         ]
     return APIResponse(success=True, data=data)
+
+
+# Whitelist of kundali_data fields that are safe to expose to other members.
+# Birth chart positions are fine; contact / address blocks are not.
+_KUNDALI_PUBLIC_KEYS = {
+    "rashi", "nakshatra", "gana", "gotra", "manglik",
+    "birth_time", "birth_place",
+    "horoscope", "chart", "predictions",
+}
+
+# Top-level fields on ProfileRead that we always strip for other viewers.
+# Phone is stored on the User model, not the profile — but if it ever leaks
+# in via partner_prefs / family_details it's nulled by the dict scrubber.
+_PII_PHONE_LIKE = ("phone", "mobile", "whatsapp", "alt_phone", "contact")
+_PII_ADDRESS_LIKE = ("address", "address1", "address2", "postcode", "post_code", "pincode", "zip")
+
+
+def _scrub_pii_dict(d: dict) -> dict:
+    """Return a shallow copy of `d` with phone/email/address-like keys removed.
+    Used to safely expose free-form blobs (family_details, partner_prefs) to
+    non-self viewers without leaking contact info."""
+    out = {}
+    for k, v in (d or {}).items():
+        kl = str(k).lower()
+        if any(p in kl for p in _PII_PHONE_LIKE):
+            continue
+        if any(p in kl for p in _PII_ADDRESS_LIKE):
+            continue
+        if "email" in kl:
+            continue
+        out[k] = v
+    return out
+
+
+def _strip_pii_for_other_viewer(data: "ProfileRead") -> None:
+    """Redact contact/address PII from a ProfileRead for non-self viewers.
+    Mutates `data` in place — Pydantic models are mutable by default."""
+    # kundali_data: only keep birth-chart fields; drop the contact block.
+    try:
+        kd = getattr(data, "kundali_data", None) or {}
+        if isinstance(kd, dict):
+            data.kundali_data = {k: v for k, v in kd.items() if k in _KUNDALI_PUBLIC_KEYS}
+    except Exception:
+        pass
+    # family_details / partner_prefs: scrub phone/email/address-shaped keys.
+    try:
+        if isinstance(getattr(data, "family_details", None), dict):
+            data.family_details = _scrub_pii_dict(data.family_details)
+    except Exception:
+        pass
+    try:
+        if isinstance(getattr(data, "partner_prefs", None), dict):
+            data.partner_prefs = _scrub_pii_dict(data.partner_prefs)
+    except Exception:
+        pass
 
 
 @router.put("/{user_id}", response_model=APIResponse[ProfileRead])

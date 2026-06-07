@@ -181,9 +181,19 @@ export default function DashboardPage() {
             style={{ minWidth: 300 }}
           >
             <div className="flex flex-col gap-1.5">
-              <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-100">
-                <Shield className="h-3 w-3" /> Verified member
-              </div>
+              {/* The pill must reflect the member's actual verification state —
+                  showing "Verified member" to every viewer contradicted the
+                  global "Complete your profile & verify your ID" banner that
+                  appears on the same screen for unverified members. */}
+              {completion?.badges?.id === "verified" ? (
+                <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                  <Shield className="h-3 w-3" /> Verified member
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-100">
+                  <Shield className="h-3 w-3" /> Verification pending
+                </div>
+              )}
               <p className="font-display text-[15px] text-[#1a0a14]">
                 A complete profile gets noticed
               </p>
@@ -202,10 +212,14 @@ export default function DashboardPage() {
 
         {/* ── Membership / upgrade ───────────────────────────────────── */}
         {(() => {
+          // Canonical mapping (mirrors app/core/entitlements.py + the sidebar):
+          // free=Basic, silver=Premium, gold=Elite, platinum=VIP Concierge.
+          // The previous map was off by one and rendered "Free plan" while
+          // the sidebar showed "Basic member" — fixed.
           const PLAN_LABEL: Record<string, string> = {
-            free: "Free", silver: "Basic", gold: "Premium", platinum: "Elite",
+            free: "Basic", silver: "Premium", gold: "Elite", platinum: "VIP Concierge",
           };
-          const label = PLAN_LABEL[plan] ?? "Free";
+          const label = PLAN_LABEL[plan] ?? "Basic";
           const isTopTier = plan === "platinum";
           return (
             <section

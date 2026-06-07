@@ -58,7 +58,17 @@ PLAN_PRICE_GBP_PENCE: dict[str, int] = {
     "platinum": settings.PLATINUM_PRICE_GBP,
 }
 
-PLAN_DISPLAY: dict[str, str] = {"silver": "Basic", "gold": "Premium", "platinum": "Elite"}
+# Canonical tier → marketing-name mapping. Mirrors app/core/entitlements.py
+# and the sidebar / pricing page. The previous mapping was off by one and
+# produced PayPal order descriptions like "Match4Marriage Basic" when the
+# member paid £300 for the **Premium** plan, and welcome notifications
+# saying "Welcome to Basic" after the same purchase.
+PLAN_DISPLAY: dict[str, str] = {
+    "free": "Basic",
+    "silver": "Premium",
+    "gold": "Elite",
+    "platinum": "VIP Concierge",
+}
 
 
 class CheckoutRequest(BaseModel):
@@ -315,30 +325,52 @@ async def paypal_webhook(
 ):
     """
     Resilient backstop: if the buyer closes the tab before the frontend
-    capture call lands, PayPal still tells us via webhook. Signature is
-    verified through PayPal's verify-webhook-signature API.
+    capture call lands, PayPal still tells us via webhook. Also processes
+    refunds and reversals — without this, refunded members kept their
+    paid tier indefinitely.
+
+    Tenant resolution: PayPal doesn't send X-Tenant-ID, so we PREFER the
+    tenant slug embedded in our `custom_id` (`user|plan|tenant`). The
+    header-derived `tenant_slug` is only a fallback for single-tenant
+    deploys where the request middleware falls back to DEFAULT_TENANT_SLUG.
     """
+    body = await request.body()
+    try:
+        event = json.loads(body or b"{}")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid webhook payload")
+
+    event_type = event.get("event_type", "")
+    resource = event.get("resource", {}) or {}
+    custom_id = resource.get("custom_id", "") or ""
+    parts = custom_id.split("|")
+    if len(parts) >= 3 and parts[2]:
+        tenant_slug = parts[2]
+
     tenant_uuid = await _resolve_tenant(db, tenant_slug)
     if tenant_uuid is None:
-        raise HTTPException(status_code=404, detail="Tenant not found")
+        logger.warning("paypal_webhook_unknown_tenant", tenant_slug=tenant_slug, event_type=event_type)
+        return {"status": "ok", "skipped": "unknown tenant"}
 
     cfg = await paypal_svc.load_paypal_config(db, tenant_uuid)
     if cfg is None:
-        raise HTTPException(status_code=503, detail="PayPal is not configured")
+        logger.warning("paypal_webhook_no_config", tenant=tenant_slug, event_type=event_type)
+        return {"status": "ok", "skipped": "paypal not configured"}
 
-    body = await request.body()
     if not paypal_svc.verify_webhook(cfg, dict(request.headers), body):
         raise HTTPException(status_code=400, detail="Invalid PayPal webhook signature")
 
-    event = json.loads(body or b"{}")
-    event_type = event.get("event_type", "")
     logger.info("paypal_webhook", event_type=event_type, event_id=event.get("id"))
+
+    # ── Refund / reversal — downgrade the member's tier ─────────────────
+    if event_type in ("PAYMENT.CAPTURE.REFUNDED", "PAYMENT.CAPTURE.REVERSED"):
+        await _downgrade_on_refund(db, resource, tenant_uuid, event)
+        await db.commit()
+        return {"status": "ok"}
 
     if event_type != "PAYMENT.CAPTURE.COMPLETED":
         return {"status": "ok", "skipped": event_type}
 
-    resource = event.get("resource", {})
-    custom_id = resource.get("custom_id", "")
     # Key idempotency on the ORDER id (stable across the capture API path and
     # this webhook) so a page-refresh capture and this webhook don't both
     # create a subscription.
@@ -347,7 +379,6 @@ async def paypal_webhook(
         .get("related_ids", {})
         .get("order_id", "")
     ) or resource.get("id", "")
-    parts = custom_id.split("|")
     if len(parts) < 2 or not order_id:
         logger.warning("paypal_webhook_bad_custom_id", custom_id=custom_id)
         return {"status": "ok", "skipped": "missing correlation"}
@@ -378,10 +409,57 @@ async def paypal_webhook(
     return {"status": "ok"}
 
 
+async def _downgrade_on_refund(
+    db: AsyncSession,
+    resource: dict,
+    tenant_id: uuid.UUID,
+    event: dict,
+) -> None:
+    """Find the Subscription that matches the refunded capture and downgrade
+    the owning user to the free tier. PayPal sends refund webhooks for the
+    full lifetime of the order, so we identify the matching subscription via
+    `custom_id` (canonical) with a fallback on `order_id`."""
+    custom_id = (resource.get("custom_id") or "").split("|")
+    if len(custom_id) < 2:
+        logger.warning("paypal_refund_bad_custom_id", custom_id=resource.get("custom_id"))
+        return
+    try:
+        user_uuid = uuid.UUID(custom_id[0])
+    except ValueError:
+        return
+
+    # Mark every paid subscription this user has on this tenant as cancelled
+    # (we don't have a REFUNDED enum value; CANCELLED has the same product
+    # effect — they lose access — and the refund event_id is captured in the
+    # log line below for audit).
+    await db.execute(
+        update(Subscription)
+        .where(
+            Subscription.tenant_id == tenant_id,
+            Subscription.user_id == user_uuid,
+            Subscription.status == SubscriptionStatus.ACTIVE,
+            Subscription.deleted_at.is_(None),
+        )
+        .values(status=SubscriptionStatus.CANCELLED)
+    )
+    await db.execute(
+        update(User)
+        .where(User.id == user_uuid)
+        .values(subscription_tier=SubscriptionTier.FREE)
+    )
+    logger.info(
+        "paypal_refund_downgrade",
+        user_id=str(user_uuid),
+        event_id=event.get("id"),
+        capture_id=resource.get("id"),
+    )
+
+
 @router.get("/subscriptions/limits", response_model=APIResponse[FeatureLimits])
 async def get_feature_limits(
     current_user: Annotated[dict, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
 ):
     """Returns the current user's plan limits based on active subscription."""
     user_id_str = current_user.get("sub", "")
@@ -405,13 +483,42 @@ async def get_feature_limits(
         can_use_advanced_filters,
         can_view_photos,
         can_view_premium_photos,
+        interest_limit,
     )
+
+    # interests_remaining is the actual remaining count, not the plan cap.
+    # The prior implementation returned the cap (10) for everyone on free,
+    # so the client could never short-circuit when the user had exhausted
+    # their quota — every send hit the backend and surfaced a 403 instead.
+    interests_remaining_val: int
+    cap = interest_limit(plan)
+    if cap is None:
+        interests_remaining_val = -1  # unlimited
+    else:
+        from datetime import timezone as _tz
+        from sqlalchemy import func as _func
+        from app.models.match import Interest
+        try:
+            now = datetime.now(_tz.utc)
+            period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            sent = (await db.execute(
+                select(_func.count())
+                .select_from(Interest)
+                .where(
+                    Interest.sender_id == user_uuid,
+                    Interest.deleted_at.is_(None),
+                    Interest.created_at >= period_start,
+                )
+            )).scalar_one()
+            interests_remaining_val = max(0, cap - int(sent))
+        except Exception:
+            interests_remaining_val = cap  # fail open with cap if count blows up
 
     return APIResponse(
         success=True,
         data=FeatureLimits(
             plan=plan,
-            interests_remaining=limits["interests"],
+            interests_remaining=interests_remaining_val,
             contacts_remaining=limits["contacts"],
             video_calls_remaining=limits["video_calls"],
             can_video_call=plan != "free",

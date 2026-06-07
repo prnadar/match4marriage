@@ -66,6 +66,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
 
+  // Defence-in-depth: also inject <meta name="robots" content="noindex,nofollow"/>
+  // into the admin head client-side. Headers (X-Robots-Tag) are the primary
+  // signal — this is a backup for crawlers that ignore them.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "robots";
+      document.head.appendChild(meta);
+    }
+    meta.content = "noindex, nofollow, noarchive";
+  }, []);
+
   useEffect(() => {
     if (pathname === "/admin/login") { setAuthenticated(true); return; }
     let cancelled = false;

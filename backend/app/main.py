@@ -31,6 +31,30 @@ settings = get_settings()
 configure_logging(debug=settings.DEBUG)
 logger = get_logger(__name__)
 
+# Sentry — no-op unless SENTRY_DSN is set. Initialised before the app is
+# constructed so every uncaught exception (incl. ones inside lifespan) is
+# reported. PII is scrubbed by Sentry's default processors; we disable
+# `send_default_pii` to be explicit. Sample 10% of traces in prod to stay
+# inside the free tier; bump if/when you upgrade.
+import os
+_sentry_dsn = os.getenv("SENTRY_DSN", "").strip()
+if _sentry_dsn:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            environment=settings.ENVIRONMENT,
+            release=settings.APP_VERSION,
+            send_default_pii=False,
+            traces_sample_rate=0.1 if settings.is_production else 0.0,
+            integrations=[FastApiIntegration(), StarletteIntegration()],
+        )
+        logger.info("sentry_initialised", env=settings.ENVIRONMENT)
+    except Exception as exc:
+        logger.warning("sentry_init_failed", error=str(exc))
+
 
 async def _ensure_default_tenant() -> None:
     """Idempotent: ensure the default tenant row exists so requests don't 400."""
@@ -165,6 +189,17 @@ async def _run_boot_ddl_serialized() -> None:
     if _boot_ddl_done:
         return
 
+    # Opt out via env: in steady-state production where all migrations have
+    # been applied (e.g. via alembic), the boot DDL is dead weight that takes
+    # AccessExclusiveLocks on every cold boot. Set RUN_BOOT_DDL=false in the
+    # production env once you've run migrations to disable. Default is true
+    # so dev / first-launch / Vercel cold start keeps converging the schema.
+    import os
+    if os.getenv("RUN_BOOT_DDL", "true").lower() in {"false", "0", "no", "off"}:
+        _boot_ddl_done = True
+        logger.info("boot_ddl_disabled_via_env")
+        return
+
     from sqlalchemy import text
 
     # AUTOCOMMIT so the advisory lock isn't trapped inside the same tx as the
@@ -219,10 +254,37 @@ async def _run_boot_ddl_serialized() -> None:
     _boot_ddl_done = True
 
 
+async def _seed_default_tenant() -> None:
+    """Ensure the configured DEFAULT_TENANT_SLUG row exists.
+
+    Tenants used to be auto-provisioned from the X-Tenant-ID header by
+    `profile._resolve_tenant_uuid` — that was a security hole (unauth
+    callers minting tenants). With that removed, the single default tenant
+    must be seeded at boot so the app stands up cleanly on a fresh DB.
+    New tenants are an admin operation, not a request-time side-effect.
+    """
+    from sqlalchemy import text as sa_text
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                sa_text(
+                    "INSERT INTO tenants (id, slug, name, branding, features, plan, "
+                    "max_users, is_active, created_at, updated_at) "
+                    "VALUES (gen_random_uuid(), :slug, :name, '{}'::jsonb, '{}'::jsonb, "
+                    "'starter', 10000, true, NOW(), NOW()) "
+                    "ON CONFLICT (slug) DO NOTHING"
+                ),
+                {"slug": settings.DEFAULT_TENANT_SLUG, "name": settings.DEFAULT_TENANT_SLUG.capitalize()},
+            )
+    except Exception as exc:
+        logger.warning("default_tenant_seed_failed", slug=settings.DEFAULT_TENANT_SLUG, error=str(exc))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("startup", environment=settings.ENVIRONMENT, version=settings.APP_VERSION)
     await _run_boot_ddl_serialized()
+    await _seed_default_tenant()
     yield
     await close_redis()
     await engine.dispose()
@@ -242,9 +304,23 @@ app = FastAPI(
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(TenantMiddleware)
+def _build_cors_origins() -> list[str]:
+    """In production we pin to the literal production origins from
+    settings.ALLOWED_ORIGINS — wildcarding `*.vercel.app` with credentials
+    let any Vercel project under those names pivot creds-bearing requests.
+    In dev we add local hosts so the Next dev server works. Previews
+    deliberately need to be added explicitly via ALLOWED_ORIGINS."""
+    base = [o.strip() for o in (settings.ALLOWED_ORIGINS or "").split(",") if o.strip()]
+    if not settings.is_production:
+        for dev in ("http://localhost:3000", "http://127.0.0.1:3000"):
+            if dev not in base:
+                base.append(dev)
+    return base or ["http://localhost:3000"]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://([a-zA-Z0-9-]+\.)?(m4mweb|match4marriage)\.vercel\.app|http://localhost:3000|https://match4marriage\.com|https://www\.match4marriage\.com",
+    allow_origins=_build_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -256,19 +332,30 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception):
-    """Ensure 500s carry CORS headers so the browser shows the real error, not 'CORS blocked'."""
-    logger.error("unhandled_exception", path=str(request.url.path), error=str(exc), error_type=type(exc).__name__)
+    """Ensure 500s carry CORS headers so the browser shows the real error,
+    not 'CORS blocked'. The body never includes the exception class/message
+    in production — that leaked SQL fragments and asyncpg internals straight
+    to the client. Full detail goes to the server logs only."""
+    logger.error(
+        "unhandled_exception",
+        path=str(request.url.path),
+        error=str(exc),
+        error_type=type(exc).__name__,
+        exc_info=True,
+    )
     origin = request.headers.get("origin", "")
     headers = {}
     if origin:
         headers["Access-Control-Allow-Origin"] = origin
         headers["Access-Control-Allow-Credentials"] = "true"
         headers["Vary"] = "Origin"
-    return JSONResponse(
-        status_code=500,
-        content={"detail": f"{type(exc).__name__}: {exc}"},
-        headers=headers,
+    # Verbose body only outside production for easier dev debugging.
+    body = (
+        {"detail": f"{type(exc).__name__}: {exc}"}
+        if not settings.is_production
+        else {"detail": "Internal server error"}
     )
+    return JSONResponse(status_code=500, content=body, headers=headers)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 PREFIX = settings.API_PREFIX

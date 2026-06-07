@@ -150,6 +150,19 @@ class Settings(BaseSettings):
             problems.append("DATABASE_URL is still pointing at SQLite — set a Postgres URL")
         if self.DEMO_MODE:
             problems.append("DEMO_MODE is enabled — OTP '000000' would be accepted in production")
+        if self.FRONTEND_URL.startswith("http://localhost") or self.FRONTEND_URL.startswith("http://127."):
+            problems.append(
+                "FRONTEND_URL still points at localhost — PayPal would send paying "
+                "buyers to your dev machine on return. Set FRONTEND_URL to the "
+                "production frontend origin (e.g. https://match4marriage.com)."
+            )
+        if not self.FRONTEND_URL.startswith("https://"):
+            problems.append("FRONTEND_URL must use https:// in production")
+        if not self.ALLOWED_ORIGINS or "localhost" in self.ALLOWED_ORIGINS:
+            problems.append(
+                "ALLOWED_ORIGINS must be set to your production origin(s) "
+                "(comma-separated). Localhost is not permitted in production."
+            )
         if problems:
             raise ValueError(
                 "Refusing to start in production with insecure config:\n  - "

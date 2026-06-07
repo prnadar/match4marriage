@@ -9,7 +9,17 @@ const AnimatedHeartCursor = dynamic(
   { ssr: false }
 );
 
+// Base URL for any absolute URL Next derives (OG images, canonical, sitemap
+// links). Defaults to the Vercel production hostname the team uses today —
+// override with NEXT_PUBLIC_SITE_URL once a bare domain is wired up.
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (process.env.NEXT_PUBLIC_VERCEL_URL
+    ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+    : "https://m4mweb.vercel.app");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "Match4Marriage: Find Your Perfect Match",
     template: "%s | Match4Marriage",
@@ -24,11 +34,34 @@ export const metadata: Metadata = {
     title: "Match4Marriage",
   },
   formatDetection: { telephone: false },
+  // NOTE: /og-default.jpg and /apple-touch-icon.png are referenced here but
+  // the binaries themselves haven't been committed yet. Drop them into
+  // /public when the brand assets are ready — the operator handover doc
+  // calls these out.
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
   openGraph: {
     type: "website",
     siteName: "Match4Marriage",
     title: "Match4Marriage: Find Your Perfect Match",
     description: "UK's most trusted Indian matrimonial service for families.",
+    url: SITE_URL,
+    images: [
+      {
+        url: "/og-default.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Match4Marriage — UK's most trusted Indian matrimonial service.",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Match4Marriage: Find Your Perfect Match",
+    description: "UK's most trusted Indian matrimonial service for families.",
+    images: ["/og-default.jpg"],
   },
 };
 
