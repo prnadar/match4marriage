@@ -222,22 +222,52 @@ async def get_current_user(
             detail="Account is disabled",
         )
 
-    # Bootstrap-admin promotion. Set BOOTSTRAP_ADMIN_EMAILS in env as a
-    # comma-separated list (e.g. "founder@yourdomain.com,ops@yourdomain.com")
-    # to auto-promote those accounts to admin the first time they sign in.
-    # Removes the need to hand-run SQL on a fresh deploy. Idempotent: skips
-    # the UPDATE if the user is already admin. Case-insensitive on email.
+    # Bootstrap-admin promotion. BOOTSTRAP_ADMIN_EMAILS is a comma-separated
+    # list of emails that get auto-granted the `admin` role. The codebase
+    # uses Firebase **custom claims** (`roles: ["admin"]`) for admin checks
+    # (see _roles_from_claims / has_admin_role / scripts/grant_admin.py),
+    # NOT a DB column — so we set the claim via the Firebase Admin SDK so
+    # future token refreshes carry it independently of env.
+    #
+    # Firebase only embeds claims at token issuance, so the CURRENT request's
+    # token won't carry the new claim. We overlay `admin` onto this request's
+    # `claims` dict too so the very first sign-in is admitted instead of
+    # requiring the client to manually force-refresh the ID token.
     try:
         from app.core.config import get_settings as _get_settings
         bootstrap_raw = (_get_settings().BOOTSTRAP_ADMIN_EMAILS or "")
         bootstrap_set = {e.strip().lower() for e in bootstrap_raw.split(",") if e.strip()}
-        if existing is not None and email and email.lower() in bootstrap_set and not existing.is_admin:
-            existing.is_admin = True
-            # Verified flags too — bootstrap admins skip onboarding gates.
-            existing.is_email_verified = True
-            existing.is_phone_verified = True
-            await db.commit()
-            logger.info("bootstrap_admin_promoted", email=email.lower())
+        if email and email.lower() in bootstrap_set:
+            # 1. Persist via Firebase custom claims (idempotent — only writes
+            #    if "admin" isn't already there).
+            try:
+                from firebase_admin import auth as fb_auth
+                from app.core.firebase import get_firebase_app
+
+                fb_app = get_firebase_app()
+                if fb_app is not None:
+                    fb_user = fb_auth.get_user(firebase_uid, app=fb_app)
+                    existing_claims = dict(fb_user.custom_claims or {})
+                    roles_value = existing_claims.get("roles") or []
+                    if isinstance(roles_value, str):
+                        roles_value = [r.strip() for r in roles_value.split(",") if r.strip()]
+                    if "admin" not in [str(r).lower() for r in roles_value]:
+                        new_roles = list(roles_value) + ["admin"]
+                        existing_claims["roles"] = new_roles
+                        fb_auth.set_custom_user_claims(firebase_uid, existing_claims, app=fb_app)
+                        logger.info("bootstrap_admin_claim_set", email=email.lower())
+            except Exception as exc:
+                logger.warning("bootstrap_admin_set_claims_failed", error=str(exc))
+
+            # 2. Overlay `admin` onto the CURRENT request's claims so this
+            #    very request is admitted. Without this, the first sign-in
+            #    would still be rejected (token issued before claims were
+            #    set) and the user would have to sign out + back in.
+            current_roles = claims.get("roles") or []
+            if isinstance(current_roles, str):
+                current_roles = [r.strip() for r in current_roles.split(",") if r.strip()]
+            if "admin" not in [str(r).lower() for r in current_roles]:
+                claims["roles"] = list(current_roles) + ["admin"]
     except Exception as exc:  # never block sign-in on this
         logger.warning("bootstrap_admin_promote_failed", error=str(exc))
 
