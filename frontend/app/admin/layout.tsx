@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { ToastProvider } from "@/components/admin/Toast";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { firebaseAuth, clearClientState } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
 
@@ -86,15 +86,37 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
       if (cancelled) return;
       if (!user) { router.replace("/admin/login"); return; }
-      try {
-        const res = await api.get<{ data: { is_admin: boolean; email: string | null } }>("/api/v1/auth/me");
-        const data = (res.data as any)?.data;
-        if (!data?.is_admin) { router.replace("/admin/login"); return; }
-        if (cancelled) return;
-        setAdminEmail(data?.email || user.email || null);
-        setAuthenticated(true);
-      } catch {
-        if (!cancelled) router.replace("/admin/login");
+
+      // Force a token refresh so the admin custom claims are guaranteed to be
+      // on the token — a stale cached token could lack them and read as
+      // non-admin. (The login page force-refreshes too; keep them in step.)
+      try { await user.getIdToken(true); } catch { /* api layer retries on 401 */ }
+
+      // Verify admin while tolerating transient failures. A network / cold-
+      // start error must NOT redirect to /admin/login: the login page would
+      // immediately send a signed-in admin back here, and with a full-reload
+      // redirect that becomes an infinite loop. Only a *definitive* answer
+      // redirects — a successful "not an admin" response, or no user at all.
+      for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
+        try {
+          const res = await api.get<{ data: { is_admin: boolean; email: string | null } }>("/api/v1/auth/me");
+          if (cancelled) return;
+          const data = (res.data as any)?.data;
+          if (data?.is_admin) {
+            setAdminEmail(data?.email || user.email || null);
+            setAuthenticated(true);
+          } else {
+            router.replace("/admin/login");
+          }
+          return;
+        } catch (err) {
+          // A 401 means the api layer already handled session expiry (it
+          // redirects to /auth/login itself) — stop. Anything else is
+          // transient: back off and retry instead of bouncing into a loop.
+          if (err instanceof ApiError && err.status === 401) return;
+          if (attempt === 2) return; // give up quietly; keep showing the loader
+          await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+        }
       }
     });
     return () => { cancelled = true; unsub(); };
