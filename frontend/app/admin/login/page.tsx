@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Heart, Mail, Lock, Eye, EyeOff, AlertCircle,
@@ -14,20 +13,29 @@ import { api } from "@/lib/api";
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminLoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const greeting = useMemo(() => {
+  // The time-of-day greeting is resolved AFTER mount, never during render.
+  // Computing it in render makes the server (UTC) and the client (local)
+  // disagree on the hour, which trips a React hydration mismatch. A failed
+  // hydration leaves the Next.js client router wedged, so a successful
+  // sign-in's redirect silently no-ops and the button stays on "Signing in…"
+  // forever. Starting from a stable value keeps SSR and the first client
+  // render identical.
+  const [greeting, setGreeting] = useState("Welcome back");
+  useEffect(() => {
     const h = new Date().getHours();
-    if (h < 5) return "Welcome back";
-    if (h < 12) return "Good morning";
-    if (h < 17) return "Good afternoon";
-    if (h < 21) return "Good evening";
-    return "Welcome back";
+    setGreeting(
+      h < 5 ? "Welcome back"
+        : h < 12 ? "Good morning"
+        : h < 17 ? "Good afternoon"
+        : h < 21 ? "Good evening"
+        : "Welcome back",
+    );
   }, []);
 
   useEffect(() => {
@@ -36,11 +44,14 @@ export default function AdminLoginPage() {
       try {
         await user.getIdToken(true);
         const res = await api.get<{ data: { is_admin: boolean } }>("/api/v1/auth/me");
-        if ((res.data as any)?.data?.is_admin) router.replace("/admin/dashboard");
+        // Hard navigation, not router.replace: the SPA router can be left in a
+        // broken state by a hydration hiccup, and a no-op redirect would strand
+        // a signed-in admin here. A full load always lands the dashboard.
+        if ((res.data as any)?.data?.is_admin) window.location.assign("/admin/dashboard");
       } catch { /* stay on login */ }
     });
     return unsub;
-  }, [router]);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,7 +69,7 @@ export default function AdminLoginPage() {
         setLoading(false);
         return;
       }
-      router.replace("/admin/dashboard");
+      window.location.assign("/admin/dashboard");
     } catch (e: any) {
       const code = e?.code || "";
       if (code.includes("user-not-found") || code.includes("invalid-credential") || code.includes("wrong-password")) {
