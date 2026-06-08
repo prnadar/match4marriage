@@ -238,8 +238,15 @@ async def get_current_user(
         bootstrap_raw = (_get_settings().BOOTSTRAP_ADMIN_EMAILS or "")
         bootstrap_set = {e.strip().lower() for e in bootstrap_raw.split(",") if e.strip()}
         if email and email.lower() in bootstrap_set:
+            # Bootstrap accounts are the founding operators, so grant BOTH
+            # `admin` (console access) and `super_admin` (so they can
+            # grant/revoke other admins from the UI — the grant-admin routes
+            # require super_admin, and nobody else can mint one). Otherwise the
+            # very first admin is a script-only dead-end.
+            bootstrap_roles = ("admin", "super_admin")
+
             # 1. Persist via Firebase custom claims (idempotent — only writes
-            #    if "admin" isn't already there).
+            #    the roles that aren't already present).
             try:
                 from firebase_admin import auth as fb_auth
                 from app.core.firebase import get_firebase_app
@@ -251,23 +258,24 @@ async def get_current_user(
                     roles_value = existing_claims.get("roles") or []
                     if isinstance(roles_value, str):
                         roles_value = [r.strip() for r in roles_value.split(",") if r.strip()]
-                    if "admin" not in [str(r).lower() for r in roles_value]:
-                        new_roles = list(roles_value) + ["admin"]
-                        existing_claims["roles"] = new_roles
+                    have = [str(r).lower() for r in roles_value]
+                    missing = [r for r in bootstrap_roles if r not in have]
+                    if missing:
+                        existing_claims["roles"] = list(roles_value) + missing
                         fb_auth.set_custom_user_claims(firebase_uid, existing_claims, app=fb_app)
-                        logger.info("bootstrap_admin_claim_set", email=email.lower())
+                        logger.info("bootstrap_admin_claim_set", email=email.lower(), added=missing)
             except Exception as exc:
                 logger.warning("bootstrap_admin_set_claims_failed", error=str(exc))
 
-            # 2. Overlay `admin` onto the CURRENT request's claims so this
+            # 2. Overlay the roles onto the CURRENT request's claims so this
             #    very request is admitted. Without this, the first sign-in
             #    would still be rejected (token issued before claims were
             #    set) and the user would have to sign out + back in.
             current_roles = claims.get("roles") or []
             if isinstance(current_roles, str):
                 current_roles = [r.strip() for r in current_roles.split(",") if r.strip()]
-            if "admin" not in [str(r).lower() for r in current_roles]:
-                claims["roles"] = list(current_roles) + ["admin"]
+            have_now = [str(r).lower() for r in current_roles]
+            claims["roles"] = list(current_roles) + [r for r in bootstrap_roles if r not in have_now]
     except Exception as exc:  # never block sign-in on this
         logger.warning("bootstrap_admin_promote_failed", error=str(exc))
 

@@ -105,10 +105,12 @@ class Settings(BaseSettings):
     DEMO_MODE: bool = False
 
     # ── Bootstrap admin emails ────────────────────────────────────────────
-    # Comma-separated list of email addresses that get auto-promoted to admin
-    # the first time they sign in. Saves having to hand-run SQL on a fresh
-    # production deploy. Auto-marks email + phone verified so the (app) gate
-    # doesn't bounce the bootstrap admin to /onboarding either.
+    # Comma-separated list of email addresses that get auto-promoted on first
+    # sign-in. Saves hand-running the grant script on a fresh deploy. The
+    # promotion grants both `admin` and `super_admin` via Firebase custom
+    # claims (see get_current_user in core/security.py) — the same mechanism
+    # has_admin_role / scripts/grant_admin.py rely on. Idempotent, and never
+    # blocks sign-in if the Firebase write fails.
     # Example: BOOTSTRAP_ADMIN_EMAILS=founder@m4m.com,ops@m4m.com
     BOOTSTRAP_ADMIN_EMAILS: str = ""
 
