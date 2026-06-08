@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   motion,
   AnimatePresence,
@@ -50,6 +51,7 @@ const TAGLINE = "Elite Indian Matrimony · United Kingdom";
 
 export default function Preloader() {
   const reduced = useReducedMotion();
+  const pathname = usePathname();
   const [show, setShow] = useState(true);
   const stageRef = useRef<HTMLDivElement>(null);
 
@@ -81,6 +83,12 @@ export default function Preloader() {
     el.addEventListener("mousemove", onMove);
     return () => el.removeEventListener("mousemove", onMove);
   }, [mx, my, reduced]);
+
+  // The cinematic preloader is a marketing flourish — it must not gate the
+  // admin console (and a full-reload there would remount it, so it can appear
+  // to "hang" during a redirect). All hooks above run unconditionally first,
+  // so the Rules of Hooks still hold.
+  if (pathname?.startsWith("/admin")) return null;
 
   /* ─── Variants ────────────────────────────────────────────── */
   const stage: Variants = {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Heart, Mail, Lock, Eye, EyeOff, AlertCircle,
@@ -13,6 +14,7 @@ import { api } from "@/lib/api";
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminLoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -44,14 +46,15 @@ export default function AdminLoginPage() {
       try {
         await user.getIdToken(true);
         const res = await api.get<{ data: { is_admin: boolean } }>("/api/v1/auth/me");
-        // Hard navigation, not router.replace: the SPA router can be left in a
-        // broken state by a hydration hiccup, and a no-op redirect would strand
-        // a signed-in admin here. A full load always lands the dashboard.
-        if ((res.data as any)?.data?.is_admin) window.location.assign("/admin/dashboard");
+        // SPA navigation keeps the in-memory Firebase session continuous so the
+        // dashboard gate sees the signed-in user immediately. A full reload
+        // would re-read persistence — a transient `null` there bounces back to
+        // login → infinite loop — and would remount the root-layout preloader.
+        if ((res.data as any)?.data?.is_admin) router.replace("/admin/dashboard");
       } catch { /* stay on login */ }
     });
     return unsub;
-  }, []);
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,7 +72,7 @@ export default function AdminLoginPage() {
         setLoading(false);
         return;
       }
-      window.location.assign("/admin/dashboard");
+      router.replace("/admin/dashboard");
     } catch (e: any) {
       const code = e?.code || "";
       if (code.includes("user-not-found") || code.includes("invalid-credential") || code.includes("wrong-password")) {
