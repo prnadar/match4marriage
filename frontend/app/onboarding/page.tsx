@@ -27,10 +27,11 @@ import {
   fetchSignInMethodsForEmail,
   RecaptchaVerifier,
   linkWithPhoneNumber,
+  signOut,
   updateProfile as updateFirebaseProfile,
   type ConfirmationResult,
 } from "firebase/auth";
-import { firebaseAuth, rememberSessionUid } from "@/lib/firebase";
+import { firebaseAuth, rememberSessionUid, clearClientState } from "@/lib/firebase";
 import { api } from "@/lib/api";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -154,17 +155,40 @@ export default function OnboardingPage() {
         const res = await api.get("/api/v1/profile/me");
         if (cancelled) return;
         const p = (res.data as any)?.data;
-        const hasProfile = !!(p && p.first_name && String(p.first_name).trim());
-        const hasPhone   = !!(user.phoneNumber && user.phoneNumber.trim());
 
-        // ID verification is no longer part of onboarding — a profile +
-        // a verified phone is enough to enter the app.
-        if (hasProfile && hasPhone) {
+        // A profile row exists ONLY once onboarding is fully complete (the
+        // final step is the first and only write, after phone verification).
+        // Require the verified phone too, so a legacy named-but-phoneless
+        // record can't ping-pong with the (app) gate.
+        if (p && p.first_name && String(p.first_name).trim() && user.phoneNumber) {
           router.replace("/dashboard");
           return;
         }
-        if (hasProfile) { setStep(2); return; }
-        // Signed in but profile bootstrap never finished — back to step 1.
+
+        // No profile → onboarding was not finished.
+        const sameSession =
+          typeof sessionStorage !== "undefined" &&
+          sessionStorage.getItem("m4m_onboarding_active") === "1";
+        if (sameSession) {
+          // Same-session refresh: keep their login and let them carry on.
+          // Account + email are already done (they're signed in) and the name
+          // is held in sessionStorage for the final save, so resume at step 2.
+          setStep(2);
+          return;
+        }
+
+        // Returning later with an unfinished signup → discard the half-account
+        // so they start completely fresh and the email is freed. The endpoint
+        // refuses if a profile somehow exists, so a real member is never
+        // deleted. Then sign out and reload a clean step 1.
+        try { await api.post("/api/v1/profile/me/discard-incomplete", {}); } catch { /* best-effort */ }
+        try { await signOut(firebaseAuth); } catch {}
+        clearClientState();
+        try {
+          sessionStorage.removeItem("m4m_onboarding_active");
+          sessionStorage.removeItem("m4m_onboarding_name");
+        } catch { /* non-fatal */ }
+        if (!cancelled) window.location.assign("/onboarding");
       } catch {
         // Backend unreachable — leave the user on step 1 to retry.
       }
@@ -207,30 +231,16 @@ export default function OnboardingPage() {
         await updateFirebaseProfile(cred.user, { displayName: fullName.trim() });
       } catch { /* non-fatal */ }
 
-      // Save first/last name to our backend immediately. If this fails the
-      // user's name never reaches the profile, so they end up on /profile/me
-      // with blank fields — block the step transition and surface the error
-      // so they retry instead of silently losing data.
-      const nameParts = fullName.trim().split(/\s+/);
+      // The profile is saved only at the very END of onboarding (after phone
+      // verification), so an abandoned signup leaves NO profile/member record.
+      // We just stash the name + an "onboarding in progress" marker here.
+      // sessionStorage survives a same-session refresh (→ resume) but not a
+      // brand-new visit (→ the half-account is discarded).
       try {
-        await api.patch("/api/v1/profile/me", {
-          first_name: nameParts[0] || undefined,
-          last_name: nameParts.slice(1).join(" ") || undefined,
-        });
-      } catch (e: any) {
-        console.error("Initial profile save failed:", e);
-        setError(
-          e?.message ||
-          "We created your account but couldn't save your name. Please check your connection and try again."
-        );
-        setLoading(false);
-        return false;
-      }
-
-      // Best-effort cache so /profile/me can fall back to it if the backend
-      // round-trips drop the name (used by the load fallback in the profile page).
-      try {
-        localStorage.setItem("user_name", fullName.trim());
+        const nm = fullName.trim();
+        localStorage.setItem("user_name", nm);
+        sessionStorage.setItem("m4m_onboarding_active", "1");
+        sessionStorage.setItem("m4m_onboarding_name", nm);
       } catch { /* private mode / quota — non-fatal */ }
 
       // Send a 6-digit verification code to the email and switch to the
@@ -336,8 +346,18 @@ export default function OnboardingPage() {
       // 2. Refresh the token so the backend sees the new phone claim.
       try { await user.getIdToken(true); } catch { /* non-fatal */ }
 
-      // 3. Save profile basics.
+      // 3. Save the COMPLETE profile in a single write — this is the first
+      //    and only time a profile/member row is created. The name was
+      //    collected in step 1 but deliberately not saved then; pull it from
+      //    the sessionStorage stash (survives a same-session refresh) so the
+      //    record is created complete in one go.
+      const stashedName =
+        (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("m4m_onboarding_name") || "" : "") ||
+        fullName;
+      const nameParts = stashedName.trim().split(/\s+/).filter(Boolean);
       await api.patch("/api/v1/profile/me", {
+        first_name: nameParts[0] || undefined,
+        last_name: nameParts.slice(1).join(" ") || undefined,
         date_of_birth: payload.dob || undefined,
         gender: payload.gender ? payload.gender.toLowerCase() : undefined,
         religion: payload.religion ? (RELIGION_MAP[payload.religion] || payload.religion.toLowerCase()) : undefined,
@@ -353,11 +373,12 @@ export default function OnboardingPage() {
         if (payload.gender) localStorage.setItem("user_gender", payload.gender.toLowerCase());
       } catch { /* private mode / quota — non-fatal */ }
 
-      // Onboarding is now 2 steps — go straight to the dashboard. Members
-      // can verify ID later from their profile page.
+      // Onboarding complete — clear the in-progress markers and enter the app.
       try {
         localStorage.setItem("onboarding_completed", "true");
         localStorage.removeItem("onboarding_step");
+        sessionStorage.removeItem("m4m_onboarding_active");
+        sessionStorage.removeItem("m4m_onboarding_name");
       } catch { /* non-fatal */ }
       router.push("/dashboard");
       return true;
@@ -367,7 +388,7 @@ export default function OnboardingPage() {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, fullName]);
 
   const currentStep = STEPS[step - 1];
 

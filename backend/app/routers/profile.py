@@ -421,14 +421,30 @@ async def _get_or_create_own_profile(
     return result.scalar_one()
 
 
-@router.get("/me", response_model=APIResponse[ProfileRead])
+@router.get("/me", response_model=APIResponse[ProfileRead | None])
 async def get_my_profile(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
+    """
+    Return the caller's profile, or ``data: null`` when none exists yet.
+
+    We intentionally do NOT create a profile row on read. Onboarding is only
+    complete once its final step PATCHes the mandatory fields (which creates
+    the row). Auto-creating here was producing blank, half-finished member
+    records for anyone who merely loaded the app mid-onboarding.
+    """
     try:
-        profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
+        user_id = uuid.UUID(str(current_user.get("sub") or current_user.get("user_id")))
+        profile = (await db.execute(
+            select(UserProfile).where(
+                UserProfile.user_id == user_id,
+                UserProfile.deleted_at.is_(None),
+            )
+        )).scalar_one_or_none()
+        if profile is None:
+            return APIResponse(success=True, data=None)
         # Refresh email verification from Firebase claims (fix #9)
         await _sync_verification_flags(db, current_user)
         return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
@@ -437,6 +453,61 @@ async def get_my_profile(
     except Exception as exc:
         logger.error("get_my_profile_failed", error=str(exc), error_type=type(exc).__name__, exc_info=True)
         raise HTTPException(status_code=500, detail="Could not load your profile")
+
+
+@router.post("/me/discard-incomplete", response_model=APIResponse[dict])
+async def discard_incomplete_registration(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    """
+    Delete the caller's login (and any orphan DB row) IF onboarding was never
+    completed — i.e. no profile row exists. This lets an abandoned signup be
+    cleared so its email is freed for a fresh registration.
+
+    Hard safety: if a profile row exists (onboarding finished), refuse. A
+    completed member can never be removed via this path.
+    """
+    user_id = uuid.UUID(str(current_user.get("sub") or current_user.get("user_id")))
+    firebase_uid = current_user.get("firebase_uid")
+
+    profile = (await db.execute(
+        select(UserProfile).where(
+            UserProfile.user_id == user_id,
+            UserProfile.deleted_at.is_(None),
+        )
+    )).scalar_one_or_none()
+
+    # Refuse ONLY when onboarding actually completed (a real, named member).
+    # A blank or partial profile row — a legacy half-finished record — is still
+    # discardable; otherwise such a user would be permanently stuck (bounced to
+    # onboarding but impossible to clear).
+    required = ("first_name", "date_of_birth", "gender", "mother_tongue", "country")
+    if profile is not None and all(getattr(profile, f, None) for f in required):
+        raise HTTPException(status_code=409, detail="Account has completed onboarding; not discarding")
+
+    # Remove the partial profile (if any) + the user row.
+    try:
+        if profile is not None:
+            await db.execute(sa_text("DELETE FROM profiles WHERE user_id = :id"), {"id": user_id})
+        await db.execute(sa_text("DELETE FROM users WHERE id = :id"), {"id": user_id})
+        await db.commit()
+    except Exception as exc:
+        logger.warning("discard_db_delete_failed", error=str(exc))
+
+    # Delete the Firebase login so the email can be registered again.
+    try:
+        from firebase_admin import auth as fb_auth
+        from app.core.firebase import get_firebase_app
+        app = get_firebase_app()
+        if app is not None and firebase_uid:
+            fb_auth.delete_user(firebase_uid, app=app)
+            logger.info("discarded_incomplete_registration", firebase_uid=firebase_uid)
+    except Exception as exc:
+        logger.warning("discard_firebase_delete_failed", error=str(exc))
+
+    return APIResponse(success=True, data={"discarded": True})
 
 
 async def _sync_verification_flags(db: AsyncSession, current_user: dict) -> None:
