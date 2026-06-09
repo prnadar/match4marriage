@@ -140,7 +140,15 @@ export default function LoginPage() {
   };
 
   const getRecaptcha = () => {
-    if (recaptchaRef.current) return recaptchaRef.current;
+    // Start clean each time: a stale widget left in the container (re-mount,
+    // mode switch, or a previous failed send) makes Firebase throw "reCAPTCHA
+    // has already been rendered in this element".
+    try { recaptchaRef.current?.clear(); } catch {}
+    recaptchaRef.current = null;
+    if (typeof document !== "undefined") {
+      const el = document.getElementById("recaptcha-login");
+      if (el) el.innerHTML = "";
+    }
     const verifier = new RecaptchaVerifier(firebaseAuth, "recaptcha-login", { size: "invisible" });
     recaptchaRef.current = verifier;
     return verifier;

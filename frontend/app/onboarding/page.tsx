@@ -902,13 +902,31 @@ function Step2Profile({
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
 
   const ensureRecaptcha = useCallback(() => {
-    if (recaptchaRef.current) return recaptchaRef.current;
+    // Start from a clean slate every time. A verifier left over from a
+    // re-mount, a "Back" → "Continue", or a previous failed "Send code"
+    // leaves a widget in the container, and Firebase then throws
+    // "reCAPTCHA has already been rendered in this element". Clear the old
+    // verifier AND empty the container node before creating a fresh one.
+    try { recaptchaRef.current?.clear(); } catch {}
+    recaptchaRef.current = null;
+    if (typeof document !== "undefined") {
+      const el = document.getElementById("recaptcha-onboarding");
+      if (el) el.innerHTML = "";
+    }
     const v = new RecaptchaVerifier(firebaseAuth, "recaptcha-onboarding", { size: "invisible" });
     recaptchaRef.current = v;
     return v;
   }, []);
 
   const resetRecaptcha = useCallback(() => {
+    try { recaptchaRef.current?.clear(); } catch {}
+    recaptchaRef.current = null;
+  }, []);
+
+  // Tear the reCAPTCHA down when this step unmounts (Back to step 1, or
+  // leaving onboarding) so a stale widget can't trigger "already rendered"
+  // on the next mount.
+  useEffect(() => () => {
     try { recaptchaRef.current?.clear(); } catch {}
     recaptchaRef.current = null;
   }, []);
