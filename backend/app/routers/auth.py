@@ -437,12 +437,60 @@ async def check_email_exists(
 # ── Email verification endpoints ──────────────────────────────────────────────
 
 
+async def _ensure_auth_user(db: AsyncSession, current_user: dict, tenant_slug: str) -> User:
+    """
+    Return the caller's auth-user row, creating it (with NO profile) if needed.
+
+    Onboarding defers profile creation to its final step, so during email
+    verification the DB row may not exist yet — but we still need somewhere to
+    send the code and record email-verified. We therefore create the *user* row
+    only. A user row WITHOUT a profile is NOT a member (the gate, browse and
+    matches all key off profiles); abandoned ones are removed by
+    /profile/me/discard-incomplete.
+    """
+    import uuid as _uuid
+
+    user_uuid = _uuid.UUID(str(current_user.get("sub") or current_user.get("user_id") or ""))
+    user = (await db.execute(
+        select(User).where(User.id == user_uuid, User.deleted_at.is_(None))
+    )).scalar_one_or_none()
+    if user is not None:
+        return user
+
+    from app.routers.profile import _resolve_tenant_uuid
+    tenant_uuid = await _resolve_tenant_uuid(db, tenant_slug)
+    if tenant_uuid is None:
+        raise HTTPException(status_code=500, detail="Tenant not provisioned")
+
+    fb_uid = current_user.get("firebase_uid")
+    user = User(
+        id=user_uuid,
+        tenant_id=tenant_uuid,
+        email=current_user.get("email"),
+        firebase_uids=[fb_uid] if fb_uid else [],
+        is_email_verified=bool(current_user.get("email_verified")),
+    )
+    db.add(user)
+    try:
+        await db.flush()
+    except Exception:
+        # Concurrent create — re-fetch the row created by the other request.
+        await db.rollback()
+        user = (await db.execute(
+            select(User).where(User.id == user_uuid)
+        )).scalar_one_or_none()
+        if user is None:
+            raise HTTPException(status_code=500, detail="Could not provision your account")
+    return user
+
+
 @router.post("/send-verification-email", response_model=APIResponse[dict])
 @limiter.limit("2/minute")
 async def send_verification_email_endpoint(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
 ):
     """
     Send a 6-character email verification token to the authenticated user's
@@ -462,13 +510,10 @@ async def send_verification_email_endpoint(
             detail="Invalid user session",
         )
 
-    result = await db.execute(
-        select(User).where(User.id == user_uuid, User.deleted_at.is_(None))
-    )
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    # Onboarding defers profile creation, so the DB row may not exist yet at
+    # this stage — provision the auth-user row (no profile) so there's
+    # somewhere to send the code and record email-verified.
+    user = await _ensure_auth_user(db, current_user, tenant_slug)
 
     if user.is_email_verified:
         return APIResponse(
@@ -548,6 +593,7 @@ async def verify_email_endpoint(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
     token: str = Query(..., min_length=6, max_length=6, description="6-digit verification code"),
 ):
     """
@@ -600,13 +646,7 @@ async def verify_email_endpoint(
             detail="Invalid or expired verification token",
         )
 
-    result = await db.execute(
-        select(User).where(User.id == user_uuid, User.deleted_at.is_(None))
-    )
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    user = await _ensure_auth_user(db, current_user, tenant_slug)
 
     if user.is_email_verified:
         await redis.delete(redis_key)
