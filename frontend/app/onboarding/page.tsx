@@ -156,31 +156,37 @@ export default function OnboardingPage() {
         if (cancelled) return;
         const p = (res.data as any)?.data;
 
-        // A profile row exists ONLY once onboarding is fully complete (the
-        // final step is the first and only write, after phone verification).
-        // Require the verified phone too, so a legacy named-but-phoneless
-        // record can't ping-pong with the (app) gate.
-        if (p && p.first_name && String(p.first_name).trim() && user.phoneNumber) {
+        const hasProfile = !!(p && p.first_name && String(p.first_name).trim());
+
+        // Complete (profile + verified phone) → done, straight to the dashboard.
+        if (hasProfile && user.phoneNumber) {
           router.replace("/dashboard");
           return;
         }
 
-        // No profile → onboarding was not finished.
-        const sameSession =
-          typeof sessionStorage !== "undefined" &&
-          sessionStorage.getItem("m4m_onboarding_active") === "1";
-        if (sameSession) {
-          // Same-session refresh: keep their login and let them carry on.
-          // Account + email are already done (they're signed in) and the name
-          // is held in sessionStorage for the final save, so resume at step 2.
+        // A profile that already has real data but no linked phone yet → let
+        // them FINISH at step 2. We never discard a profile that has data — a
+        // real member must never be kicked back to "create account".
+        if (hasProfile) {
           setStep(2);
           return;
         }
 
-        // Returning later with an unfinished signup → discard the half-account
-        // so they start completely fresh and the email is freed. The endpoint
-        // refuses if a profile somehow exists, so a real member is never
-        // deleted. Then sign out and reload a clean step 1.
+        // No profile at all → a fresh, deferred signup (nothing saved).
+        const sameSession =
+          typeof sessionStorage !== "undefined" &&
+          sessionStorage.getItem("m4m_onboarding_active") === "1";
+        if (sameSession) {
+          // Same-session refresh: keep their login and resume at step 2 (the
+          // name is held in sessionStorage for the final save).
+          setStep(2);
+          return;
+        }
+
+        // Returning later with an unfinished signup (no data saved) → discard
+        // the half-account so they start completely fresh and the email is
+        // freed. The endpoint refuses if a profile exists, so a real member is
+        // never deleted. Sign out and reload a clean step 1.
         try { await api.post("/api/v1/profile/me/discard-incomplete", {}); } catch { /* best-effort */ }
         try { await signOut(firebaseAuth); } catch {}
         clearClientState();

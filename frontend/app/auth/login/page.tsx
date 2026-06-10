@@ -95,7 +95,13 @@ export default function LoginPage() {
     try {
       const res = await profileApi.me();
       const p = (res.data as any)?.data;
-      if (p?.first_name?.trim()) { router.replace("/dashboard"); return; }
+      // Only a COMPLETE member (profile + verified phone) goes to the
+      // dashboard. Anyone else lands on onboarding directly — never flashed
+      // to the dashboard and bounced back to "create your account".
+      if (p?.first_name?.trim() && firebaseAuth.currentUser?.phoneNumber) {
+        router.replace("/dashboard");
+        return;
+      }
     } catch { /* new user or backend down */ }
     router.replace("/onboarding");
   };
