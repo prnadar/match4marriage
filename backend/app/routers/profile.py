@@ -567,6 +567,53 @@ def _apply_profile_patch(profile: UserProfile, payload: dict) -> None:
             setattr(profile, key, value)
 
 
+def _is_onboarding_complete(p: UserProfile) -> bool:
+    """The mandatory onboarding fields (mirrors the /onboarding gate):
+    full name, date of birth, gender, mother tongue, country."""
+    return bool(
+        (p.first_name and p.first_name.strip())
+        and p.date_of_birth is not None
+        and p.gender is not None
+        and (p.mother_tongue and str(p.mother_tongue).strip())
+        and (p.country and p.country.strip())
+    )
+
+
+async def _assign_membership_if_onboarded(db: AsyncSession, profile: UserProfile) -> None:
+    """The first time a profile satisfies the onboarding requirements, mint the
+    member's permanent membership number (M4M<year><seq>) and send their welcome
+    email. Idempotent and best-effort — never raises into the request."""
+    if not _is_onboarding_complete(profile):
+        return
+    user_row = (await db.execute(
+        select(User).where(User.id == profile.user_id)
+    )).scalar_one_or_none()
+    if user_row is None or user_row.membership_number:
+        return
+    try:
+        number = await assign_membership_number(db, user_row)
+    except Exception as e:
+        logger.error("membership_assign_failed", user_id=str(profile.user_id), error=str(e))
+        return
+    if number and user_row.email:
+        display_name = " ".join(
+            x for x in (profile.first_name, profile.last_name) if x
+        ).strip() or user_row.email.split("@")[0]
+        try:
+            await send_membership_welcome_email(
+                email=user_row.email,
+                user_name=display_name,
+                membership_number=number,
+            )
+        except Exception as e:
+            logger.error(
+                "membership_email_failed",
+                user_id=str(profile.user_id),
+                membership_number=number,
+                error=str(e),
+            )
+
+
 @router.patch("/me", response_model=APIResponse[ProfileRead])
 async def patch_my_profile(
     payload: ProfileUpdate,
@@ -603,6 +650,12 @@ async def patch_my_profile(
         pass
     await db.flush()
     await db.refresh(profile)
+
+    # Onboarding-completion hook: the final onboarding step PATCHes the profile
+    # with its mandatory fields. The first time it's complete, mint the member's
+    # permanent membership number + send their welcome email (once).
+    await _assign_membership_if_onboarded(db, profile)
+
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
 
 

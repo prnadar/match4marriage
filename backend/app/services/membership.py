@@ -1,10 +1,11 @@
 """
 Membership-number service.
 
-Mints human-friendly identifiers like ``M4M202600001`` and assigns them
-to users when they finish onboarding. Numbers are unique per tenant, with
-a separate counter per year so the prefix carries useful "when joined"
-context.
+Mints human-friendly identifiers like ``M4M2026001`` (prefix + 4-digit year
++ a per-year sequence, zero-padded to 3 digits) and assigns them to users
+when they finish onboarding. Numbers are unique per tenant, with a separate
+counter per year so the prefix carries useful "when joined" context. The
+sequence grows past 3 digits naturally once a year exceeds 999 members.
 
 Concurrency: PostgreSQL transaction-level advisory locks scoped to
 ``(tenant_id, year)`` serialise concurrent assignments without blocking
@@ -83,7 +84,8 @@ async def assign_membership_number(
     )
     max_seq = row.scalar() or 0
     next_seq = int(max_seq) + 1
-    number = f"{prefix}{next_seq:05d}"
+    # 3-digit zero-pad → M4M2026001, M4M2026002, … (grows to 4+ digits past 999).
+    number = f"{prefix}{next_seq:03d}"
 
     user.membership_number = number
     db.add(user)

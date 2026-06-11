@@ -85,10 +85,10 @@ class User(TenantModel):
     pan_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Membership number assigned once onboarding completes. Format:
-    # ``M4MYYYYNNNNN`` (no separators) where YYYY is the year of issuance
-    # and NNNNN is a zero-padded sequence per year. Nullable so we can
-    # issue on completion rather than at signup; uniqueness is enforced
-    # inside the tenant.
+    # ``M4MYYYYNNN`` (no separators), e.g. M4M2026001 — YYYY is the year of
+    # issuance and NNN is a per-year sequence zero-padded to 3 digits (grows
+    # to 4+ digits past 999). Nullable so we can issue on completion rather
+    # than at signup; uniqueness is enforced inside the tenant.
     membership_number: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
 
     # Subscription tier. The legacy ``trust_score`` column has been retired

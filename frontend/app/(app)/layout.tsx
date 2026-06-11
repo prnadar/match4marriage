@@ -8,7 +8,7 @@ import {
   Shield, Bell, Settings, LogOut, ChevronRight, Users, Star as StarIcon,
   CreditCard, Home, Menu, X, AlertTriangle, Mail, MapPin, ArrowRight,
 } from "lucide-react";
-import { profileApi } from "@/lib/api";
+import { profileApi, api } from "@/lib/api";
 import { clearClientState, firebaseAuth, rememberSessionUid } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 import PublicHeader from "@/components/PublicHeader";
@@ -90,6 +90,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarName, setSidebarName] = useState("");
   const [sidebarInitial, setSidebarInitial] = useState("");
   const [sidebarPlan, setSidebarPlan] = useState<string>("Basic");
+  const [sidebarMembership, setSidebarMembership] = useState<string | null>(null);
   // Same hook PublicHeader uses; keeps the sidebar avatar in lock-step
   // with the top-bar avatar after a primary-photo change.
   const sidebarPhotoUrl = useProfilePhoto();
@@ -151,6 +152,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         };
         setSidebarPlan(tierToLabel[tier] || "Basic");
       } catch { /* leave default */ }
+
+      // Membership number (issued once onboarding completes) — shown under
+      // the member's name in the sidebar.
+      try {
+        const meRes = await api.get("/api/v1/auth/me");
+        const d = (meRes.data as any)?.data ?? meRes.data;
+        setSidebarMembership(d?.membership_number ?? null);
+      } catch { /* leave null */ }
     }
     loadSidebar();
   }, [pathname]);
@@ -279,6 +288,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate" style={{ color: "#ffffff" }}>{sidebarName || "My Profile"}</p>
+                {sidebarMembership && (
+                  <p className="truncate" style={{ fontFamily: "ui-monospace, monospace", fontSize: "10px", letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", margin: "1px 0 0" }}>
+                    {sidebarMembership}
+                  </p>
+                )}
                 <div className="flex items-center gap-1 mt-0.5">
                   <Shield className="w-3 h-3" style={{ color: "#8DB870" }} />
                   <span className="text-xs font-medium" style={{ color: "#8DB870" }}>{sidebarPlan} member</span>
