@@ -177,11 +177,17 @@ export default function DashboardPage() {
   const completionScore = completion?.score ?? 0;
 
   return (
-    <div className="relative min-h-screen overflow-hidden" style={{ background: "#fdfbf9" }}>
-      {/* Soft ambient accents */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+    <div
+      className="relative min-h-screen overflow-hidden"
+      style={{ background: "linear-gradient(165deg,#170811 0%,#220c1a 45%,#0b0509 100%)" }}
+    >
+      {/* Ambient backdrop — matches the Subscription page */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
         <span className="m4m-dash-aurora m4m-dash-aurora-rose" />
         <span className="m4m-dash-aurora m4m-dash-aurora-gold" />
+        <span className="m4m-dash-aurora m4m-dash-aurora-plum" />
+        <span className="m4m-dash-dots" />
+        <span className="m4m-dash-vignette" />
       </div>
 
       <div className="relative mx-auto max-w-[1200px] px-6 py-8 lg:px-8 lg:py-10">
@@ -194,38 +200,38 @@ export default function DashboardPage() {
           className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_auto] lg:items-center"
         >
           <motion.div variants={fadeUp}>
-            <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-[0.2em] text-rose-700/80">
+            <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-[0.2em] text-[#f3c9a8]">
               Welcome back
             </p>
-            <h1 className="font-display text-[34px] font-semibold leading-tight text-[#1a0a14] sm:text-[40px]">
+            <h1 className="font-display text-[34px] font-semibold leading-tight text-white sm:text-[40px]">
               <RevealText as="span" split="word" className="font-display">
                 Your curated matches
               </RevealText>
             </h1>
             {membershipNumber && (
-              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-rose-100 bg-white/70 px-3 py-1 text-[11px] font-semibold tracking-[0.14em] text-rose-700 shadow-[0_2px_8px_rgba(220,30,60,0.05)]">
-                <span className="text-rose-700/60 uppercase">Member</span>
-                <span className="font-mono tabular-nums text-[#1a0a14]">{membershipNumber}</span>
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] font-semibold tracking-[0.14em] backdrop-blur-sm">
+                <span className="uppercase text-[#f3c9a8]/70">Member</span>
+                <span className="font-mono tabular-nums text-white">{membershipNumber}</span>
               </div>
             )}
-            <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-[#6a5560]">
+            <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-white/55">
               {loading ? (
                 "Loading the introductions our advisors selected for you today…"
               ) : (
                 <>
-                  <CountUp to={matches.length} className="font-semibold text-[#1a0a14]" />{" "}
+                  <CountUp to={matches.length} className="font-semibold text-white" />{" "}
                   hand-picked introductions for you, refreshed daily by our team.
                 </>
               )}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3 text-[12px]">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 ring-1 ring-rose-100 text-rose-700/80">
-                <Clock className="h-3.5 w-3.5" />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.05] px-3 py-1 text-white/70 ring-1 ring-white/10">
+                <Clock className="h-3.5 w-3.5 text-[#f3c9a8]" />
                 Refreshes 6:00 AM IST
               </span>
               <Link
                 href="/matches"
-                className="inline-flex items-center gap-1 text-rose-700 transition-colors hover:text-rose-800"
+                className="inline-flex items-center gap-1 text-[#f3c9a8] transition-colors hover:text-white"
               >
                 Browse all profiles <ArrowRight className="h-3.5 w-3.5" />
               </Link>
@@ -236,7 +242,7 @@ export default function DashboardPage() {
           <motion.div
             variants={fadeUp}
             whileHover={hoverLift}
-            className="relative flex items-center gap-5 rounded-3xl border border-rose-100/70 bg-white p-5 shadow-[0_2px_18px_rgba(220,30,60,0.06)]"
+            className="relative flex items-center gap-5 rounded-3xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm"
             style={{ minWidth: 300 }}
           >
             <div className="flex flex-col gap-1.5">
@@ -245,23 +251,23 @@ export default function DashboardPage() {
                   global "Complete your profile & verify your ID" banner that
                   appears on the same screen for unverified members. */}
               {completion?.badges?.id === "verified" ? (
-                <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-emerald-400/12 px-2 py-0.5 text-[10px] font-semibold text-emerald-200 ring-1 ring-emerald-400/25">
                   <Shield className="h-3 w-3" /> Verified member
                 </div>
               ) : (
-                <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-100">
+                <div className="inline-flex items-center gap-1.5 self-start rounded-full bg-amber-300/12 px-2 py-0.5 text-[10px] font-semibold text-amber-100 ring-1 ring-amber-300/25">
                   <Shield className="h-3 w-3" /> Verification pending
                 </div>
               )}
-              <p className="font-display text-[15px] text-[#1a0a14]">
+              <p className="font-display text-[15px] text-white">
                 A complete profile gets noticed
               </p>
-              <p className="text-[12px] leading-snug text-[#6a5560]">
+              <p className="text-[12px] leading-snug text-white/55">
                 Members with full profiles and photos receive far more interest.
               </p>
               <Link
                 href="/profile/me"
-                className="mt-1 inline-flex items-center gap-1 self-start text-[12px] font-semibold text-rose-700 hover:text-rose-800"
+                className="mt-1 inline-flex items-center gap-1 self-start text-[12px] font-semibold text-[#f3c9a8] hover:text-white"
               >
                 Complete your profile <ArrowRight className="h-3 w-3" />
               </Link>
@@ -284,7 +290,7 @@ export default function DashboardPage() {
             <motion.section
               {...reveal}
               whileHover={hoverLift}
-              className="mt-7 flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-rose-100/70 bg-gradient-to-br from-white to-rose-50/40 p-5 shadow-[0_2px_14px_rgba(220,30,60,0.05)]"
+              className="mt-7 flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm"
             >
               <div className="flex items-center gap-4 min-w-[240px]">
                 <motion.span
@@ -292,27 +298,27 @@ export default function DashboardPage() {
                   whileInView={{ rotate: 0, scale: 1, opacity: 1 }}
                   viewport={{ once: true }}
                   transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.1 }}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 text-rose-700 ring-1 ring-rose-100"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#dc1e3c]/15 text-[#ff8aa3] ring-1 ring-[#dc1e3c]/30"
                 >
                   <Crown className="h-5 w-5" />
                 </motion.span>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700/70">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#f3c9a8]/70">
                     Your membership
                   </p>
-                  <p className="font-display text-[20px] font-semibold text-[#1a0a14] leading-tight">
+                  <p className="font-display text-[20px] font-semibold text-white leading-tight">
                     {label} plan
                   </p>
                 </div>
               </div>
 
               {isTopTier ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/12 px-3 py-1.5 text-[12px] font-semibold text-emerald-200 ring-1 ring-emerald-400/25">
                   <Check className="h-3.5 w-3.5" /> You're on our highest tier
                 </span>
               ) : (
                 <div className="flex flex-1 flex-wrap items-center justify-end gap-4">
-                  <p className="text-[13px] leading-snug text-[#6a5560] max-w-sm">
+                  <p className="text-[13px] leading-snug text-white/55 max-w-sm">
                     {plan === "free"
                       ? "Unlock direct messaging, contact access and priority introductions."
                       : "Upgrade for more contacts, priority placement and concierge support."}
@@ -321,7 +327,7 @@ export default function DashboardPage() {
                     href="/subscription"
                     whileHover={hoverLift}
                     whileTap={reduce ? undefined : { scale: 0.97 }}
-                    className="group inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-[13.5px] font-semibold text-white shadow-[0_6px_18px_rgba(220,30,60,0.32)] transition-all hover:shadow-[0_12px_28px_rgba(220,30,60,0.42)]"
+                    className="group inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-[13.5px] font-semibold text-white shadow-[0_10px_28px_-6px_rgba(220,30,60,0.6)] transition-all hover:shadow-[0_14px_34px_-6px_rgba(220,30,60,0.75)]"
                     style={{ background: "linear-gradient(135deg, #dc1e3c, #a0153c)" }}
                   >
                     {plan === "free" ? "Upgrade your plan" : "See higher tiers"}
@@ -336,25 +342,25 @@ export default function DashboardPage() {
         {/* ── Profile completeness ───────────────────────────────────── */}
         <motion.section
           {...reveal}
-          className="mt-7 flex flex-wrap items-center gap-5 rounded-2xl border border-rose-100/70 bg-white p-5 shadow-[0_2px_14px_rgba(220,30,60,0.05)]"
+          className="mt-7 flex flex-wrap items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm"
         >
           <div className="flex-1 min-w-[260px]">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <span className="text-[13px] font-semibold text-[#1a0a14]">
-                Profile completeness · <CountUp to={completionScore} suffix="%" className="font-display" />
+              <span className="text-[13px] font-semibold text-white">
+                Profile completeness · <CountUp to={completionScore} suffix="%" className="font-display text-[#f3c9a8]" />
               </span>
               {completionScore < 100 && (
-                <span className="text-[11px] font-medium text-amber-700">
+                <span className="text-[11px] font-medium text-amber-200/90">
                   +{100 - completionScore} pts to unlock all introductions
                 </span>
               )}
             </div>
-            <div className="relative h-2 overflow-hidden rounded-full bg-rose-100/60">
+            <div className="relative h-2 overflow-hidden rounded-full bg-white/10">
               <motion.div
                 className="absolute inset-y-0 left-0 rounded-full"
                 style={{
                   background: "linear-gradient(90deg,#dc1e3c 0%,#C9954A 100%)",
-                  boxShadow: "0 0 14px rgba(220,30,60,0.35)",
+                  boxShadow: "0 0 14px rgba(220,30,60,0.45)",
                 }}
                 initial={{ width: 0 }}
                 whileInView={{ width: `${completionScore}%` }}
@@ -370,27 +376,27 @@ export default function DashboardPage() {
                   const label = k === "id" ? "ID verified" : k === "phone" ? "Phone verified" : k === "email" ? "Email verified" : "Photos uploaded";
                   if (state === "verified") {
                     return (
-                      <span key={k} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-100">
+                      <span key={k} className="inline-flex items-center gap-1 rounded-full bg-emerald-400/12 px-2.5 py-1 text-[11px] font-medium text-emerald-200 ring-1 ring-emerald-400/25">
                         <Check className="h-3 w-3" strokeWidth={2.4} /> {label}
                       </span>
                     );
                   }
                   if (state === "pending") {
                     return (
-                      <span key={k} className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 ring-1 ring-amber-100">
+                      <span key={k} className="inline-flex items-center gap-1 rounded-full bg-amber-300/12 px-2.5 py-1 text-[11px] font-medium text-amber-100 ring-1 ring-amber-300/25">
                         <Clock className="h-3 w-3" strokeWidth={2} /> {label} · pending
                       </span>
                     );
                   }
                   return (
-                    <span key={k} className="inline-flex items-center gap-1 rounded-full bg-rose-50/70 px-2.5 py-1 text-[11px] font-medium text-rose-700 ring-1 ring-rose-100">
+                    <span key={k} className="inline-flex items-center gap-1 rounded-full bg-[#dc1e3c]/12 px-2.5 py-1 text-[11px] font-medium text-rose-200 ring-1 ring-[#dc1e3c]/25">
                       <Plus className="h-3 w-3" strokeWidth={2.4} /> {label}
                     </span>
                   );
                 })}
                 {/* Missing field hints (top 3) */}
                 {completion.missing.slice(0, 3).map((m) => (
-                  <span key={m.key} className="inline-flex items-center gap-1 rounded-full bg-rose-50/70 px-2.5 py-1 text-[11px] font-medium text-rose-700 ring-1 ring-rose-100">
+                  <span key={m.key} className="inline-flex items-center gap-1 rounded-full bg-[#dc1e3c]/12 px-2.5 py-1 text-[11px] font-medium text-rose-200 ring-1 ring-[#dc1e3c]/25">
                     <Plus className="h-3 w-3" strokeWidth={2.4} /> {m.label}
                   </span>
                 ))}
@@ -406,43 +412,51 @@ export default function DashboardPage() {
 
         {/* ── Interest quota notice ──────────────────────────────────── */}
         {interestError && (
-          <div className="fade-in-up mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-[13px] text-rose-800">
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-400/25 bg-rose-400/10 px-4 py-3 text-[13px] text-rose-100 backdrop-blur-sm"
+          >
             <span className="flex items-center gap-2">
-              <Heart className="h-4 w-4 flex-shrink-0 text-rose-700" />
+              <Heart className="h-4 w-4 flex-shrink-0 text-[#ff8aa3]" />
               {interestError}
             </span>
             <Link
               href="/subscription"
-              className="inline-flex items-center gap-1 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-[0_4px_14px_rgba(220,30,60,0.25)]"
+              className="inline-flex items-center gap-1 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-[0_4px_14px_rgba(220,30,60,0.35)]"
             >
               Upgrade to Premium <ArrowRight className="h-3.5 w-3.5" />
             </Link>
-          </div>
+          </motion.div>
         )}
 
         {/* ── Sent interest strip ────────────────────────────────────── */}
         {sent.length > 0 && (
-          <div className="fade-in-up mt-6 flex items-center gap-2.5 rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3 text-[13px] text-emerald-800">
-            <Heart className="h-4 w-4 fill-emerald-700 text-emerald-700" />
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 flex items-center gap-2.5 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-[13px] text-emerald-100 backdrop-blur-sm"
+          >
+            <Heart className="h-4 w-4 fill-emerald-300 text-emerald-300" />
             <span>
-              Interest sent to <strong>{sent.map((m) => m.name.split(" ")[0]).join(", ")}</strong> · awaiting response
+              Interest sent to <strong className="text-white">{sent.map((m) => m.name.split(" ")[0]).join(", ")}</strong> · awaiting response
             </span>
-          </div>
+          </motion.div>
         )}
 
         {/* ── Section heading ────────────────────────────────────────── */}
         <motion.div {...reveal} className="mt-10 mb-5 flex items-end justify-between gap-4">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-rose-700/80">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#f3c9a8]">
               <Sparkles className="mr-1 inline h-3 w-3" /> Today's introductions
             </p>
-            <h2 className="font-display mt-1 text-[24px] font-semibold text-[#1a0a14]">
+            <h2 className="font-display mt-1 text-[24px] font-semibold text-white">
               Hand-picked for you
             </h2>
           </div>
           <Link
             href="/matches"
-            className="hidden items-center gap-1 text-[13px] font-semibold text-rose-700 hover:text-rose-800 sm:inline-flex"
+            className="hidden items-center gap-1 text-[13px] font-semibold text-[#f3c9a8] hover:text-white sm:inline-flex"
           >
             See all <ArrowRight className="h-3.5 w-3.5" />
           </Link>
@@ -454,15 +468,15 @@ export default function DashboardPage() {
             {Array.from({ length: 6 }).map((_, i) => (
               <div
                 key={i}
-                className="overflow-hidden rounded-[20px] border border-rose-100/70 bg-white shadow-[0_2px_14px_rgba(220,30,60,0.05)]"
+                className="overflow-hidden rounded-[20px] border border-white/10 bg-white/[0.04]"
               >
-                <div className="m4m-skeleton h-[260px] rounded-none" />
+                <div className="h-[260px] animate-pulse bg-white/[0.06]" />
                 <div className="p-4">
-                  <div className="m4m-skeleton mb-2 h-4 w-2/3" />
-                  <div className="m4m-skeleton h-3 w-1/2" />
+                  <div className="mb-2 h-4 w-2/3 animate-pulse rounded bg-white/10" />
+                  <div className="h-3 w-1/2 animate-pulse rounded bg-white/[0.07]" />
                   <div className="mt-3 flex gap-1.5">
-                    <div className="m4m-skeleton h-5 w-16 rounded-full" />
-                    <div className="m4m-skeleton h-5 w-20 rounded-full" />
+                    <div className="h-5 w-16 animate-pulse rounded-full bg-white/[0.07]" />
+                    <div className="h-5 w-20 animate-pulse rounded-full bg-white/[0.07]" />
                   </div>
                 </div>
               </div>
@@ -473,7 +487,7 @@ export default function DashboardPage() {
         {/* ── Error state ────────────────────────────────────────────── */}
         {!loading && error && (
           <EmptyState
-            icon={<AlertCircle className="h-10 w-10 text-rose-700/60" />}
+            icon={<AlertCircle className="h-10 w-10 text-rose-300/70" />}
             title="We couldn't load your matches"
             body={error}
           />
@@ -484,7 +498,7 @@ export default function DashboardPage() {
           <>
             {active.length === 0 ? (
               <EmptyState
-                icon={<Heart className="h-10 w-10 text-rose-700/40" />}
+                icon={<Heart className="h-10 w-10 text-[#ff8aa3]/60" />}
                 title={matches.length === 0 ? "No matches yet" : "All caught up for today"}
                 body={
                   matches.length === 0
@@ -517,13 +531,17 @@ export default function DashboardPage() {
       </div>
 
       <style jsx>{`
-        .m4m-dash-aurora { position: absolute; border-radius: 50%; filter: blur(110px); pointer-events: none; will-change: transform; }
-        .m4m-dash-aurora-rose { width: 460px; height: 460px; top: -170px; right: -110px; background: radial-gradient(circle, rgba(220,30,60,0.13), transparent 62%); animation: m4mDashRose 28s ease-in-out infinite alternate; }
-        .m4m-dash-aurora-gold { width: 420px; height: 420px; bottom: -150px; left: -130px; background: radial-gradient(circle, rgba(201,149,74,0.15), transparent 62%); animation: m4mDashGold 34s ease-in-out infinite alternate; }
-        @keyframes m4mDashRose { from { transform: translate(0,0) scale(1); } to { transform: translate(-70px,60px) scale(1.12); } }
-        @keyframes m4mDashGold { from { transform: translate(0,0) scale(1); } to { transform: translate(60px,-50px) scale(0.9); } }
+        .m4m-dash-aurora { position: absolute; border-radius: 50%; filter: blur(120px); pointer-events: none; will-change: transform; }
+        .m4m-dash-aurora-rose { width: 540px; height: 540px; top: -150px; right: -120px; background: radial-gradient(circle, rgba(220,30,60,0.5), transparent 60%); opacity: 0.5; animation: m4mDashRose 28s ease-in-out infinite alternate; }
+        .m4m-dash-aurora-gold { width: 560px; height: 560px; bottom: -190px; left: -150px; background: radial-gradient(circle, rgba(201,149,74,0.4), transparent 60%); opacity: 0.42; animation: m4mDashGold 34s ease-in-out infinite alternate; }
+        .m4m-dash-aurora-plum { width: 380px; height: 380px; top: 42%; right: 28%; background: radial-gradient(circle, rgba(124,58,137,0.4), transparent 60%); opacity: 0.26; animation: m4mDashPlum 30s ease-in-out infinite alternate; }
+        @keyframes m4mDashRose { from { transform: translate(0,0) scale(1); } to { transform: translate(-90px,70px) scale(1.12); } }
+        @keyframes m4mDashGold { from { transform: translate(0,0) scale(1); } to { transform: translate(90px,-60px) scale(0.92); } }
+        @keyframes m4mDashPlum { from { transform: translate(0,0) scale(1); } to { transform: translate(-60px,60px) scale(1.1); } }
+        .m4m-dash-dots { position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,0.22) 1px, transparent 1px); background-size: 30px 30px; opacity: 0.06; -webkit-mask-image: radial-gradient(ellipse at 50% 0%, black 5%, transparent 70%); mask-image: radial-gradient(ellipse at 50% 0%, black 5%, transparent 70%); }
+        .m4m-dash-vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.5) 100%); }
         @media (prefers-reduced-motion: reduce) {
-          .m4m-dash-aurora-rose, .m4m-dash-aurora-gold { animation: none !important; }
+          .m4m-dash-aurora-rose, .m4m-dash-aurora-gold, .m4m-dash-aurora-plum { animation: none !important; }
         }
       `}</style>
     </div>
@@ -541,12 +559,12 @@ function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="fade-in-up rounded-3xl border border-rose-100/70 bg-white px-6 py-16 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
-      <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-rose-50">
+    <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-6 py-16 text-center backdrop-blur-sm">
+      <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.06] ring-1 ring-white/10">
         {icon}
       </div>
-      <h3 className="font-display text-[20px] font-semibold text-[#1a0a14]">{title}</h3>
-      <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-[#6a5560]">{body}</p>
+      <h3 className="font-display text-[20px] font-semibold text-white">{title}</h3>
+      <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-white/55">{body}</p>
       {action && <div className="mt-5">{action}</div>}
     </div>
   );
