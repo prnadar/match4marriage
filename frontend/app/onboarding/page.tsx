@@ -925,20 +925,22 @@ function Step2Profile({
   const [otpState, setOtpState] = useState<OtpState>("idle");
   const confirmationRef = useRef<ConfirmationResult | null>(null);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
+  const recaptchaHostRef = useRef<HTMLDivElement | null>(null);
 
   const ensureRecaptcha = useCallback(() => {
-    // Start from a clean slate every time. A verifier left over from a
-    // re-mount, a "Back" → "Continue", or a previous failed "Send code"
-    // leaves a widget in the container, and Firebase then throws
-    // "reCAPTCHA has already been rendered in this element". Clear the old
-    // verifier AND empty the container node before creating a fresh one.
+    // Render into a BRAND-NEW DOM node every time. grecaptcha refuses to render
+    // twice into the same element ("reCAPTCHA has already been rendered in this
+    // element"), and neither verifier.clear() nor emptying the node's innerHTML
+    // reliably sheds that binding once a widget — or an AnimatePresence remount
+    // between steps — has touched it. Swapping in a fresh child node sidesteps
+    // the check entirely.
     try { recaptchaRef.current?.clear(); } catch {}
     recaptchaRef.current = null;
-    if (typeof document !== "undefined") {
-      const el = document.getElementById("recaptcha-onboarding");
-      if (el) el.innerHTML = "";
-    }
-    const v = new RecaptchaVerifier(firebaseAuth, "recaptcha-onboarding", { size: "invisible" });
+    const target = document.createElement("div");
+    const host = recaptchaHostRef.current;
+    if (host) { host.innerHTML = ""; host.appendChild(target); }
+    else { document.body.appendChild(target); }
+    const v = new RecaptchaVerifier(firebaseAuth, target, { size: "invisible" });
     recaptchaRef.current = v;
     return v;
   }, []);
@@ -1050,7 +1052,7 @@ function Step2Profile({
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.35, ease: EASE }}
     >
-      <div id="recaptcha-onboarding" />
+      <div ref={recaptchaHostRef} aria-hidden />
 
       <Eyebrow>Step 2 of 2</Eyebrow>
       <H2>About you</H2>

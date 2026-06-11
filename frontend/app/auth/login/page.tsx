@@ -56,6 +56,7 @@ export default function LoginPage() {
   const [otpSent, setOtpSent] = useState(false);
   const confirmationRef = useRef<ConfirmationResult | null>(null);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
+  const recaptchaHostRef = useRef<HTMLDivElement | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -149,11 +150,11 @@ export default function LoginPage() {
     // has already been rendered in this element".
     try { recaptchaRef.current?.clear(); } catch {}
     recaptchaRef.current = null;
-    if (typeof document !== "undefined") {
-      const el = document.getElementById("recaptcha-login");
-      if (el) el.innerHTML = "";
-    }
-    const verifier = new RecaptchaVerifier(firebaseAuth, "recaptcha-login", { size: "invisible" });
+    const target = document.createElement("div");
+    const host = recaptchaHostRef.current;
+    if (host) { host.innerHTML = ""; host.appendChild(target); }
+    else { document.body.appendChild(target); }
+    const verifier = new RecaptchaVerifier(firebaseAuth, target, { size: "invisible" });
     recaptchaRef.current = verifier;
     return verifier;
   };
@@ -227,7 +228,7 @@ export default function LoginPage() {
       overflow: "hidden",
       fontFamily: "var(--font-poppins, sans-serif)",
     }}>
-      <div id="recaptcha-login" style={{ position: "absolute", left: -9999 }} />
+      <div ref={recaptchaHostRef} aria-hidden style={{ position: "absolute", left: -9999 }} />
 
       {/* ═══ LEFT — Editorial photograph ═══════════════════════════════ */}
       <aside className="m4m-login-hero" style={{
