@@ -86,25 +86,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Consistent cross-resolution scaling. The desktop UI is pinned to a
-            reference width (REF) and the whole page is zoomed to match the
-            actual viewport, so the site keeps the SAME apparent size / feel on
-            1080p, 1440p and 4K monitors instead of looking tiny on wide or
-            high-DPI screens. Runs in <head> before first paint (no flash);
-            mobile/tablet (<1024px) keep their native responsive layout. REF is
-            the single tuning knob — raise it to make everything smaller, lower
-            it to make everything larger. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              "(function(){var REF=1600,MIN=0.9,MAX=2,raf=0;" +
-              "function a(){raf=0;try{var w=window.innerWidth||document.documentElement.clientWidth,z='';" +
-              "if(w>=1024){var r=Math.min(Math.max(w/REF,MIN),MAX);if(Math.abs(r-1)>0.005)z=String(Math.round(r*1000)/1000);}" +
-              "document.documentElement.style.zoom=z;}catch(e){}}" +
-              "function s(){if(!raf)raf=requestAnimationFrame(a);}a();" +
-              "window.addEventListener('resize',s,{passive:true});})();",
-          }}
-        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/*
