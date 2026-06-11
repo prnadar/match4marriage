@@ -63,6 +63,12 @@ function hasPromo(p: RemotePlan): boolean {
 }
 
 function periodLabel(p: RemotePlan): string {
+  // Human billing cadence by tier: the inaugural Basic is free for the first
+  // 3 months; the paid tiers (Premium / Elite) bill every 6 months. The
+  // PricingPeriod enum only models monthly/quarterly/yearly, so the label is
+  // derived here from the tier.
+  if (p.tier === "silver") return "for 3 months";
+  if (p.tier === "gold" || p.tier === "platinum") return "/ 6 months";
   switch (p.period) {
     case "monthly":   return "/ month";
     case "quarterly": return "/ quarter";
@@ -412,8 +418,36 @@ export default function SubscriptionPage() {
           </div>
         )}
 
+        {/* VIP Bespoke Service — contact-only, by invitation */}
+        <section className="mt-8 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#1a0a14] via-[#2a0f1e] to-[#1a0a14] p-6 text-white sm:p-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-4">
+              <span className="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
+                <Crown className="h-5 w-5 text-[#f3d9a8]" />
+              </span>
+              <div>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#f3d9a8]">
+                  By invitation
+                </span>
+                <h3 className="font-display mt-0.5 text-[20px] font-semibold">VIP Bespoke Service</h3>
+                <p className="mt-1.5 max-w-xl text-[13.5px] leading-relaxed text-white/70">
+                  A fully personal, white-glove matchmaking experience — hand-selected
+                  introductions, a dedicated senior advisor, family liaison, and complete
+                  discretion. Tailored entirely to you.
+                </p>
+              </div>
+            </div>
+            <a
+              href="mailto:enquiry@match4marriage.com?subject=VIP%20Bespoke%20Service%20enquiry"
+              className="inline-flex flex-shrink-0 items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-[13.5px] font-semibold text-[#1a0a14] shadow-lg transition-all hover:bg-[#f3d9a8]"
+            >
+              <Mail className="h-4 w-4" /> enquiry@match4marriage.com
+            </a>
+          </div>
+        </section>
+
         {/* Honest billing notice */}
-        <section className="mt-10 rounded-3xl border border-amber-100 bg-amber-50/60 p-5">
+        <section className="mt-6 rounded-3xl border border-amber-100 bg-amber-50/60 p-5">
           <div className="flex items-start gap-3">
             <Lock className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700" />
             <div>
@@ -423,7 +457,7 @@ export default function SubscriptionPage() {
               <p className="mt-1 text-[13px] leading-relaxed text-[#6a5560]">
                 Choose a plan and pay securely through PayPal using your PayPal balance
                 or any card. Your membership activates as soon as the payment is confirmed.
-                For the VIP Concierge tier, speak to an advisor first.
+                For the VIP Bespoke service, email enquiry@match4marriage.com.
               </p>
             </div>
           </div>
