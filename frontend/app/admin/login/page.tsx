@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Heart, Mail, Lock, Eye, EyeOff, AlertCircle,
+  Mail, Lock, Eye, EyeOff, AlertCircle,
   ShieldCheck, Zap, KeyRound, ArrowRight, Check,
 } from "lucide-react";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
@@ -143,28 +143,20 @@ export default function AdminLoginPage() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 11,
-              background: "linear-gradient(135deg, #ff4d79, #a0153c)",
-              display: "grid", placeItems: "center",
-              boxShadow: "0 6px 22px rgba(220,30,60,0.45), inset 0 0 0 1px rgba(255,255,255,0.12)",
+            <span style={{
+              display: "inline-flex", alignItems: "center",
+              background: "rgba(255,255,255,0.95)", borderRadius: 12,
+              padding: "6px 10px",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.28)",
             }}>
-              <Heart style={{ width: 18, height: 18, color: "#fff" }} fill="#fff" />
-            </div>
-            <div style={{ lineHeight: 1.1 }}>
-              <div style={{
-                fontFamily: "var(--font-playfair, serif)",
-                fontSize: 20, fontWeight: 700, color: "#fff",
-                letterSpacing: "-0.01em",
-              }}>
-                Match<span style={{ color: "#ff98ae" }}>4</span>Marriage
-              </div>
-              <div style={{
-                fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,0.42)",
-                letterSpacing: "0.16em", textTransform: "uppercase", marginTop: 2,
-              }}>
-                Admin Console
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/images/logo.jpeg" alt="Match 4 Marriage" style={{ height: 34, width: "auto", display: "block" }} />
+            </span>
+            <div style={{
+              fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,0.55)",
+              letterSpacing: "0.16em", textTransform: "uppercase",
+            }}>
+              Admin Console
             </div>
           </div>
 
