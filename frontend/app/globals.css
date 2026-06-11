@@ -79,14 +79,7 @@
   }
 
   html {
-    /* Fluid root for cross-resolution consistency. Screens up to 1440px stay
-       at exactly 16px (no change to phones / common laptops); wider, high-res
-       monitors scale the root up to 19px so the UI doesn't look tiny on them.
-       Everything sized in rem (px is auto-converted to rem at build time via
-       postcss-pxtorem) scales with this — and the layout stays responsive, so
-       there is no overflow. Raise the 0.32vw slope / 19px cap for a stronger
-       effect. */
-    font-size: clamp(16px, calc(11.4px + 0.32vw), 19px);
+    font-size: 16px;
     scroll-behavior: smooth;
   }
 
