@@ -248,9 +248,9 @@ function Hero({ count }: { count: number }) {
         position: "relative",
         padding: "16px 18px",
         borderRadius: 14,
-        background: "linear-gradient(135deg, #fff8ec 0%, #fff1f3 100%)",
+        background: "rgba(255,255,255,0.04)",
         border: "1px solid rgba(201,149,74,0.22)",
-        boxShadow: "0 6px 20px rgba(220,30,60,0.06)",
+        boxShadow: "0 2px 20px rgba(0,0,0,0.22)",
         overflow: "hidden",
       }}
     >
@@ -271,14 +271,14 @@ function Hero({ count }: { count: number }) {
         <div style={{ minWidth: 0 }}>
           <div style={{
             fontFamily: "var(--font-playfair, serif)",
-            fontSize: 17, fontWeight: 700, color: "#1a0a14",
+            fontSize: 17, fontWeight: 700, color: "#ffffff",
             letterSpacing: "-0.01em",
           }}>
             Tell us who you&apos;re looking for
           </div>
-          <div style={{ fontSize: 12.5, color: "#888", marginTop: 2 }}>
+          <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.6)", marginTop: 2 }}>
             We&apos;ll match you against people who fit. Drag the ranges, tap the chips.
-            {count > 0 && <span style={{ marginLeft: 6, color: "#7a5a1d", fontWeight: 600 }}>· {count} preferences set</span>}
+            {count > 0 && <span style={{ marginLeft: 6, color: "#C9954A", fontWeight: 600 }}>· {count} preferences set</span>}
           </div>
         </div>
       </div>
@@ -292,12 +292,12 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   return (
     <div style={{
       padding: 18, borderRadius: 14,
-      background: "#fff", border: "1px solid rgba(220,30,60,0.08)",
-      boxShadow: "0 2px 14px rgba(220,30,60,0.04)",
+      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)",
+      boxShadow: "0 2px 20px rgba(0,0,0,0.22)",
     }}>
       <div style={{
         fontSize: 11, fontWeight: 700,
-        letterSpacing: "0.08em", color: "#777", marginBottom: 14,
+        letterSpacing: "0.08em", color: "rgba(255,255,255,0.62)", marginBottom: 14,
       }}>{title}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
         {children}
@@ -313,8 +313,8 @@ function Row({ label, value, children }: { label: string; value: string; childre
         display: "flex", justifyContent: "space-between", alignItems: "baseline",
         marginBottom: 8,
       }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#1a0a14" }}>{label}</span>
-        <span style={{ fontSize: 13, color: "#a0153c", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{value}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#ffffff" }}>{label}</span>
+        <span style={{ fontSize: 13, color: "#f3c9a8", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{value}</span>
       </div>
       {children}
     </div>
@@ -325,7 +325,7 @@ function SimpleField({ label, children }: { label: string; children: React.React
   return (
     <label style={{ display: "block" }}>
       <div style={{
-        fontSize: 11, fontWeight: 600, color: "#555", letterSpacing: "0.06em", marginBottom: 4,
+        fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.62)", letterSpacing: "0.06em", marginBottom: 4,
       }}>{label}</div>
       {children}
     </label>
@@ -334,10 +334,10 @@ function SimpleField({ label, children }: { label: string; children: React.React
 
 const selectStyle: React.CSSProperties = {
   width: "100%", boxSizing: "border-box",
-  padding: "9px 12px", border: "1px solid rgba(220,30,60,0.18)", borderRadius: 8,
+  padding: "9px 12px", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8,
   // 16px keeps iOS Safari from auto-zooming on focus of these inputs/selects.
-  fontSize: 16, fontFamily: "inherit", outline: "none", background: "#fff",
-  color: "#1a0a14",
+  fontSize: 16, fontFamily: "inherit", outline: "none", background: "rgba(255,255,255,0.05)",
+  color: "#ffffff",
 };
 
 // ─── Pill multi-select group ────────────────────────────────────────────────
@@ -354,7 +354,7 @@ function PillGroup({
   return (
     <div>
       <div style={{
-        fontSize: 11, fontWeight: 600, color: "#555", letterSpacing: "0.06em",
+        fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.62)", letterSpacing: "0.06em",
         display: "flex", alignItems: "center", gap: 6, marginBottom: 8,
       }}>
         <span>{label}</span>
@@ -362,7 +362,7 @@ function PillGroup({
           <span style={{
             fontSize: 9, fontWeight: 700,
             padding: "1px 6px", borderRadius: 999,
-            background: "rgba(220,30,60,0.10)", color: "#a0153c",
+            background: "rgba(220,30,60,0.20)", color: "#f3c9a8",
           }}>{selected.size} selected</span>
         )}
       </div>
@@ -378,11 +378,11 @@ function PillGroup({
               onClick={() => onToggle(opt)}
               style={{
                 padding: "7px 13px", borderRadius: 999,
-                border: `1px solid ${active ? "rgba(220,30,60,0.4)" : "rgba(0,0,0,0.08)"}`,
+                border: `1px solid ${active ? "rgba(220,30,60,0.4)" : "rgba(255,255,255,0.15)"}`,
                 background: active
-                  ? "linear-gradient(135deg, rgba(220,30,60,0.10), rgba(160,21,60,0.06))"
-                  : "#fdfbf9",
-                color: active ? "#a0153c" : "#555",
+                  ? "linear-gradient(135deg, #dc1e3c, #a0153c)"
+                  : "rgba(255,255,255,0.05)",
+                color: active ? "#fff" : "rgba(255,255,255,0.7)",
                 fontSize: 12.5, fontWeight: active ? 600 : 500,
                 cursor: "pointer", fontFamily: "inherit",
                 boxShadow: active ? "0 2px 8px rgba(220,30,60,0.14)" : "none",
@@ -479,7 +479,7 @@ function DualRange({
         style={{
           position: "relative",
           height: 6, borderRadius: 4,
-          background: "rgba(0,0,0,0.06)",
+          background: "rgba(255,255,255,0.12)",
           cursor: "pointer",
           touchAction: "none",
         }}
@@ -639,19 +639,19 @@ function MatchPreview({
   return (
     <div style={{
       padding: 18, borderRadius: 14,
-      background: "linear-gradient(160deg, #fffaf6 0%, #fff1f3 100%)",
-      border: "1px solid rgba(220,30,60,0.10)",
-      boxShadow: "0 4px 18px rgba(220,30,60,0.05)",
+      background: "rgba(255,255,255,0.04)",
+      border: "1px solid rgba(255,255,255,0.10)",
+      boxShadow: "0 2px 20px rgba(0,0,0,0.22)",
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Heart style={{ width: 14, height: 14, color: "#dc1e3c" }} fill="#dc1e3c" />
           <span style={{
             fontSize: 11, fontWeight: 700,
-            letterSpacing: "0.08em", color: "#777",
+            letterSpacing: "0.08em", color: "rgba(255,255,255,0.62)",
           }}>Sample matches</span>
         </div>
-        <span style={{ fontSize: 11, color: "#888" }}>
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
           {loading ? "Searching…" : total != null && total > cards.length
             ? `+${total - cards.length} more match these filters`
             : null}
@@ -659,7 +659,7 @@ function MatchPreview({
       </div>
 
       {isEmpty ? (
-        <div style={{ textAlign: "center", padding: "16px 0", color: "#aaa", fontSize: 12 }}>
+        <div style={{ textAlign: "center", padding: "16px 0", color: "rgba(255,255,255,0.45)", fontSize: 12 }}>
           No matches yet. Try widening your range or removing a filter.
         </div>
       ) : (
@@ -679,9 +679,9 @@ function MatchPreview({
                 style={{
                   position: "relative",
                   padding: 12, borderRadius: 12,
-                  background: "#fff",
-                  border: "1px solid rgba(220,30,60,0.08)",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.22)",
                   display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
                   minHeight: 120,
                 }}
@@ -699,12 +699,12 @@ function MatchPreview({
                 </div>
                 <div style={{ textAlign: "center", minWidth: 0, width: "100%" }}>
                   <div style={{
-                    fontSize: 13, fontWeight: 600, color: "#1a0a14",
+                    fontSize: 13, fontWeight: 600, color: "#ffffff",
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
                     {c.first_name ? `${c.first_name[0]}.` : "—"}
                   </div>
-                  <div style={{ fontSize: 11, color: "#888" }}>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
                     {[c.age ? `${c.age}` : null, c.city].filter(Boolean).join(" · ") || "—"}
                   </div>
                 </div>

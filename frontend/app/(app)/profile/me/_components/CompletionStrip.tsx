@@ -92,12 +92,12 @@ export function CompletionStrip({ fallbackScore = 0, onJumpToTab, refreshKey }: 
         marginBottom: 16,
         borderRadius: 16,
         background: isComplete
-          ? "linear-gradient(135deg, #fff8ec 0%, #ffe8c2 100%)"
-          : "linear-gradient(135deg, #fffaf6 0%, #fff1f3 100%)",
-        border: `1px solid ${isComplete ? "rgba(201,149,74,0.35)" : "rgba(220,30,60,0.12)"}`,
+          ? "linear-gradient(135deg, rgba(201,149,74,0.10) 0%, rgba(201,149,74,0.04) 100%)"
+          : "rgba(255,255,255,0.04)",
+        border: `1px solid ${isComplete ? "rgba(201,149,74,0.35)" : "rgba(255,255,255,0.10)"}`,
         boxShadow: isComplete
           ? "0 8px 28px rgba(201,149,74,0.18)"
-          : "0 6px 22px rgba(220,30,60,0.06)",
+          : "0 2px 20px rgba(0,0,0,0.22)",
         overflow: "hidden",
       }}
       className="m4m-completion-strip"
@@ -116,7 +116,7 @@ export function CompletionStrip({ fallbackScore = 0, onJumpToTab, refreshKey }: 
         <svg width={SIZE} height={SIZE} style={{ transform: "rotate(-90deg)" }}>
           <circle
             cx={SIZE / 2} cy={SIZE / 2} r={R}
-            stroke="rgba(26,10,20,0.07)" strokeWidth={STROKE} fill="none"
+            stroke="rgba(255,255,255,0.12)" strokeWidth={STROKE} fill="none"
           />
           <motion.circle
             cx={SIZE / 2} cy={SIZE / 2} r={R}
@@ -141,12 +141,12 @@ export function CompletionStrip({ fallbackScore = 0, onJumpToTab, refreshKey }: 
             <div style={{
               fontFamily: "var(--font-playfair, serif)",
               fontSize: 22, fontWeight: 700,
-              color: isComplete ? "#7a5a1d" : "#1a0a14",
+              color: isComplete ? "#C9954A" : "#ffffff",
             }}>
               {score}<span style={{ fontSize: 12, marginLeft: 1 }}>%</span>
             </div>
             <div style={{
-              fontSize: 9, fontWeight: 700, color: "#888", letterSpacing: "0.08em", marginTop: 2,
+              fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.6)", letterSpacing: "0.08em", marginTop: 2,
             }}>
               Complete
             </div>
@@ -157,18 +157,18 @@ export function CompletionStrip({ fallbackScore = 0, onJumpToTab, refreshKey }: 
       {/* ── Headline + next action ── */}
       <div style={{ minWidth: 0, position: "relative", zIndex: 1 }}>
         {loading ? (
-          <div style={{ height: 18, width: 220, borderRadius: 6, background: "rgba(0,0,0,0.05)" }} />
+          <div style={{ height: 18, width: 220, borderRadius: 6, background: "rgba(255,255,255,0.06)" }} />
         ) : isComplete ? (
           <>
             <div style={{
               display: "flex", alignItems: "center", gap: 6,
               fontFamily: "var(--font-playfair, serif)",
-              fontSize: 17, fontWeight: 700, color: "#7a5a1d", marginBottom: 2,
+              fontSize: 17, fontWeight: 700, color: "#C9954A", marginBottom: 2,
             }}>
               <Sparkles style={{ width: 16, height: 16 }} />
               Your profile is fully set up.
             </div>
-            <div style={{ fontSize: 12, color: "#7a5a1d99" }}>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.82)" }}>
               Submit it for verification to start matching.
             </div>
           </>
@@ -176,7 +176,7 @@ export function CompletionStrip({ fallbackScore = 0, onJumpToTab, refreshKey }: 
           <>
             <div style={{
               fontFamily: "var(--font-playfair, serif)",
-              fontSize: 17, fontWeight: 600, color: "#1a0a14", marginBottom: 4,
+              fontSize: 17, fontWeight: 600, color: "#ffffff", marginBottom: 4,
             }}>
               {total === 1
                 ? "One step from a complete profile"
@@ -188,7 +188,7 @@ export function CompletionStrip({ fallbackScore = 0, onJumpToTab, refreshKey }: 
                 display: "inline-flex", alignItems: "center", gap: 6,
                 background: "transparent", border: "none", padding: 0,
                 fontFamily: "var(--font-poppins, sans-serif)", fontSize: 13,
-                color: "#a0153c", fontWeight: 600, cursor: "pointer",
+                color: "#ff8aa3", fontWeight: 600, cursor: "pointer",
               }}
             >
               Next: add your {next.label.toLowerCase()}
@@ -201,7 +201,7 @@ export function CompletionStrip({ fallbackScore = 0, onJumpToTab, refreshKey }: 
           // call failed) — show the parent's score instead of a stale spinner.
           <div style={{
             fontFamily: "var(--font-playfair, serif)",
-            fontSize: 17, fontWeight: 600, color: "#1a0a14",
+            fontSize: 17, fontWeight: 600, color: "#ffffff",
           }}>
             Keep building your profile
           </div>
@@ -239,9 +239,9 @@ function Badge({
   icon: any; label: string; state: BadgeState; reduce: boolean;
 }) {
   const palette: Record<BadgeState, { bg: string; fg: string; border: string; ring: string }> = {
-    verified: { bg: "rgba(201,149,74,0.12)", fg: "#7a5a1d", border: "rgba(201,149,74,0.42)", ring: "0 0 0 3px rgba(201,149,74,0.18)" },
-    pending:  { bg: "rgba(220,30,60,0.06)",  fg: "#a0153c", border: "rgba(220,30,60,0.25)",  ring: "none" },
-    locked:   { bg: "rgba(0,0,0,0.03)",      fg: "#9aa3a8", border: "rgba(0,0,0,0.06)",     ring: "none" },
+    verified: { bg: "rgba(16,185,129,0.14)", fg: "#34d399", border: "rgba(16,185,129,0.25)", ring: "0 0 0 3px rgba(16,185,129,0.18)" },
+    pending:  { bg: "rgba(245,158,11,0.14)", fg: "#fbbf24", border: "rgba(245,158,11,0.25)",  ring: "none" },
+    locked:   { bg: "rgba(255,255,255,0.06)", fg: "rgba(255,255,255,0.5)", border: "rgba(255,255,255,0.12)", ring: "none" },
   };
   const p = palette[state];
   return (
@@ -267,8 +267,8 @@ function Badge({
           transition={{ delay: 0.2, type: "spring", stiffness: 500, damping: 20 }}
           style={{
             marginLeft: 2, width: 5, height: 5, borderRadius: "50%",
-            background: "#c9954a",
-            boxShadow: "0 0 6px rgba(201,149,74,0.6)",
+            background: "#34d399",
+            boxShadow: "0 0 6px rgba(16,185,129,0.6)",
           }}
         />
       )}

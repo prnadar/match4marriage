@@ -147,9 +147,9 @@ export function SubmitCelebration({ open, onDone }: Props) {
               position: "relative",
               padding: "36px 44px 32px",
               borderRadius: 24,
-              background: "linear-gradient(160deg, #fffaf6 0%, #fff1f3 100%)",
-              border: "1px solid rgba(220,30,60,0.14)",
-              boxShadow: "0 24px 60px rgba(220,30,60,0.28), 0 0 0 1px rgba(255,255,255,0.6) inset",
+              background: "#1f0e1a",
+              border: "1px solid rgba(255,255,255,0.12)",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.5)",
               maxWidth: 420, width: "calc(100% - 32px)",
               textAlign: "center",
               cursor: "default",
@@ -209,7 +209,7 @@ export function SubmitCelebration({ open, onDone }: Props) {
               transition={{ delay: 0.4, duration: 0.35 }}
               style={{
                 fontFamily: "var(--font-playfair, serif)",
-                fontSize: 24, fontWeight: 700, color: "#1a0a14",
+                fontSize: 24, fontWeight: 700, color: "#ffffff",
                 margin: "0 0 6px",
                 letterSpacing: "-0.01em",
               }}
@@ -223,7 +223,7 @@ export function SubmitCelebration({ open, onDone }: Props) {
               transition={{ delay: 0.5, duration: 0.35 }}
               style={{
                 fontFamily: "var(--font-poppins, sans-serif)",
-                fontSize: 13.5, color: "#666",
+                fontSize: 13.5, color: "#e7dde0",
                 margin: 0, lineHeight: 1.55,
               }}
             >

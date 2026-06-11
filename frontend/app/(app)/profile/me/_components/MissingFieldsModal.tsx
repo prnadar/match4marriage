@@ -69,9 +69,9 @@ export function MissingFieldsModal({ open, missing, onClose, onJumpToTab }: Prop
               width: "100%", maxWidth: 440,
               padding: "26px 26px 22px",
               borderRadius: 20,
-              background: "#fff",
-              border: "1px solid rgba(220,30,60,0.12)",
-              boxShadow: "0 24px 60px rgba(220,30,60,0.18)",
+              background: "#1f0e1a",
+              border: "1px solid rgba(255,255,255,0.12)",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.5)",
             }}
           >
             <button
@@ -79,9 +79,9 @@ export function MissingFieldsModal({ open, missing, onClose, onJumpToTab }: Prop
               aria-label="Close"
               style={{
                 position: "absolute", top: 12, right: 12,
-                background: "rgba(0,0,0,0.04)", border: "none", borderRadius: 8,
+                background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 8,
                 width: 30, height: 30, display: "grid", placeItems: "center",
-                cursor: "pointer", color: "#888",
+                cursor: "pointer", color: "rgba(255,255,255,0.6)",
               }}
             >
               <X style={{ width: 14, height: 14 }} />
@@ -95,17 +95,17 @@ export function MissingFieldsModal({ open, missing, onClose, onJumpToTab }: Prop
                 background: "rgba(200,144,32,0.14)",
                 display: "grid", placeItems: "center",
               }}>
-                <AlertTriangle style={{ width: 18, height: 18, color: "#9A6B00" }} />
+                <AlertTriangle style={{ width: 18, height: 18, color: "#f3c9a8" }} />
               </div>
               <div>
                 <h3 id="missing-fields-title" style={{
                   fontFamily: "var(--font-playfair, serif)",
-                  fontSize: 18, fontWeight: 700, color: "#1a0a14",
+                  fontSize: 18, fontWeight: 700, color: "#ffffff",
                   margin: 0, lineHeight: 1.2,
                 }}>
                   Almost there
                 </h3>
-                <p style={{ fontSize: 12, color: "#888", margin: "2px 0 0" }}>
+                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", margin: "2px 0 0" }}>
                   {missing.length === 1
                     ? "Add one more thing before submitting:"
                     : `Add ${missing.length} more things before submitting:`}
@@ -131,8 +131,8 @@ export function MissingFieldsModal({ open, missing, onClose, onJumpToTab }: Prop
                       gap: 12,
                       padding: "12px 14px",
                       borderRadius: 10,
-                      border: "1px solid rgba(220,30,60,0.08)",
-                      background: "rgba(255,250,246,0.7)",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.04)",
                       cursor: "pointer",
                       textAlign: "left",
                       fontFamily: "inherit",
@@ -146,26 +146,26 @@ export function MissingFieldsModal({ open, missing, onClose, onJumpToTab }: Prop
                     }}
                     onMouseLeave={(e) => {
                       const el = e.currentTarget;
-                      el.style.background = "rgba(255,250,246,0.7)";
-                      el.style.borderColor = "rgba(220,30,60,0.08)";
+                      el.style.background = "rgba(255,255,255,0.04)";
+                      el.style.borderColor = "rgba(255,255,255,0.10)";
                       el.style.transform = "translateX(0)";
                     }}
                   >
                     <div style={{ minWidth: 0 }}>
                       <div style={{
-                        fontSize: 13, fontWeight: 600, color: "#1a0a14",
+                        fontSize: 13, fontWeight: 600, color: "#ffffff",
                       }}>
                         {meta.label}
                       </div>
                       <div style={{
-                        fontSize: 11, color: "#888", textTransform: "capitalize",
+                        fontSize: 11, color: "rgba(255,255,255,0.6)", textTransform: "capitalize",
                       }}>
                         in {meta.tab.replace(/_/g, " ")} tab
                       </div>
                     </div>
                     <span style={{
                       display: "inline-flex", alignItems: "center", gap: 4,
-                      fontSize: 12, color: "#a0153c", fontWeight: 600,
+                      fontSize: 12, color: "#ff9bb0", fontWeight: 600,
                       flexShrink: 0,
                     }}>
                       Take me there <ChevronRight style={{ width: 14, height: 14 }} />

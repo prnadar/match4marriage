@@ -36,10 +36,10 @@ export function SavedPill({ state, errorText }: Props) {
   }, [state]);
 
   const palette: Record<SaveState, { bg: string; fg: string; border: string }> = {
-    idle:   { bg: "#fff",                 fg: "#888",    border: "rgba(0,0,0,0.06)" },
-    saving: { bg: "rgba(255,255,255,0.95)", fg: "#1a0a14", border: "rgba(220,30,60,0.18)" },
-    saved:  { bg: "rgba(255,250,242,0.98)", fg: "#7a5a1d", border: "rgba(201,149,74,0.42)" },
-    error:  { bg: "rgba(255,238,238,0.98)", fg: "#a0153c", border: "rgba(220,30,60,0.30)" },
+    idle:   { bg: "#1f0e1a",              fg: "rgba(255,255,255,0.6)", border: "rgba(255,255,255,0.12)" },
+    saving: { bg: "#1f0e1a",              fg: "#ffffff", border: "rgba(255,255,255,0.12)" },
+    saved:  { bg: "#1f0e1a",              fg: "#f3c9a8", border: "rgba(201,149,74,0.42)" },
+    error:  { bg: "#1f0e1a",              fg: "#ff9bb0", border: "rgba(220,30,60,0.30)" },
   };
   const p = palette[state];
 
@@ -62,8 +62,8 @@ export function SavedPill({ state, errorText }: Props) {
             background: p.bg,
             border: `1px solid ${p.border}`,
             boxShadow: state === "saved"
-              ? "0 10px 28px rgba(201,149,74,0.30), 0 0 0 1px rgba(255,255,255,0.6) inset"
-              : "0 10px 28px rgba(0,0,0,0.10), 0 0 0 1px rgba(255,255,255,0.6) inset",
+              ? "0 10px 28px rgba(201,149,74,0.30), 0 0 0 1px rgba(255,255,255,0.12) inset"
+              : "0 10px 28px rgba(0,0,0,0.40), 0 0 0 1px rgba(255,255,255,0.12) inset",
             backdropFilter: "blur(8px)",
             fontSize: 12.5, fontWeight: 600, color: p.fg,
             fontFamily: "var(--font-poppins, sans-serif)",

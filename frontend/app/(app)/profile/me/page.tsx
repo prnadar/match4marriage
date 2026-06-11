@@ -102,12 +102,12 @@ const BASE_INPUT: React.CSSProperties = {
   // 16px (1rem) so iOS Safari doesn't auto-zoom on focus across this
   // long form; the prior 0.875rem is visually all-but-identical.
   fontSize: "1rem",
-  color: "#1a0a14",
-  border: "1px solid rgba(220,30,60,0.15)",
+  color: "#f4eef0",
+  border: "1px solid rgba(255,255,255,0.12)",
   borderRadius: 10,
   padding: "12px 16px",
   outline: "none",
-  background: "#fff",
+  background: "rgba(255,255,255,0.05)",
   boxSizing: "border-box",
   transition: "border-color 0.2s ease, box-shadow 0.2s ease",
 };
@@ -116,7 +116,7 @@ const LABEL_STYLE: React.CSSProperties = {
   fontFamily: "var(--font-poppins, sans-serif)",
   fontSize: 11,
   fontWeight: 600,
-  color: "#555",
+  color: "rgba(255,255,255,0.62)",
   letterSpacing: "0.08em",
   display: "block",
   marginBottom: 6,
@@ -125,9 +125,9 @@ const LABEL_STYLE: React.CSSProperties = {
 const CARD_STYLE: React.CSSProperties = {
   borderRadius: 16,
   padding: "1.25rem",
-  background: "#fff",
-  border: "1px solid rgba(220,30,60,0.08)",
-  boxShadow: "0 2px 16px rgba(220,30,60,0.06)",
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.10)",
+  boxShadow: "0 2px 20px rgba(0,0,0,0.22)",
 };
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
@@ -597,13 +597,13 @@ export default function MyProfilePage() {
     }));
 
   return (
-    <div className="p-4 sm:p-8" style={{ background: "#fdfbf9", minHeight: "100%" }}>
+    <div className="m4m-profile p-4 sm:p-8" style={{ background: "linear-gradient(165deg,#170811 0%,#220c1a 45%,#0b0509 100%)", minHeight: "100%", color: "#e7dde0" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: "1.5rem" }}>
         <h1 style={{
           fontFamily: "var(--font-playfair, serif)",
           fontSize: "1.875rem",
           fontWeight: 300,
-          color: "#1a0a14",
+          color: "#ffffff",
           letterSpacing: "-0.01em",
           margin: 0,
         }}>
@@ -613,17 +613,17 @@ export default function MyProfilePage() {
           <div style={{
             display: "inline-flex", alignItems: "center", gap: 8,
             padding: "6px 12px",
-            background: "#fff",
-            border: "1px solid rgba(220,30,60,0.15)",
+            background: "rgba(255,255,255,0.05)",
+            border: "1px solid rgba(255,255,255,0.12)",
             borderRadius: 9999,
             fontSize: 11,
             fontWeight: 700,
             letterSpacing: "0.14em",
-            color: "#a78a8f",
-            boxShadow: "0 2px 8px rgba(220,30,60,0.05)",
+            color: "rgba(243,201,168,0.75)",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
           }}>
             <span style={{ textTransform: "uppercase" }}>Member</span>
-            <span style={{ fontFamily: "ui-monospace, monospace", color: "#1a0a14", letterSpacing: "0.06em" }}>
+            <span style={{ fontFamily: "ui-monospace, monospace", color: "#fff", letterSpacing: "0.06em" }}>
               {membershipNumber}
             </span>
           </div>
@@ -634,11 +634,12 @@ export default function MyProfilePage() {
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         gap: 12, padding: "12px 16px", borderRadius: 10, marginBottom: 16,
-        background: verifStatus === "approved" ? "#e8f5e9"
-                  : verifStatus === "submitted" ? "#fff4e0"
-                  : verifStatus === "rejected" ? "#ffe9ec"
-                  : "#f3f3f3",
-        border: "1px solid rgba(0,0,0,0.06)",
+        background: verifStatus === "approved" ? "rgba(16,185,129,0.12)"
+                  : verifStatus === "submitted" ? "rgba(245,158,11,0.12)"
+                  : verifStatus === "rejected" ? "rgba(244,63,94,0.12)"
+                  : "rgba(255,255,255,0.05)",
+        border: "1px solid rgba(255,255,255,0.10)",
+        color: "rgba(255,255,255,0.82)",
         fontSize: 14,
       }}>
         <div>
@@ -647,11 +648,11 @@ export default function MyProfilePage() {
           {verifStatus === "rejected"  && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><AlertTriangle style={{ width: 16, height: 16, color: "#dc2626" }} /> <strong>Changes needed:</strong> {rejectionReason || "please update and resubmit."}</span>}
           {verifStatus === "draft" && rejectionReason && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Info style={{ width: 16, height: 16, color: "#0284c7" }} /> <strong>Admin request:</strong> {rejectionReason.replace(/^More info needed: /, "")}. Please update and resubmit.</span>}
           {verifStatus === "draft" && !rejectionReason && <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Edit3 style={{ width: 16, height: 16, color: "#dc1e3c" }} /> <strong>Draft.</strong> Complete all sections, then submit for verification.</span>}
-          <span style={{ marginLeft: 12, color: "#666", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <span style={{ marginLeft: 12, color: "rgba(255,255,255,0.5)", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
             {autoSaveState === "saving" && "Saving…"}
-            {autoSaveState === "saved" && (<><CheckCircle style={{ width: 12, height: 12, color: "#16a34a" }} /> Saved</>)}
+            {autoSaveState === "saved" && (<><CheckCircle style={{ width: 12, height: 12, color: "#34d399" }} /> Saved</>)}
             {autoSaveState === "error" && (
-              <span style={{ color: "#c00" }} title={saveError}>
+              <span style={{ color: "#ff8a8a" }} title={saveError}>
                 Save failed{saveError ? `: ${saveError.slice(0, 160)}` : ""}
               </span>
             )}
@@ -694,17 +695,17 @@ export default function MyProfilePage() {
       {submitError && (
         <div style={{
           padding: "14px 16px",
-          background: "#fff4e0",
-          border: "1px solid rgba(200,144,32,0.35)",
+          background: "rgba(245,158,11,0.12)",
+          border: "1px solid rgba(245,158,11,0.3)",
           borderRadius: 10, marginBottom: 16, fontSize: 13,
-          color: "#7B2D3A",
+          color: "rgba(255,255,255,0.82)",
           display: "flex", gap: 10, alignItems: "flex-start",
         }}>
-          <span style={{ flexShrink: 0, color: "#b45309" }}>
+          <span style={{ flexShrink: 0, color: "#fbbf24" }}>
             <AlertTriangle style={{ width: 16, height: 16 }} />
           </span>
           <div>
-            <strong style={{ color: "#7B2D3A" }}>Can&apos;t submit yet.</strong>{" "}
+            <strong style={{ color: "#ffd9a0" }}>Can&apos;t submit yet.</strong>{" "}
             {submitError}
           </div>
         </div>
@@ -712,15 +713,15 @@ export default function MyProfilePage() {
       {submitSuccess && (
         <div style={{
           padding: "14px 16px",
-          background: "#e8f5e9",
-          border: "1px solid rgba(92,122,82,0.35)",
+          background: "rgba(16,185,129,0.12)",
+          border: "1px solid rgba(16,185,129,0.3)",
           borderRadius: 10, marginBottom: 16, fontSize: 13,
-          color: "#3F5937",
+          color: "rgba(255,255,255,0.82)",
           display: "flex", gap: 10, alignItems: "flex-start",
         }}>
-          <CheckCircle2 size={18} strokeWidth={2.2} style={{ flexShrink: 0, color: "#3F5937", marginTop: 1 }} />
+          <CheckCircle2 size={18} strokeWidth={2.2} style={{ flexShrink: 0, color: "#6ee7b7", marginTop: 1 }} />
           <div>
-            <strong style={{ color: "#3F5937" }}>Submitted for review.</strong>{" "}
+            <strong style={{ color: "#6ee7b7" }}>Submitted for review.</strong>{" "}
             We&apos;ll notify you once the team has looked at it.
           </div>
         </div>
@@ -728,28 +729,47 @@ export default function MyProfilePage() {
       <style jsx>{`
         @keyframes m4m-btn-spin { to { transform: rotate(360deg); } }
       `}</style>
+      <style jsx global>{`
+        .m4m-profile { position: relative; isolation: isolate; }
+        .m4m-profile::before, .m4m-profile::after {
+          content: ""; position: absolute; border-radius: 50%;
+          filter: blur(120px); pointer-events: none; z-index: 0;
+        }
+        .m4m-profile::before {
+          width: 520px; height: 520px; top: -160px; right: -120px;
+          background: radial-gradient(circle, rgba(220,30,60,0.32), transparent 60%);
+        }
+        .m4m-profile::after {
+          width: 560px; height: 560px; bottom: -220px; left: -150px;
+          background: radial-gradient(circle, rgba(201,149,74,0.26), transparent 60%);
+        }
+        .m4m-profile > * { position: relative; z-index: 1; }
+        .m4m-profile select option { background: #21101b; color: #f4eef0; }
+        .m4m-profile input::placeholder,
+        .m4m-profile textarea::placeholder { color: rgba(255,255,255,0.34); }
+      `}</style>
 
       {loadStatus === "error" && (
         <div style={{
           padding: "14px 16px",
-          background: "#fff4e0",
-          border: "1px solid rgba(200,144,32,0.35)",
+          background: "rgba(245,158,11,0.12)",
+          border: "1px solid rgba(245,158,11,0.3)",
           borderRadius: 10, marginBottom: 16, fontSize: 13,
-          color: "#7B2D3A",
+          color: "rgba(255,255,255,0.82)",
           display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between",
         }}>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <AlertTriangle style={{ width: 16, height: 16, color: "#b45309", flexShrink: 0, marginTop: 1 }} />
+            <AlertTriangle style={{ width: 16, height: 16, color: "#fbbf24", flexShrink: 0, marginTop: 1 }} />
             <div>
-              <strong style={{ color: "#7B2D3A" }}>We couldn&apos;t load your profile.</strong>{" "}
+              <strong style={{ color: "#ffd9a0" }}>We couldn&apos;t load your profile.</strong>{" "}
               {loadError || "Please check your connection and try again."}
             </div>
           </div>
           <button
             onClick={loadProfile}
             style={{
-              padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(123,45,58,0.3)",
-              background: "#fff", color: "#7B2D3A", fontWeight: 600, fontSize: 12,
+              padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.18)",
+              background: "rgba(255,255,255,0.08)", color: "#fff", fontWeight: 600, fontSize: 12,
               cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
             }}
           >
@@ -781,12 +801,12 @@ export default function MyProfilePage() {
           {/* Tab Bar */}
           <div style={{
             display: "flex",
-            background: "#fff",
+            background: "rgba(255,255,255,0.04)",
             borderRadius: "16px 16px 0 0",
-            borderTop: "1px solid rgba(220,30,60,0.08)",
-            borderLeft: "1px solid rgba(220,30,60,0.08)",
-            borderRight: "1px solid rgba(220,30,60,0.08)",
-            borderBottom: "2px solid rgba(220,30,60,0.1)",
+            borderTop: "1px solid rgba(255,255,255,0.10)",
+            borderLeft: "1px solid rgba(255,255,255,0.10)",
+            borderRight: "1px solid rgba(255,255,255,0.10)",
+            borderBottom: "2px solid rgba(220,30,60,0.25)",
             overflowX: "auto",
           }}>
             {TABS.map((tab) => {
@@ -804,7 +824,7 @@ export default function MyProfilePage() {
                     fontFamily: "var(--font-poppins, sans-serif)",
                     fontSize: "0.78rem",
                     fontWeight: isActive ? 700 : 400,
-                    color: isActive ? "#dc1e3c" : "#888",
+                    color: isActive ? "#ff9bb0" : "rgba(255,255,255,0.5)",
                     background: "transparent",
                     border: "none",
                     cursor: "pointer",
@@ -835,11 +855,11 @@ export default function MyProfilePage() {
                     padding: "2px 5px",
                     borderRadius: 99,
                     background: isComplete
-                      ? "rgba(34,197,94,0.12)"
+                      ? "rgba(16,185,129,0.16)"
                       : isActive
-                      ? "rgba(220,30,60,0.08)"
-                      : "rgba(0,0,0,0.05)",
-                    color: isComplete ? "#16a34a" : isActive ? "#dc1e3c" : "#bbb",
+                      ? "rgba(220,30,60,0.2)"
+                      : "rgba(255,255,255,0.08)",
+                    color: isComplete ? "#34d399" : isActive ? "#ff9bb0" : "rgba(255,255,255,0.45)",
                     fontWeight: 600,
                     lineHeight: 1.4,
                     transition: "background 0.2s, color 0.2s",
@@ -858,10 +878,10 @@ export default function MyProfilePage() {
           {/* Tab Content Area */}
           <div style={{
             position: "relative",
-            background: "#fdfbf9",
-            borderLeft: "1px solid rgba(220,30,60,0.08)",
-            borderRight: "1px solid rgba(220,30,60,0.08)",
-            borderBottom: "1px solid rgba(220,30,60,0.08)",
+            background: "rgba(255,255,255,0.015)",
+            borderLeft: "1px solid rgba(255,255,255,0.10)",
+            borderRight: "1px solid rgba(255,255,255,0.10)",
+            borderBottom: "1px solid rgba(255,255,255,0.10)",
             borderRadius: "0 0 16px 16px",
             padding: "1.5rem",
             overflow: "hidden",
@@ -955,9 +975,9 @@ function GeneralTab({
   return (
     <>
       {/* Mandatory notice */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderRadius: 10, background: "rgba(220,30,60,0.04)", border: "1px solid rgba(220,30,60,0.12)", marginBottom: 4 }}>
-        <span style={{ color: "#dc1e3c", fontWeight: 700, fontSize: 14 }}>*</span>
-        <span style={{ fontSize: 12, color: "#888" }}>Fields marked with an asterisk are mandatory and must be completed before your profile can go live.</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderRadius: 10, background: "rgba(220,30,60,0.10)", border: "1px solid rgba(220,30,60,0.25)", marginBottom: 4 }}>
+        <span style={{ color: "#ff8aa3", fontWeight: 700, fontSize: 14 }}>*</span>
+        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>Fields marked with an asterisk are mandatory and must be completed before your profile can go live.</span>
       </div>
       {/* Personal Details */}
       <SubSection title="Personal Details">
@@ -1427,11 +1447,11 @@ function InterestsTab({
                     fontWeight: 500,
                     padding: "8px 16px",
                     borderRadius: 99,
-                    border: selected ? "none" : "1px solid rgba(220,30,60,0.2)",
+                    border: selected ? "none" : "1px solid rgba(255,255,255,0.15)",
                     background: selected
                       ? "linear-gradient(135deg,#dc1e3c,#a0153c)"
-                      : "#fff",
-                    color: selected ? "#fff" : "#888",
+                      : "rgba(255,255,255,0.05)",
+                    color: selected ? "#fff" : "rgba(255,255,255,0.7)",
                     cursor: "pointer",
                     transition: "all 0.2s ease",
                     boxShadow: selected ? "0 2px 8px rgba(220,30,60,0.25)" : "none",
@@ -1580,14 +1600,14 @@ function SubSection({ title, children }: { title: string; children: React.ReactN
           gap: 12,
           marginBottom: "1.25rem",
           paddingBottom: "0.75rem",
-          borderBottom: "1px solid rgba(220,30,60,0.07)",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
           flexWrap: "wrap",
         }}>
           <h3 style={{
             fontFamily: "var(--font-playfair, serif)",
             fontSize: "1.0625rem",
             fontWeight: 600,
-            color: "#1a0a14",
+            color: "#ffffff",
             margin: 0,
           }}>
             {title}
@@ -1607,9 +1627,9 @@ function SubSection({ title, children }: { title: string; children: React.ReactN
                   gap: 7,
                   padding: "5px 12px 5px 9px",
                   borderRadius: 9999,
-                  background: "linear-gradient(180deg,#fff5f7,#ffe9ee)",
-                  border: "1px solid rgba(220,30,60,0.22)",
-                  color: "#b3173a",
+                  background: "linear-gradient(180deg, rgba(220,30,60,0.20), rgba(220,30,60,0.10))",
+                  border: "1px solid rgba(220,30,60,0.35)",
+                  color: "#ffb3c2",
                   fontFamily: "var(--font-poppins, sans-serif)",
                   fontSize: 12,
                   fontWeight: 600,
@@ -1723,7 +1743,7 @@ function FInput({
       onBlur={() => setFocused(false)}
       style={{
         ...BASE_INPUT,
-        borderColor: focused ? "rgba(220,30,60,0.4)" : "rgba(220,30,60,0.15)",
+        borderColor: focused ? "rgba(220,30,60,0.55)" : "rgba(255,255,255,0.12)",
         boxShadow: focused ? "0 0 0 3px rgba(220,30,60,0.08)" : "none",
       }}
     />
@@ -1752,7 +1772,7 @@ function FSelect({
           appearance: "none",
           WebkitAppearance: "none",
           paddingRight: 36,
-          borderColor: focused ? "rgba(220,30,60,0.4)" : "rgba(220,30,60,0.15)",
+          borderColor: focused ? "rgba(220,30,60,0.55)" : "rgba(255,255,255,0.12)",
           boxShadow: focused ? "0 0 0 3px rgba(220,30,60,0.08)" : "none",
           cursor: "pointer",
           width: "100%",
@@ -1768,7 +1788,7 @@ function FSelect({
         top: "50%",
         transform: "translateY(-50%)",
         pointerEvents: "none",
-        color: "rgba(220,30,60,0.5)",
+        color: "rgba(255,255,255,0.45)",
       }}>
         <svg width="12" height="8" viewBox="0 0 12 8" fill="none">
           <path d="M1 1L6 6L11 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1799,7 +1819,7 @@ function FTextarea({
         ...BASE_INPUT,
         resize: "vertical",
         lineHeight: 1.6,
-        borderColor: focused ? "rgba(220,30,60,0.4)" : "rgba(220,30,60,0.15)",
+        borderColor: focused ? "rgba(220,30,60,0.55)" : "rgba(255,255,255,0.12)",
         boxShadow: focused ? "0 0 0 3px rgba(220,30,60,0.08)" : "none",
       }}
     />
@@ -1810,8 +1830,8 @@ function RepRow({ children, onRemove }: { children: React.ReactNode; onRemove?: 
   return (
     <div style={{
       position: "relative",
-      background: "rgba(220,30,60,0.025)",
-      border: "1px solid rgba(220,30,60,0.08)",
+      background: "rgba(255,255,255,0.03)",
+      border: "1px solid rgba(255,255,255,0.10)",
       borderRadius: 12,
       padding: "14px 14px 14px 14px",
       marginBottom: 10,
@@ -1827,8 +1847,8 @@ function RepRow({ children, onRemove }: { children: React.ReactNode; onRemove?: 
             height: 22,
             borderRadius: "50%",
             border: "none",
-            background: "rgba(220,30,60,0.1)",
-            color: "#dc1e3c",
+            background: "rgba(220,30,60,0.18)",
+            color: "#ff8aa3",
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
@@ -1860,9 +1880,9 @@ function AddBtn({ onClick }: { onClick: () => void }) {
         fontFamily: "var(--font-poppins, sans-serif)",
         fontSize: "0.8125rem",
         fontWeight: 600,
-        color: "#dc1e3c",
-        background: hovered ? "rgba(220,30,60,0.06)" : "transparent",
-        border: "1px solid rgba(220,30,60,0.3)",
+        color: "#ff9bb0",
+        background: hovered ? "rgba(220,30,60,0.14)" : "transparent",
+        border: "1px solid rgba(255,160,180,0.35)",
         borderRadius: 8,
         padding: "7px 14px",
         cursor: "pointer",
@@ -1939,9 +1959,9 @@ function PhotoCard({ name, photoUrl }: { name: string; photoUrl?: string | null 
     <div style={{
       borderRadius: 16,
       overflow: "hidden",
-      border: "1px solid rgba(220,30,60,0.08)",
-      boxShadow: "0 2px 16px rgba(220,30,60,0.06)",
-      background: "#fff",
+      border: "1px solid rgba(255,255,255,0.10)",
+      boxShadow: "0 2px 20px rgba(0,0,0,0.22)",
+      background: "rgba(255,255,255,0.04)",
     }}>
       <div
         style={{
@@ -2009,14 +2029,14 @@ function PhotoCard({ name, photoUrl }: { name: string; photoUrl?: string | null 
           fontFamily: "var(--font-playfair, serif)",
           fontSize: "1.0625rem",
           fontWeight: 600,
-          color: "#1a0a14",
+          color: "#ffffff",
         }}>
           {name}
         </p>
         <p style={{
           fontFamily: "var(--font-poppins, sans-serif)",
           fontSize: "0.8125rem",
-          color: "#888",
+          color: "rgba(255,255,255,0.5)",
           marginTop: 2,
         }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -2041,7 +2061,7 @@ function CompletenessCard({ completeness }: { completeness: number }) {
           fontFamily: "var(--font-poppins, sans-serif)",
           fontSize: "0.875rem",
           fontWeight: 600,
-          color: "#1a0a14",
+          color: "#ffffff",
         }}>
           Profile Complete
         </span>
@@ -2056,7 +2076,7 @@ function CompletenessCard({ completeness }: { completeness: number }) {
       </div>
       <div style={{
         height: 6,
-        background: "rgba(26,10,20,0.06)",
+        background: "rgba(255,255,255,0.10)",
         borderRadius: 99,
         overflow: "hidden",
         marginBottom: "0.5rem",
@@ -2072,7 +2092,7 @@ function CompletenessCard({ completeness }: { completeness: number }) {
       <p style={{
         fontFamily: "var(--font-poppins, sans-serif)",
         fontSize: "0.75rem",
-        color: "#888",
+        color: "rgba(255,255,255,0.5)",
         lineHeight: 1.5,
       }}>
         Complete all sections to unlock +28 trust points and 3× more profile views.

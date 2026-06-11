@@ -295,26 +295,26 @@ export function PhotoGrid() {
       <div>
         <h3 style={{
           fontFamily: "var(--font-playfair, serif)",
-          fontSize: "1.1rem", fontWeight: 700, color: "#1a0a14",
+          fontSize: "1.1rem", fontWeight: 700, color: "#ffffff",
           margin: "0 0 6px",
         }}>
           My Photos
         </h3>
         <p style={{
-          fontSize: "0.8125rem", color: "#888",
+          fontSize: "0.8125rem", color: "rgba(255,255,255,0.6)",
           fontFamily: "var(--font-poppins, sans-serif)", margin: 0,
         }}>
-          Profiles with photos get <strong style={{ color: "#dc1e3c" }}>8× more responses</strong>.
+          Profiles with photos get <strong style={{ color: "#ff8aa3" }}>8× more responses</strong>.
           Add up to {MAX_PER_SECTION} public and {MAX_PER_SECTION} premium photos.
         </p>
         {topError && (
           <div style={{
             marginTop: 10, padding: "8px 12px", borderRadius: 8,
-            background: "rgba(220,30,60,0.06)", border: "1px solid rgba(220,30,60,0.18)",
-            fontSize: 12, color: "#a0153c",
+            background: "rgba(244,63,94,0.12)", border: "1px solid rgba(244,63,94,0.3)",
+            fontSize: 12, color: "rgba(255,255,255,0.82)",
             display: "flex", alignItems: "center", gap: 6,
           }}>
-            <AlertCircle style={{ width: 13, height: 13 }} />
+            <AlertCircle style={{ width: 13, height: 13, color: "#ff8aa3" }} />
             {topError}
           </div>
         )}
@@ -446,9 +446,9 @@ function PhotoSection({
 }) {
   const [zoneActive, setZoneActive] = useState(false);
   const isGold = accent === "gold";
-  const primary = isGold ? "#c9954a" : "#dc1e3c";
-  const tint = isGold ? "rgba(201,149,74,0.08)" : "rgba(220,30,60,0.08)";
-  const border = isGold ? "rgba(201,149,74,0.30)" : "rgba(220,30,60,0.25)";
+  const primary = isGold ? "#c9954a" : "#ff8aa3";
+  const tint = isGold ? "rgba(201,149,74,0.10)" : "rgba(220,30,60,0.12)";
+  const border = isGold ? "rgba(201,149,74,0.30)" : "rgba(220,30,60,0.30)";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -457,7 +457,7 @@ function PhotoSection({
         <div>
           <p style={{
             fontFamily: "var(--font-poppins, sans-serif)", fontSize: "0.95rem", fontWeight: 700,
-            color: "#1a0a14", margin: 0,
+            color: "#ffffff", margin: 0,
             display: "inline-flex", alignItems: "center", gap: 7,
           }}>
             {isGold && <Lock style={{ width: 13, height: 13, color: primary }} />}
@@ -470,7 +470,7 @@ function PhotoSection({
             </span>
           </p>
           <p style={{
-            fontSize: "0.75rem", color: "#999",
+            fontSize: "0.75rem", color: "rgba(255,255,255,0.45)",
             fontFamily: "var(--font-poppins, sans-serif)", margin: "4px 0 0",
           }}>
             {helper}
@@ -497,12 +497,12 @@ function PhotoSection({
         onDrop={(e) => { e.preventDefault(); setZoneActive(false); onFiles(e.dataTransfer.files); }}
         style={{
           position: "relative",
-          border: `2px dashed ${zoneActive ? primary : remaining === 0 ? "rgba(0,0,0,0.08)" : border}`,
+          border: `2px dashed ${zoneActive ? primary : remaining === 0 ? "rgba(255,255,255,0.12)" : border}`,
           borderRadius: 16,
           padding: "24px 24px",
           textAlign: "center",
           cursor: remaining === 0 ? "not-allowed" : "pointer",
-          background: zoneActive ? tint : "#fdfbf9",
+          background: zoneActive ? tint : "rgba(255,255,255,0.03)",
           transition: "border-color 0.18s, background 0.18s",
           opacity: remaining === 0 ? 0.55 : 1,
           overflow: "hidden",
@@ -552,12 +552,12 @@ function PhotoSection({
         </motion.div>
         <p style={{
           fontFamily: "var(--font-poppins, sans-serif)", fontWeight: 600,
-          fontSize: "0.9rem", color: "#1a0a14", margin: "0 0 4px",
+          fontSize: "0.9rem", color: "#ffffff", margin: "0 0 4px",
           position: "relative", zIndex: 1,
         }}>
           {remaining === 0 ? zoneLabel : zoneActive ? "Release to upload" : zoneLabel}
         </p>
-        <p style={{ fontSize: "0.8125rem", color: "#aaa", margin: 0, position: "relative", zIndex: 1 }}>
+        <p style={{ fontSize: "0.8125rem", color: "rgba(255,255,255,0.45)", margin: 0, position: "relative", zIndex: 1 }}>
           JPG, PNG, WebP · Max 5MB each · {remaining} slot{remaining !== 1 ? "s" : ""} remaining
         </p>
       </div>
@@ -627,7 +627,7 @@ function PhotoTile({
             ? "0 0 0 2px rgba(201,149,74,0.55), 0 6px 18px rgba(201,149,74,0.22)"
             : isOver
               ? "0 0 0 3px #dc1e3c, 0 8px 22px rgba(220,30,60,0.30)"
-              : "0 4px 16px rgba(0,0,0,0.12)",
+              : "0 2px 20px rgba(0,0,0,0.22)",
         transition: "box-shadow 0.18s, transform 0.15s",
         transform: isOver && !isDragging ? "scale(1.02)" : "scale(1)",
       }}
@@ -759,10 +759,10 @@ function UploadTile({ item, onDismiss }: { item: UploadingItem; onDismiss: () =>
         aspectRatio: "1",
         borderRadius: 14,
         overflow: "hidden",
-        background: "#fdfbf9",
+        background: "rgba(255,255,255,0.04)",
         boxShadow: failed
           ? "0 0 0 2px rgba(220,30,60,0.4), 0 4px 16px rgba(220,30,60,0.18)"
-          : "0 4px 16px rgba(0,0,0,0.08)",
+          : "0 2px 20px rgba(0,0,0,0.22)",
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -780,10 +780,10 @@ function UploadTile({ item, onDismiss }: { item: UploadingItem; onDismiss: () =>
           position: "absolute", inset: 0,
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
           gap: 8, padding: 12, textAlign: "center",
-          background: "rgba(255,255,255,0.65)", backdropFilter: "blur(2px)",
+          background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)",
         }}>
-          <AlertCircle style={{ width: 22, height: 22, color: "#dc1e3c" }} />
-          <p style={{ fontSize: 11, color: "#a0153c", margin: 0, fontWeight: 600 }}>
+          <AlertCircle style={{ width: 22, height: 22, color: "#ff8aa3" }} />
+          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.82)", margin: 0, fontWeight: 600 }}>
             {item.error}
           </p>
           <button
@@ -802,7 +802,7 @@ function UploadTile({ item, onDismiss }: { item: UploadingItem; onDismiss: () =>
         <div style={{
           position: "absolute", inset: 0,
           display: "grid", placeItems: "center",
-          background: "rgba(255,255,255,0.32)",
+          background: "rgba(0,0,0,0.40)",
         }}>
           <ProgressRing value={item.progress} />
         </div>
@@ -822,7 +822,7 @@ function ProgressRing({ value }: { value: number }) {
     <div style={{ position: "relative", width: SIZE, height: SIZE }}>
       <svg width={SIZE} height={SIZE} style={{ transform: "rotate(-90deg)" }}>
         <circle cx={SIZE / 2} cy={SIZE / 2} r={R}
-          stroke="rgba(255,255,255,0.7)" strokeWidth={STROKE} fill="none"
+          stroke="rgba(255,255,255,0.12)" strokeWidth={STROKE} fill="none"
         />
         <motion.circle
           cx={SIZE / 2} cy={SIZE / 2} r={R}
@@ -836,7 +836,7 @@ function ProgressRing({ value }: { value: number }) {
       </svg>
       <div style={{
         position: "absolute", inset: 0, display: "grid", placeItems: "center",
-        fontSize: 11, fontWeight: 700, color: "#1a0a14",
+        fontSize: 11, fontWeight: 700, color: "#ffffff",
       }}>
         {Math.round(pct * 100)}%
       </div>
@@ -858,7 +858,7 @@ function EmptySlot({ onClick, reduce, premium }: { onClick: () => void; reduce: 
         aspectRatio: "1",
         borderRadius: 14,
         border: `1.5px dashed ${border}`,
-        background: "#fdfbf9",
+        background: "rgba(255,255,255,0.03)",
         display: "flex", flexDirection: "column",
         alignItems: "center", justifyContent: "center", gap: 6,
         cursor: "pointer",
@@ -874,7 +874,7 @@ function EmptySlot({ onClick, reduce, premium }: { onClick: () => void; reduce: 
           ? <Lock style={{ width: 20, height: 20, color: accent }} />
           : <Camera style={{ width: 22, height: 22, color: accent }} />}
       </motion.div>
-      <span style={{ fontSize: 11, color: "#bbb", fontWeight: 500 }}>Add photo</span>
+      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>Add photo</span>
     </motion.button>
   );
 }
