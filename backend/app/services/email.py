@@ -120,7 +120,7 @@ async def send_verification_email(
         <tr>
           <td style="padding:36px 40px;">
             <p style="font-size:16px; color:#333333; margin:0 0 16px;">
-              Namaste {user_name},
+              Hello {user_name},
             </p>
             <p style="font-size:15px; color:#555555; line-height:1.6; margin:0 0 24px;">
               Thank you for joining Match4Marriage, your trusted partner in finding a life partner
@@ -160,7 +160,7 @@ async def send_verification_email(
 """
 
     plain = (
-        f"Namaste {user_name},\n\n"
+        f"Hello {user_name},\n\n"
         f"Your Match4Marriage email verification code is: {token}\n\n"
         "This code expires in 10 minutes.\n\n"
         "If you did not create an account, please ignore this email."
@@ -470,7 +470,7 @@ async def send_interest_notification_email(
               You have a new interest!
             </h2>
             <p style="font-size:15px; color:#555555; line-height:1.6; margin:0 0 24px;">
-              Namaste {recipient_name},<br><br>
+              Hello {recipient_name},<br><br>
               <strong>{from_name}</strong> has expressed interest in your profile.
               Log in to view their profile and decide if you'd like to connect.
             </p>
@@ -502,7 +502,7 @@ async def send_interest_notification_email(
 """
 
     plain = (
-        f"Namaste {recipient_name},\n\n"
+        f"Hello {recipient_name},\n\n"
         f"{from_name} has expressed interest in your profile on Match4Marriage.\n\n"
         "Log in to view their profile and decide whether you'd like to connect.\n\n"
         "The Match4Marriage Team"
