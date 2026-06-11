@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # ── App ──────────────────────────────────────────────────────────────
     APP_NAME: str = "Match4Marriage API"
-    APP_VERSION: str = "1.1.0-membership"
+    APP_VERSION: str = "1.1.1-membership-fix"
     ENVIRONMENT: Literal["development", "staging", "production"] = "development"
     DEBUG: bool = False
     API_PREFIX: str = "/api/v1"

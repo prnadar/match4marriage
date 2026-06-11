@@ -64,9 +64,14 @@ async def assign_membership_number(
     # if this query somehow misses.
     row = await db.execute(
         text(
+            # NB: use substr(text, int), NOT `SUBSTRING(x FROM :p)`. With the
+            # `FROM` form Postgres infers the bind param as the regex-PATTERN
+            # variant (text) and asyncpg then rejects our integer start with
+            # "expected str, got int" — which silently failed every assignment.
+            # substr()'s 2nd arg is unambiguously an integer.
             """
             SELECT COALESCE(
-              MAX(CAST(SUBSTRING(membership_number FROM :start_pos) AS INTEGER)),
+              MAX(CAST(substr(membership_number, :start_pos) AS INTEGER)),
               0
             )
             FROM users
