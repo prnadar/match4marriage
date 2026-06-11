@@ -150,7 +150,7 @@ export default function AdminLoginPage() {
               boxShadow: "0 8px 24px rgba(0,0,0,0.28)",
             }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/images/logo.jpeg" alt="Match 4 Marriage" style={{ height: 34, width: "auto", display: "block" }} />
+              <img src="/images/logo.png" alt="Match 4 Marriage" style={{ height: 34, width: "auto", display: "block" }} />
             </span>
             <div style={{
               fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,0.55)",

@@ -285,7 +285,7 @@ export default function LoginPage() {
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/images/logo.jpeg"
+              src="/images/logo.png"
               alt="Match4Marriage"
               style={{ height: 34, width: "auto", display: "block" }}
             />

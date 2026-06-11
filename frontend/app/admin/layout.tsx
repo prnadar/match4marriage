@@ -174,7 +174,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="h-16 flex items-center gap-2.5 px-4 border-b border-sidebar-border/60">
           <span className="inline-flex items-center rounded-lg bg-white/95 px-2 py-1 shadow-[0_4px_12px_rgba(0,0,0,0.25)]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/logo.jpeg" alt="Match 4 Marriage" className="h-7 w-auto block" />
+            <img src="/images/logo.png" alt="Match 4 Marriage" className="h-7 w-auto block" />
           </span>
           <div className="flex-1 min-w-0">
             <div className="text-[10px] text-sidebar-muted uppercase tracking-[0.16em] font-semibold">Admin Console</div>

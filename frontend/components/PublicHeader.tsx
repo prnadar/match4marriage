@@ -135,7 +135,7 @@ export default function PublicHeader({ transparent = false, transparentUntil, va
           {/* Logo — single JPEG mark, used on every page (including the
               cinematic homepage hero). */}
           <Link href="/" className="m4m-nav__logo" aria-label="Match4Marriage home">
-            <img className="m4m-nav__logo-img" src="/images/logo.jpeg" alt="Match4Marriage" />
+            <img className="m4m-nav__logo-img" src="/images/logo.png" alt="Match4Marriage" />
           </Link>
 
           {/* Desktop nav (centre column — auto-centred regardless of side widths).
