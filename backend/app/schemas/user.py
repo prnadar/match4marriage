@@ -149,3 +149,7 @@ class ProfileCard(BaseSchema):
     religion: Religion | None
     primary_photo_url: str | None
     completeness_score: int
+    # True once an admin approves the member's ID (verification_status ==
+    # "approved"). Drives the "Verified" badge + the Browse "Verified only"
+    # filter; defaults False so older callers/tests stay valid.
+    is_verified: bool = False

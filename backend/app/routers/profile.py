@@ -170,6 +170,8 @@ async def browse_profiles(
     max_age: int | None = Query(default=None, ge=18, le=100),
     religion: Religion | None = Query(default=None),
     location: str | None = Query(default=None),
+    country: str | None = Query(default=None),
+    verified: bool | None = Query(default=None),
     education: str | None = Query(default=None),
     marital_status: MaritalStatus | None = Query(default=None),
     has_photo: bool | None = Query(default=None),
@@ -229,6 +231,11 @@ async def browse_profiles(
         base_q = base_q.where(UserProfile.religion == religion)
     if marital_status is not None:
         base_q = base_q.where(UserProfile.marital_status == marital_status)
+    if verified is True:
+        # "Verified only" = admin-approved ID. (Other statuses — draft /
+        # submitted / unset — remain browseable by default; only this opt-in
+        # toggle narrows to approved.)
+        base_q = base_q.where(UserProfile.verification_status == "approved")
 
     if location:
         loc_lower = f"%{location.lower()}%"
@@ -239,6 +246,12 @@ async def browse_profiles(
                 sqlfunc.lower(UserProfile.state).like(loc_lower),
             )
         )
+    if country:
+        # Country is stored as the human label (e.g. "United Kingdom") by
+        # onboarding, matching the Browse dropdown — case-insensitive exact
+        # match so "united kingdom" and "United Kingdom" both hit.
+        from sqlalchemy import func as sqlfunc
+        base_q = base_q.where(sqlfunc.lower(UserProfile.country) == country.lower())
     if education:
         from sqlalchemy import func as sqlfunc
         base_q = base_q.where(
@@ -284,6 +297,7 @@ async def browse_profiles(
                 religion=profile_row.religion,
                 primary_photo_url=_primary_photo(profile_row.photos or []),
                 completeness_score=profile_row.completeness_score,
+                is_verified=(profile_row.verification_status == "approved"),
             )
         )
 

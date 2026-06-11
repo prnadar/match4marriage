@@ -77,7 +77,10 @@ export default function MatchesPage() {
     setLoading(true); setError(null);
     try {
       const params: Record<string, string> = {};
-      if (religion !== "All") params.religion = religion;
+      // The backend `religion` filter is a lowercase enum (hindu, sikh, …);
+      // the UI labels are title-case ("Hindu"). Send the enum value or the
+      // query 422s and the grid comes back empty.
+      if (religion !== "All") params.religion = religion.toLowerCase();
       if (country !== "All") params.country = country;
       if (verifiedOnly) params.verified = "true";
 
