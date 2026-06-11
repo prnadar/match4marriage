@@ -14,7 +14,6 @@ import {
 } from "firebase/auth";
 import { firebaseAuth, rememberSessionUid } from "@/lib/firebase";
 import { profileApi } from "@/lib/api";
-import { featuredStories } from "@/lib/featured-stories";
 import {
   Heart, Phone, Mail, Eye, EyeOff, ArrowRight, AlertCircle,
   CheckCircle2, Loader2, ArrowLeft,
@@ -25,24 +24,23 @@ const SPRING = { type: "spring" as const, stiffness: 380, damping: 30 };
 
 type Mode = "email" | "phone";
 
-// Curated stories — each tied to a photo. Cycled on a 10s rotation so the
-// hero feels alive without any decoration or noise.
-//
-// `focal` is the CSS object-position the editorial crop should use. Editorial
-// wedding photos typically place the couple's faces in the upper third, so the
-// default is `center 28%`. Override per-story if a particular shot needs a
-// different anchor (e.g. a wide ceremony shot).
-// Sourced from the shared featured-stories list so the login slideshow,
-// the landing page, onboarding, and /success-stories all show the same
-// real couples.
-const STORIES = featuredStories.map((s) => ({
-  src: s.img,
-  focal: "center 30%",
-  quote: s.quote,
-  couple: s.names,
-  location: s.location,
-  year: s.yearNumber,
-}));
+// Editorial hero imagery for the sign-in screen. Per the brand direction we
+// show only the two curated wedding visuals here — no client/testimonial
+// photos. Each carries a short brand line shown at the bottom of the hero;
+// `focal` is the CSS object-position the cover crop anchors to (faces sit in
+// the upper third of these portrait shots). Cycled on a 10s rotation.
+const STORIES = [
+  {
+    src: "/images/banner1.png",
+    focal: "center 38%",
+    line: "Two families, one celebration — a lifetime begins.",
+  },
+  {
+    src: "/images/story2.png",
+    focal: "center 28%",
+    line: "Sacred vows, witnessed by those who love you most.",
+  },
+];
 
 export default function LoginPage() {
   const router = useRouter();
@@ -350,7 +348,7 @@ export default function LoginPage() {
               letterSpacing: "-0.01em",
               textShadow: "0 2px 20px rgba(0,0,0,0.4)",
             }}>
-              &ldquo;{currentStory.quote}&rdquo;
+              {currentStory.line}
             </p>
             <div style={{
               marginTop: 20,
@@ -364,7 +362,7 @@ export default function LoginPage() {
                 color: "rgba(255,255,255,0.85)",
                 letterSpacing: "0.14em",
               }}>
-                {currentStory.couple} &nbsp;·&nbsp; {currentStory.location} &nbsp;·&nbsp; {currentStory.year}
+                Match&nbsp;4&nbsp;Marriage &nbsp;·&nbsp; Global Tamil Matrimony Services
               </span>
             </div>
           </motion.div>

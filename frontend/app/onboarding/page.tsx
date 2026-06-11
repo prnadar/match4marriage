@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -82,8 +83,8 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 // every 6s with a 1.2s fade.
 
 const ONB_HERO_PHOTOS: ReadonlyArray<{ src: string; objectPosition: string }> = [
-  { src: "/couples/ashwini-rahul.jpg", objectPosition: "center 18%" },
-  { src: "/couples/alex-nisha.jpg",     objectPosition: "center 22%" },
+  { src: "/images/banner1.png", objectPosition: "center 35%" },
+  { src: "/images/story2.png",  objectPosition: "center 28%" },
 ];
 
 function OnboardingHeroSlideshow() {
@@ -100,18 +101,15 @@ function OnboardingHeroSlideshow() {
   return (
     <>
       {ONB_HERO_PHOTOS.map((p, i) => (
-        /* eslint-disable-next-line @next/next/no-img-element */
-        <img
+        <Image
           key={p.src}
           src={p.src}
           alt=""
           aria-hidden
-          loading={i === 0 ? "eager" : "lazy"}
+          fill
+          priority={i === 0}
+          sizes="(max-width: 1024px) 100vw, 50vw"
           style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
             objectFit: "cover",
             objectPosition: p.objectPosition,
             opacity: i === index ? 1 : 0,
