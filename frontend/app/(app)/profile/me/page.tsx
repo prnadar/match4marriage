@@ -730,7 +730,7 @@ export default function MyProfilePage() {
         @keyframes m4m-btn-spin { to { transform: rotate(360deg); } }
       `}</style>
       <style jsx global>{`
-        .m4m-profile { position: relative; isolation: isolate; }
+        .m4m-profile { position: relative; isolation: isolate; overflow: hidden; }
         .m4m-profile::before, .m4m-profile::after {
           content: ""; position: absolute; border-radius: 50%;
           filter: blur(120px); pointer-events: none; z-index: 0;
