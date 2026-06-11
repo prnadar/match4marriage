@@ -157,20 +157,31 @@ export default function MatchesPage() {
     (verifiedOnly ? 1 : 0);
 
   return (
-    <div className="min-h-screen" style={{ background: "#fdfbf9" }}>
-      <div className="mx-auto max-w-[1280px] px-6 py-8 lg:px-8 lg:py-10">
+    <div
+      className="relative min-h-screen overflow-hidden"
+      style={{ background: "linear-gradient(165deg,#170811 0%,#220c1a 45%,#0b0509 100%)", color: "#e7dde0" }}
+    >
+      {/* Ambient backdrop */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <span className="m4m-aura m4m-aura-rose" />
+        <span className="m4m-aura m4m-aura-gold" />
+        <span className="m4m-aura m4m-aura-plum" />
+        <span className="m4m-aura-vignette" />
+      </div>
+
+      <div className="relative mx-auto max-w-[1280px] px-6 py-8 lg:px-8 lg:py-10">
 
         {/* ── Header ─────────────────────────────────────────────────── */}
         <header className="fade-in-up mb-6 flex flex-col gap-1.5">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.22em] text-rose-700/80">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.22em] text-[#f3c9a8]">
             Discover
           </p>
-          <h1 className="font-display text-[34px] font-semibold leading-tight text-[#1a0a14] sm:text-[40px]">
+          <h1 className="font-display text-[34px] font-semibold leading-tight text-white sm:text-[40px]">
             <RevealText as="span" split="word" className="font-display">
               Browse verified profiles
             </RevealText>
           </h1>
-          <p className="mt-1 max-w-xl text-[14px] leading-relaxed text-[#6a5560]">
+          <p className="mt-1 max-w-xl text-[14px] leading-relaxed text-white/60">
             {loading
               ? "Loading…"
               : `${filtered.length} verified profiles match your preferences.`}
@@ -179,19 +190,19 @@ export default function MatchesPage() {
 
         {/* ── Search + filter toggle ─────────────────────────────────── */}
         <div className="fade-in-up mb-4 flex flex-wrap items-center gap-2.5" style={{ animationDelay: "60ms" }}>
-          <div className="flex flex-1 min-w-[260px] items-center gap-2 rounded-2xl border border-rose-100 bg-white px-4 shadow-[0_2px_10px_rgba(220,30,60,0.04)] focus-within:border-rose-300 focus-within:shadow-[0_4px_16px_rgba(220,30,60,0.10)]">
-            <Search className="h-4 w-4 text-rose-700/60" />
+          <div className="flex flex-1 min-w-[260px] items-center gap-2 rounded-2xl border border-white/12 bg-white/[0.05] px-4 shadow-[0_2px_10px_rgba(220,30,60,0.04)] focus-within:border-rose-300 focus-within:shadow-[0_4px_16px_rgba(220,30,60,0.10)]">
+            <Search className="h-4 w-4 text-[#ff8aa3]" />
             <input
               type="text"
               placeholder="Search by name, country, or profession…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-11 flex-1 bg-transparent text-[14px] text-[#1a0a14] outline-none placeholder:text-rose-700/40"
+              className="h-11 flex-1 bg-transparent text-[14px] text-white outline-none placeholder:text-white/35"
             />
             {search && (
               <button
                 onClick={() => setSearch("")}
-                className="text-rose-700/50 hover:text-rose-700"
+                className="text-[#ff8aa3] hover:text-white"
                 aria-label="Clear search"
               >
                 <X className="h-4 w-4" />
@@ -200,9 +211,9 @@ export default function MatchesPage() {
           </div>
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className="inline-flex h-11 items-center gap-2 rounded-2xl border border-rose-100 bg-white px-4 text-[13px] font-semibold text-[#1a0a14] shadow-[0_2px_10px_rgba(220,30,60,0.04)] hover:border-rose-200 hover:shadow-[0_4px_16px_rgba(220,30,60,0.10)]"
+            className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/12 bg-white/[0.05] px-4 text-[13px] font-semibold text-white shadow-[0_2px_10px_rgba(220,30,60,0.04)] hover:border-white/20 hover:shadow-[0_4px_16px_rgba(220,30,60,0.10)]"
           >
-            <SlidersHorizontal className="h-4 w-4 text-rose-700" />
+            <SlidersHorizontal className="h-4 w-4 text-[#ff8aa3]" />
             Filters
             {activeFilterCount > 0 && (
               <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-1.5 text-[10px] font-bold text-white">
@@ -215,8 +226,8 @@ export default function MatchesPage() {
             className={
               "inline-flex h-11 items-center gap-2 rounded-2xl px-4 text-[13px] font-semibold transition-colors " +
               (verifiedOnly
-                ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                : "border border-rose-100 bg-white text-[#1a0a14] hover:border-emerald-200 hover:text-emerald-700")
+                ? "bg-emerald-400/12 text-emerald-200 ring-1 ring-emerald-400/25"
+                : "border border-white/12 bg-white/[0.06] text-white/70 hover:border-emerald-400/25 hover:text-emerald-200")
             }
           >
             <Shield className="h-4 w-4" />
@@ -239,15 +250,15 @@ export default function MatchesPage() {
             {Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
-                className="overflow-hidden rounded-[20px] border border-rose-100/70 bg-white shadow-[0_2px_14px_rgba(220,30,60,0.05)]"
+                className="overflow-hidden rounded-[20px] border border-white/10 bg-white/[0.04]"
               >
-                <div className="m4m-skeleton h-[260px] rounded-none" />
+                <div className="h-[260px] animate-pulse bg-white/[0.07]" />
                 <div className="p-4">
-                  <div className="m4m-skeleton mb-2 h-4 w-2/3" />
-                  <div className="m4m-skeleton mb-3 h-3 w-1/2" />
+                  <div className="mb-2 h-4 w-2/3 animate-pulse rounded bg-white/10" />
+                  <div className="mb-3 h-3 w-1/2 animate-pulse rounded bg-white/[0.07]" />
                   <div className="flex gap-1.5">
-                    <div className="m4m-skeleton h-5 w-16 rounded-full" />
-                    <div className="m4m-skeleton h-5 w-20 rounded-full" />
+                    <div className="h-5 w-16 animate-pulse rounded-full bg-white/[0.07]" />
+                    <div className="h-5 w-20 animate-pulse rounded-full bg-white/[0.07]" />
                   </div>
                 </div>
               </div>
@@ -257,12 +268,12 @@ export default function MatchesPage() {
 
         {/* ── Error ──────────────────────────────────────────────────── */}
         {!loading && error && (
-          <div className="fade-in-up rounded-3xl border border-rose-100/70 bg-white px-6 py-16 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
-            <AlertCircle className="mx-auto h-10 w-10 text-rose-700/60" />
-            <h3 className="font-display mt-3 text-[20px] font-semibold text-[#1a0a14]">
+          <div className="fade-in-up rounded-3xl border border-white/10 bg-white/[0.04] px-6 py-16 text-center backdrop-blur-sm">
+            <AlertCircle className="mx-auto h-10 w-10 text-rose-300/70" />
+            <h3 className="font-display mt-3 text-[20px] font-semibold text-white">
               We couldn't load profiles
             </h3>
-            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-[#6a5560]">
+            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-white/55">
               {error}
             </p>
             <button
@@ -276,9 +287,9 @@ export default function MatchesPage() {
 
         {/* ── Interest quota notice ──────────────────────────────────── */}
         {interestError && (
-          <div className="fade-in-up mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-[13px] text-rose-800">
+          <div className="fade-in-up mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-400/25 bg-rose-400/10 px-4 py-3 text-[13px] text-rose-100 backdrop-blur-sm">
             <span className="flex items-center gap-2">
-              <Heart className="h-4 w-4 flex-shrink-0 text-rose-700" />
+              <Heart className="h-4 w-4 flex-shrink-0 text-[#ff8aa3]" />
               {interestError}
             </span>
             <div className="flex items-center gap-2">
@@ -290,7 +301,7 @@ export default function MatchesPage() {
               </Link>
               <button
                 onClick={() => setInterestError(null)}
-                className="text-rose-700/60 hover:text-rose-700"
+                className="text-[#ff8aa3] hover:text-white"
                 aria-label="Dismiss"
               >
                 <X className="h-4 w-4" />
@@ -303,12 +314,12 @@ export default function MatchesPage() {
         {!loading && !error && (
           <>
             {filtered.length === 0 ? (
-              <div className="fade-in-up rounded-3xl border border-rose-100/70 bg-white px-6 py-16 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
-                <Heart className="mx-auto h-10 w-10 text-rose-700/40" />
-                <h3 className="font-display mt-3 text-[20px] font-semibold text-[#1a0a14]">
+              <div className="fade-in-up rounded-3xl border border-white/10 bg-white/[0.04] px-6 py-16 text-center backdrop-blur-sm">
+                <Heart className="mx-auto h-10 w-10 text-[#ff8aa3]/60" />
+                <h3 className="font-display mt-3 text-[20px] font-semibold text-white">
                   No matches with these filters
                 </h3>
-                <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-[#6a5560]">
+                <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-white/55">
                   Try widening your preferences. Our advisors can also hand-pick profiles for you.
                 </p>
                 <div className="mt-5 flex justify-center gap-3">
@@ -343,6 +354,8 @@ export default function MatchesPage() {
           </>
         )}
       </div>
+
+      <style jsx>{`.m4m-aura{position:absolute;border-radius:50%;filter:blur(120px);pointer-events:none;}.m4m-aura-rose{width:540px;height:540px;top:-150px;right:-120px;background:radial-gradient(circle,rgba(220,30,60,0.5),transparent 60%);opacity:.5;}.m4m-aura-gold{width:560px;height:560px;bottom:-190px;left:-150px;background:radial-gradient(circle,rgba(201,149,74,0.4),transparent 60%);opacity:.42;}.m4m-aura-plum{width:380px;height:380px;top:42%;right:28%;background:radial-gradient(circle,rgba(124,58,137,0.4),transparent 60%);opacity:.26;}.m4m-aura-vignette{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,.5) 100%);}`}</style>
     </div>
   );
 }
@@ -359,7 +372,7 @@ function ChipRow({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="mr-1 min-w-[64px] text-[11px] font-semibold uppercase tracking-[0.12em] text-rose-700/70">
+      <span className="mr-1 min-w-[64px] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#f3c9a8]">
         {label}
       </span>
       {options.map((o) => {
@@ -372,7 +385,7 @@ function ChipRow({
               "rounded-full px-3 py-1.5 text-[12px] font-medium transition-all " +
               (active
                 ? "bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white shadow-[0_4px_14px_rgba(220,30,60,0.25)]"
-                : "bg-white text-[#6a5560] ring-1 ring-rose-100 hover:ring-rose-200 hover:text-rose-800")
+                : "bg-white/[0.05] text-white/70 ring-1 ring-white/15 hover:ring-white/25 hover:text-white")
             }
           >
             {o}

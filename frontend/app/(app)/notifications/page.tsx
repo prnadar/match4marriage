@@ -19,12 +19,12 @@ interface Notif {
   grad?: string;
 }
 
-const TYPE_META: Record<NotifType, { icon: React.ReactNode; color: string }> = {
-  interest: { icon: <Heart className="w-4 h-4" />,         color: "#dc1e3c" },
-  message:  { icon: <MessageCircle className="w-4 h-4" />, color: "#9A6B00" },
-  match:    { icon: <Star className="w-4 h-4" />,          color: "#5C7A52" },
-  trust:    { icon: <Shield className="w-4 h-4" />,        color: "#0F766E" },
-  system:   { icon: <Bell className="w-4 h-4" />,          color: "rgba(26,10,20,0.4)" },
+const TYPE_META: Record<NotifType, { icon: React.ReactNode; bg: string; fg: string }> = {
+  interest: { icon: <Heart className="w-4 h-4" />,         bg: "rgba(220,30,60,0.14)",  fg: "#ff8aa3" },
+  message:  { icon: <MessageCircle className="w-4 h-4" />, bg: "rgba(245,158,11,0.14)", fg: "#fbbf24" },
+  match:    { icon: <Star className="w-4 h-4" />,          bg: "rgba(16,185,129,0.14)", fg: "#34d399" },
+  trust:    { icon: <Shield className="w-4 h-4" />,        bg: "rgba(56,130,246,0.14)", fg: "#93c5fd" },
+  system:   { icon: <Bell className="w-4 h-4" />,          bg: "rgba(255,255,255,0.10)", fg: "rgba(255,255,255,0.6)" },
 };
 
 function timeAgo(dateStr: string): string {
@@ -126,7 +126,23 @@ export default function NotificationsPage() {
   ];
 
   return (
-    <div style={{ background: "#fdfbf9", minHeight: "100vh" }}>
+    <div
+      className="relative overflow-hidden"
+      style={{
+        background: "linear-gradient(165deg,#170811 0%,#220c1a 45%,#0b0509 100%)",
+        color: "#e7dde0",
+        minHeight: "100vh",
+      }}
+    >
+      {/* Ambient backdrop — matches the Dashboard page */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <span className="m4m-aura m4m-aura-rose" />
+        <span className="m4m-aura m4m-aura-gold" />
+        <span className="m4m-aura m4m-aura-plum" />
+        <span className="m4m-aura-vignette" />
+      </div>
+
+      <div className="relative">
       {/* Header strip */}
       <div
         className="px-4 py-5 sm:px-8 sm:py-6"
@@ -211,9 +227,9 @@ export default function NotificationsPage() {
                 style={{
                   display: "flex", alignItems: "center", gap: 6,
                   padding: "6px 14px", borderRadius: 999,
-                  border: active ? "none" : "1px solid rgba(220,30,60,0.15)",
-                  background: active ? "linear-gradient(135deg,#dc1e3c,#a0153c)" : "#fff",
-                  color: active ? "#fff" : "rgba(26,10,20,0.55)",
+                  border: active ? "none" : "1px solid rgba(255,255,255,0.15)",
+                  background: active ? "linear-gradient(135deg,#dc1e3c,#a0153c)" : "rgba(255,255,255,0.06)",
+                  color: active ? "#fff" : "rgba(255,255,255,0.6)",
                   fontFamily: "var(--font-poppins, sans-serif)",
                   fontSize: 12, fontWeight: 500, cursor: "pointer",
                   transition: "background 0.15s",
@@ -226,8 +242,8 @@ export default function NotificationsPage() {
                       width: 16, height: 16, borderRadius: "50%",
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontSize: 9, fontWeight: 700,
-                      background: active ? "rgba(255,255,255,0.25)" : "rgba(220,30,60,0.1)",
-                      color: active ? "#fff" : "#dc1e3c",
+                      background: active ? "rgba(255,255,255,0.25)" : "rgba(220,30,60,0.18)",
+                      color: active ? "#fff" : "#ff8aa3",
                     }}
                   >
                     {count}
@@ -241,8 +257,8 @@ export default function NotificationsPage() {
         {/* Loading */}
         {loading && (
           <div style={{ textAlign: "center", padding: "64px 0" }}>
-            <Loader2 style={{ width: 32, height: 32, color: "#dc1e3c", margin: "0 auto 12px", animation: "spin 1s linear infinite" }} />
-            <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, color: "rgba(26,10,20,0.4)" }}>
+            <Loader2 style={{ width: 32, height: 32, color: "#ff8aa3", margin: "0 auto 12px", animation: "spin 1s linear infinite" }} />
+            <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, color: "rgba(255,255,255,0.45)" }}>
               Loading notifications…
             </p>
             <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
@@ -251,10 +267,10 @@ export default function NotificationsPage() {
 
         {/* Error */}
         {!loading && error && (
-          <div className="rounded-3xl border border-rose-100/70 bg-white px-6 py-12 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
-            <AlertCircle className="mx-auto h-9 w-9 text-rose-700/60" />
-            <h3 className="font-display mt-3 text-[18px] font-semibold text-[#1a0a14]">Couldn't load notifications</h3>
-            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-[#6a5560]">{error}</p>
+          <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-6 py-12 text-center">
+            <AlertCircle className="mx-auto h-9 w-9 text-rose-300/70" />
+            <h3 className="font-display mt-3 text-[18px] font-semibold text-white">Couldn't load notifications</h3>
+            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-white/55">{error}</p>
             <button
               onClick={load}
               className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_20px_rgba(220,30,60,0.28)] hover:shadow-[0_10px_26px_rgba(220,30,60,0.38)]"
@@ -269,8 +285,8 @@ export default function NotificationsPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {filtered.length === 0 && (
               <div style={{ textAlign: "center", padding: "64px 0" }}>
-                <Bell style={{ width: 48, height: 48, color: "rgba(26,10,20,0.15)", margin: "0 auto 12px" }} />
-                <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, color: "rgba(26,10,20,0.4)" }}>
+                <Bell style={{ width: 48, height: 48, color: "rgba(255,255,255,0.25)", margin: "0 auto 12px" }} />
+                <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, color: "rgba(255,255,255,0.55)" }}>
                   {notifs.length === 0
                     ? "No notifications yet. Activity on your profile will appear here."
                     : "No notifications in this category"}
@@ -285,9 +301,9 @@ export default function NotificationsPage() {
                   key={notif.id}
                   style={{
                     display: "flex", alignItems: "flex-start", gap: 12, padding: 16,
-                    background: "#fff",
-                    border: notif.read ? "1px solid rgba(220,30,60,0.08)" : "1px solid rgba(220,30,60,0.12)",
-                    borderLeft: notif.read ? "1px solid rgba(220,30,60,0.08)" : "4px solid #dc1e3c",
+                    background: notif.read ? "rgba(255,255,255,0.04)" : "rgba(220,30,60,0.10)",
+                    border: notif.read ? "1px solid rgba(255,255,255,0.10)" : "1px solid rgba(220,30,60,0.25)",
+                    borderLeft: notif.read ? "1px solid rgba(255,255,255,0.10)" : "4px solid #dc1e3c",
                     borderRadius: 12, position: "relative",
                   }}
                 >
@@ -308,7 +324,7 @@ export default function NotificationsPage() {
                       style={{
                         width: 40, height: 40, borderRadius: "50%",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        background: `${meta.color}18`, color: meta.color, flexShrink: 0,
+                        background: meta.bg, color: meta.fg, flexShrink: 0,
                       }}
                     >
                       {meta.icon}
@@ -317,14 +333,14 @@ export default function NotificationsPage() {
 
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                      <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, fontWeight: 600, color: "#1a0a14", margin: 0 }}>
+                      <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, fontWeight: 600, color: "#ffffff", margin: 0 }}>
                         {notif.title}
                       </p>
-                      <span style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 10, color: "rgba(26,10,20,0.3)", flexShrink: 0 }}>
+                      <span style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 10, color: "rgba(255,255,255,0.45)", flexShrink: 0 }}>
                         {notif.time}
                       </span>
                     </div>
-                    <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 12, color: "rgba(26,10,20,0.55)", margin: "2px 0 0", lineHeight: 1.5 }}>
+                    <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 12, color: "#e7dde0", margin: "2px 0 0", lineHeight: 1.5 }}>
                       {notif.body}
                     </p>
 
@@ -334,7 +350,7 @@ export default function NotificationsPage() {
                         onClick={() => markRead(notif.id)}
                         style={{
                           display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8,
-                          fontSize: 12, fontWeight: 600, color: "#dc1e3c",
+                          fontSize: 12, fontWeight: 600, color: "#ff8aa3",
                           textDecoration: "none",
                           fontFamily: "var(--font-poppins, sans-serif)",
                         }}
@@ -357,7 +373,7 @@ export default function NotificationsPage() {
                           width: 28, height: 28, borderRadius: "50%", border: "none",
                           background: "transparent",
                           display: "flex", alignItems: "center", justifyContent: "center",
-                          cursor: "pointer", color: "rgba(26,10,20,0.25)",
+                          cursor: "pointer", color: "rgba(255,255,255,0.45)",
                         }}
                       >
                         <Check style={{ width: 14, height: 14 }} />
@@ -370,7 +386,7 @@ export default function NotificationsPage() {
                         width: 28, height: 28, borderRadius: "50%", border: "none",
                         background: "transparent",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        cursor: "pointer", color: "rgba(26,10,20,0.2)",
+                        cursor: "pointer", color: "rgba(255,255,255,0.4)",
                       }}
                     >
                       <Trash2 style={{ width: 14, height: 14 }} />
@@ -392,6 +408,9 @@ export default function NotificationsPage() {
           </div>
         )}
       </div>
+      </div>
+
+      <style jsx>{`.m4m-aura{position:absolute;border-radius:50%;filter:blur(120px);pointer-events:none;}.m4m-aura-rose{width:540px;height:540px;top:-150px;right:-120px;background:radial-gradient(circle,rgba(220,30,60,0.5),transparent 60%);opacity:.5;}.m4m-aura-gold{width:560px;height:560px;bottom:-190px;left:-150px;background:radial-gradient(circle,rgba(201,149,74,0.4),transparent 60%);opacity:.42;}.m4m-aura-plum{width:380px;height:380px;top:42%;right:28%;background:radial-gradient(circle,rgba(124,58,137,0.4),transparent 60%);opacity:.26;}.m4m-aura-vignette{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,.5) 100%);}`}</style>
     </div>
   );
 }

@@ -79,19 +79,28 @@ export default function MessagesPage() {
   });
 
   return (
-    <div className="min-h-screen" style={{ background: "#fdfbf9" }}>
-      <div className="mx-auto max-w-[760px] px-6 py-8 lg:px-8 lg:py-10">
+    <div
+      className="relative min-h-screen overflow-hidden"
+      style={{ background: "linear-gradient(165deg,#170811 0%,#220c1a 45%,#0b0509 100%)", color: "#e7dde0" }}
+    >
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <span className="m4m-aura m4m-aura-rose" />
+        <span className="m4m-aura m4m-aura-gold" />
+        <span className="m4m-aura m4m-aura-plum" />
+        <span className="m4m-aura-vignette" />
+      </div>
+      <div className="relative mx-auto max-w-[760px] px-6 py-8 lg:px-8 lg:py-10">
 
         {/* Header */}
         <header className="fade-in-up mb-5">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.22em] text-rose-700/80">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.22em] text-[#f3c9a8]">
             Conversations
           </p>
-          <h1 className="font-display mt-1 text-[34px] font-semibold leading-tight text-[#1a0a14]">
+          <h1 className="font-display mt-1 text-[34px] font-semibold leading-tight text-white">
             Messages
           </h1>
-          <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-[#6a5560]">
-            <Shield className="h-3.5 w-3.5 text-rose-700" />
+          <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] text-white/70">
+            <Shield className="h-3.5 w-3.5 text-[#f3c9a8]" />
             Private and secure
           </p>
         </header>
@@ -108,14 +117,14 @@ export default function MessagesPage() {
         ) : (
         <>
         {/* Search */}
-        <div className="fade-in-up mb-5 flex items-center gap-2 rounded-2xl border border-rose-100 bg-white px-4 shadow-[0_2px_10px_rgba(220,30,60,0.04)] focus-within:border-rose-300 focus-within:shadow-[0_4px_16px_rgba(220,30,60,0.10)]" style={{ animationDelay: "60ms" }}>
-          <Search className="h-4 w-4 text-rose-700/60" />
+        <div className="fade-in-up mb-5 flex items-center gap-2 rounded-2xl border border-white/[0.12] bg-white/[0.05] px-4 backdrop-blur-sm focus-within:border-white/20" style={{ animationDelay: "60ms" }}>
+          <Search className="h-4 w-4 text-white/45" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search conversations…"
-            className="h-11 flex-1 bg-transparent text-[14px] text-[#1a0a14] outline-none placeholder:text-rose-700/40"
+            className="h-11 flex-1 bg-transparent text-[14px] text-[#f4eef0] outline-none placeholder:text-white/35"
           />
         </div>
 
@@ -125,12 +134,12 @@ export default function MessagesPage() {
             {Array.from({ length: 5 }).map((_, i) => (
               <div
                 key={i}
-                className="flex items-center gap-4 rounded-2xl border border-rose-100/70 bg-white p-4"
+                className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4"
               >
-                <div className="m4m-skeleton h-12 w-12 rounded-full" />
+                <div className="h-12 w-12 animate-pulse rounded-full bg-white/[0.06]" />
                 <div className="flex-1">
-                  <div className="m4m-skeleton mb-2 h-3.5 w-32" />
-                  <div className="m4m-skeleton h-3 w-3/4" />
+                  <div className="mb-2 h-3.5 w-32 animate-pulse rounded bg-white/[0.06]" />
+                  <div className="h-3 w-3/4 animate-pulse rounded bg-white/[0.06]" />
                 </div>
               </div>
             ))}
@@ -139,12 +148,12 @@ export default function MessagesPage() {
 
         {/* Error */}
         {!loading && error && (
-          <div className="fade-in-up rounded-3xl border border-rose-100/70 bg-white px-6 py-12 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
-            <AlertCircle className="mx-auto h-9 w-9 text-rose-700/60" />
-            <h3 className="font-display mt-3 text-[18px] font-semibold text-[#1a0a14]">
+          <div className="fade-in-up rounded-3xl border border-white/10 bg-white/[0.04] px-6 py-12 text-center backdrop-blur-sm">
+            <AlertCircle className="mx-auto h-9 w-9 text-rose-300/70" />
+            <h3 className="font-display mt-3 text-[18px] font-semibold text-white">
               We couldn't load conversations
             </h3>
-            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-[#6a5560]">
+            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-white/55">
               {error}
             </p>
             <button
@@ -160,7 +169,7 @@ export default function MessagesPage() {
         {!loading && !error && (
           <>
             {filtered.length > 0 && (
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-rose-700/60">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">
                 {filtered.length} conversation{filtered.length !== 1 ? "s" : ""}
               </p>
             )}
@@ -173,10 +182,10 @@ export default function MessagesPage() {
                     key={t.id}
                     href={`/messages/${t.id}`}
                     className={
-                      "fade-in-up flex items-center gap-4 rounded-2xl border bg-white p-4 transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(220,30,60,0.10)] " +
+                      "fade-in-up flex items-center gap-4 rounded-2xl border bg-white/[0.04] p-4 backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-white/[0.07] " +
                       (unread > 0
-                        ? "border-rose-200 shadow-[0_2px_14px_rgba(220,30,60,0.10)]"
-                        : "border-rose-100/70 shadow-[0_1px_4px_rgba(26,10,20,0.04)]")
+                        ? "border-[#dc1e3c]/40"
+                        : "border-white/10")
                     }
                     style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}
                   >
@@ -190,8 +199,8 @@ export default function MessagesPage() {
                         className="h-12 w-12"
                       />
                       {op && op.completeness_score !== undefined && op.completeness_score >= 70 && (
-                        <span className="absolute -bottom-0.5 -right-0.5 inline-flex h-[18px] w-[18px] items-center justify-center rounded-full border border-rose-100 bg-white">
-                          <Shield className="h-[11px] w-[11px] text-rose-700" />
+                        <span className="absolute -bottom-0.5 -right-0.5 inline-flex h-[18px] w-[18px] items-center justify-center rounded-full border border-white/15 bg-[#220c1a]">
+                          <Shield className="h-[11px] w-[11px] text-[#f3c9a8]" />
                         </span>
                       )}
                     </div>
@@ -201,7 +210,7 @@ export default function MessagesPage() {
                         <span
                           className={
                             "truncate text-[14px] " +
-                            (unread > 0 ? "font-bold text-[#1a0a14]" : "font-medium text-[#1a0a14]/75")
+                            (unread > 0 ? "font-bold text-white" : "font-medium text-white/75")
                           }
                         >
                           {op?.first_name ?? "Member"}
@@ -209,9 +218,9 @@ export default function MessagesPage() {
                         </span>
                         <div className="flex flex-shrink-0 items-center gap-1">
                           {unread === 0 && t.last_message_at && (
-                            <CheckCheck className="h-3 w-3 text-rose-700" />
+                            <CheckCheck className="h-3 w-3 text-[#f3c9a8]" />
                           )}
-                          <span className="text-[10px] text-[#6a5560]">
+                          <span className="text-[10px] text-white/50">
                             {relativeTime(t.last_message_at)}
                           </span>
                         </div>
@@ -219,13 +228,13 @@ export default function MessagesPage() {
                       <p
                         className={
                           "mt-0.5 truncate text-[12.5px] " +
-                          (unread > 0 ? "text-[#1a0a14]/70" : "text-[#1a0a14]/40")
+                          (unread > 0 ? "text-white/70" : "text-white/45")
                         }
                       >
                         {t.last_message_preview ?? "Say hello and start the conversation."}
                       </p>
                       {op?.city && (
-                        <p className="mt-0.5 text-[10px] text-[#6a5560]/80">{op.city}</p>
+                        <p className="mt-0.5 text-[10px] text-white/45">{op.city}</p>
                       )}
                     </div>
 
@@ -239,12 +248,12 @@ export default function MessagesPage() {
               })}
 
               {filtered.length === 0 && (
-                <div className="rounded-3xl border border-rose-100/70 bg-white px-6 py-16 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
-                  <MessageCircle className="mx-auto h-9 w-9 text-rose-700/40" />
-                  <h3 className="font-display mt-3 text-[18px] font-semibold text-[#1a0a14]">
+                <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-6 py-16 text-center backdrop-blur-sm">
+                  <MessageCircle className="mx-auto h-9 w-9 text-[#ff8aa3]/50" />
+                  <h3 className="font-display mt-3 text-[18px] font-semibold text-white">
                     {search ? "No conversations match your search" : "No conversations yet"}
                   </h3>
-                  <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-[#6a5560]">
+                  <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-white/55">
                     {search
                       ? "Try a different name or keyword."
                       : "When someone accepts your interest, your conversation will appear here."}
@@ -265,6 +274,8 @@ export default function MessagesPage() {
         </>
         )}
       </div>
+
+      <style jsx>{`.m4m-aura{position:absolute;border-radius:50%;filter:blur(120px);pointer-events:none;}.m4m-aura-rose{width:540px;height:540px;top:-150px;right:-120px;background:radial-gradient(circle,rgba(220,30,60,0.5),transparent 60%);opacity:.5;}.m4m-aura-gold{width:560px;height:560px;bottom:-190px;left:-150px;background:radial-gradient(circle,rgba(201,149,74,0.4),transparent 60%);opacity:.42;}.m4m-aura-plum{width:380px;height:380px;top:42%;right:28%;background:radial-gradient(circle,rgba(124,58,137,0.4),transparent 60%);opacity:.26;}.m4m-aura-vignette{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,.5) 100%);}`}</style>
     </div>
   );
 }

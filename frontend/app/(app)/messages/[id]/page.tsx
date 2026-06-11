@@ -185,19 +185,28 @@ export default function ChatPage({ params }: { params: { id: string } }) {
 
   /* ── Render ────────────────────────────────────────────────────── */
   return (
-    <div className="flex h-[calc(100vh-60px)] flex-col" style={{ background: "#fdfbf9" }}>
+    <div
+      className="relative flex h-[calc(100vh-60px)] flex-col overflow-hidden"
+      style={{ background: "linear-gradient(165deg,#170811 0%,#220c1a 45%,#0b0509 100%)", color: "#e7dde0" }}
+    >
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <span className="m4m-aura m4m-aura-rose" />
+        <span className="m4m-aura m4m-aura-gold" />
+        <span className="m4m-aura m4m-aura-plum" />
+        <span className="m4m-aura-vignette" />
+      </div>
 
       {/* Header */}
-      <header className="flex items-center gap-3 border-b border-rose-100 bg-white/90 px-5 py-3 backdrop-blur">
+      <header className="relative flex items-center gap-3 border-b border-white/10 bg-white/[0.04] px-5 py-3 backdrop-blur">
         <Link
           href="/messages"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-rose-700/70 transition-colors hover:bg-rose-50 hover:text-rose-700"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/[0.07] hover:text-white"
           aria-label="Back to conversations"
         >
           <ArrowLeft className="h-4 w-4" />
         </Link>
         {other && (
-          <Link href={`/profile/${other.user_id}`} className="flex flex-1 items-center gap-3 rounded-xl px-1 py-1 transition-colors hover:bg-rose-50/40">
+          <Link href={`/profile/${other.user_id}`} className="flex flex-1 items-center gap-3 rounded-xl px-1 py-1 transition-colors hover:bg-white/[0.05]">
             <Portrait
               src={other.primary_photo_url}
               name={other.first_name}
@@ -207,11 +216,11 @@ export default function ChatPage({ params }: { params: { id: string } }) {
               className="h-10 w-10"
             />
             <div className="min-w-0">
-              <p className="truncate font-display text-[15px] font-semibold text-[#1a0a14]">
+              <p className="truncate font-display text-[15px] font-semibold text-white">
                 {other.first_name}{other.age ? `, ${other.age}` : ""}
               </p>
-              <p className="flex items-center gap-1 text-[11px] text-[#6a5560]">
-                <Shield className="h-3 w-3 text-rose-700" />
+              <p className="flex items-center gap-1 text-[11px] text-white/50">
+                <Shield className="h-3 w-3 text-[#f3c9a8]" />
                 {wsConnected ? "Connected · End-to-end encrypted" : "Connecting…"}
               </p>
             </div>
@@ -219,8 +228,8 @@ export default function ChatPage({ params }: { params: { id: string } }) {
         )}
         {!other && !loading && (
           <div className="flex-1">
-            <p className="font-display text-[15px] font-semibold text-[#1a0a14]">Conversation</p>
-            <p className="text-[11px] text-[#6a5560]">
+            <p className="font-display text-[15px] font-semibold text-white">Conversation</p>
+            <p className="text-[11px] text-white/50">
               {messagingLocked ? "Premium feature" : wsConnected ? "Connected" : "Connecting…"}
             </p>
           </div>
@@ -229,7 +238,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
 
       {/* Body */}
       {messagingLocked ? (
-        <div className="flex flex-1 items-center justify-center px-6 py-10">
+        <div className="relative flex flex-1 items-center justify-center px-6 py-10">
           <UpgradePanel
             feature="Premium"
             title="Direct messaging is a Premium feature"
@@ -237,15 +246,15 @@ export default function ChatPage({ params }: { params: { id: string } }) {
           />
         </div>
       ) : loading ? (
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-rose-700" />
+        <div className="relative flex flex-1 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-[#ff8aa3]" />
         </div>
       ) : error ? (
-        <div className="flex flex-1 items-center justify-center px-6">
-          <div className="rounded-3xl border border-rose-100/70 bg-white px-6 py-12 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
-            <AlertCircle className="mx-auto h-9 w-9 text-rose-700/60" />
-            <h3 className="font-display mt-3 text-[18px] font-semibold text-[#1a0a14]">Couldn't load conversation</h3>
-            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-[#6a5560]">{error}</p>
+        <div className="relative flex flex-1 items-center justify-center px-6">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-6 py-12 text-center backdrop-blur-sm">
+            <AlertCircle className="mx-auto h-9 w-9 text-rose-300/70" />
+            <h3 className="font-display mt-3 text-[18px] font-semibold text-white">Couldn't load conversation</h3>
+            <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-white/55">{error}</p>
             <button
               onClick={load}
               className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_20px_rgba(220,30,60,0.28)] hover:shadow-[0_10px_26px_rgba(220,30,60,0.38)]"
@@ -256,19 +265,19 @@ export default function ChatPage({ params }: { params: { id: string } }) {
         </div>
       ) : (
         <>
-          <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+          <div className="relative flex-1 overflow-y-auto px-4 py-5 sm:px-6">
             <div className="mx-auto max-w-[680px] space-y-2.5">
               {/* Encryption preamble */}
-              <div className="mx-auto mb-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-100">
+              <div className="mx-auto mb-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-400/12 px-3 py-1 text-[11px] font-medium text-emerald-200 ring-1 ring-emerald-400/25">
                 <Lock className="h-3 w-3" />
                 Messages in this conversation are end-to-end encrypted.
               </div>
 
               {messages.length === 0 ? (
-                <div className="rounded-3xl border border-rose-100/70 bg-white px-6 py-12 text-center shadow-[0_2px_14px_rgba(220,30,60,0.05)]">
-                  <MessageCircle className="mx-auto h-9 w-9 text-rose-700/40" />
-                  <p className="font-display mt-3 text-[16px] font-semibold text-[#1a0a14]">Start the conversation</p>
-                  <p className="mx-auto mt-1.5 max-w-md text-[12.5px] text-[#6a5560]">
+                <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-6 py-12 text-center backdrop-blur-sm">
+                  <MessageCircle className="mx-auto h-9 w-9 text-[#ff8aa3]/50" />
+                  <p className="font-display mt-3 text-[16px] font-semibold text-white">Start the conversation</p>
+                  <p className="mx-auto mt-1.5 max-w-md text-[12.5px] text-white/55">
                     Say hello. A thoughtful first message goes a long way.
                   </p>
                 </div>
@@ -282,10 +291,10 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                     >
                       <div
                         className={
-                          "max-w-[78%] rounded-[20px] px-4 py-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] " +
+                          "max-w-[78%] rounded-[20px] px-4 py-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.18)] " +
                           (mine
                             ? "rounded-br-md bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white"
-                            : "rounded-bl-md border border-rose-100/70 bg-white text-[#1a0a14]")
+                            : "rounded-bl-md border border-white/10 bg-white/[0.06] text-[#f4eef0]")
                         }
                       >
                         <p className="whitespace-pre-wrap break-words text-[14px] leading-[1.55]">
@@ -294,7 +303,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                         <p
                           className={
                             "mt-1 text-right text-[10px] " +
-                            (mine ? "text-white/70" : "text-[#6a5560]")
+                            (mine ? "text-white/70" : "text-white/45")
                           }
                         >
                           {fmtTime(m.created_at)}
@@ -309,7 +318,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
           </div>
 
           {/* Composer */}
-          <div className="border-t border-rose-100 bg-white/90 px-4 py-3 backdrop-blur sm:px-6">
+          <div className="relative border-t border-white/10 bg-white/[0.04] px-4 py-3 backdrop-blur sm:px-6">
             <div className="mx-auto flex max-w-[680px] items-center gap-2">
               <input
                 type="text"
@@ -323,7 +332,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                 }}
                 placeholder={wsConnected ? "Write a message…" : "Connecting…"}
                 disabled={!wsConnected}
-                className="h-11 flex-1 rounded-2xl border border-rose-100 bg-white px-4 text-[14px] text-[#1a0a14] outline-none transition-colors placeholder:text-rose-700/40 focus:border-rose-300 disabled:opacity-60"
+                className="h-11 flex-1 rounded-2xl border border-white/[0.12] bg-white/[0.05] px-4 text-[14px] text-[#f4eef0] outline-none transition-colors placeholder:text-white/35 focus:border-white/25 disabled:opacity-60"
               />
               <button
                 onClick={send}
@@ -337,6 +346,8 @@ export default function ChatPage({ params }: { params: { id: string } }) {
           </div>
         </>
       )}
+
+      <style jsx>{`.m4m-aura{position:absolute;border-radius:50%;filter:blur(120px);pointer-events:none;}.m4m-aura-rose{width:540px;height:540px;top:-150px;right:-120px;background:radial-gradient(circle,rgba(220,30,60,0.5),transparent 60%);opacity:.5;}.m4m-aura-gold{width:560px;height:560px;bottom:-190px;left:-150px;background:radial-gradient(circle,rgba(201,149,74,0.4),transparent 60%);opacity:.42;}.m4m-aura-plum{width:380px;height:380px;top:42%;right:28%;background:radial-gradient(circle,rgba(124,58,137,0.4),transparent 60%);opacity:.26;}.m4m-aura-vignette{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,.5) 100%);}`}</style>
     </div>
   );
 }
