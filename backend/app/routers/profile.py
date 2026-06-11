@@ -461,6 +461,9 @@ async def get_my_profile(
             return APIResponse(success=True, data=None)
         # Refresh email verification from Firebase claims (fix #9)
         await _sync_verification_flags(db, current_user)
+        # Self-heal: issue the membership number on read if onboarding is complete
+        # but it was never minted (e.g. the PATCH-time hook didn't run). Safe/idempotent.
+        await _assign_membership_if_onboarded(db, profile)
         return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
     except HTTPException:
         raise
@@ -582,18 +585,22 @@ def _is_onboarding_complete(p: UserProfile) -> bool:
 async def _assign_membership_if_onboarded(db: AsyncSession, profile: UserProfile) -> None:
     """The first time a profile satisfies the onboarding requirements, mint the
     member's permanent membership number (M4M<year><seq>) and send their welcome
-    email. Idempotent and best-effort — never raises into the request."""
-    if not _is_onboarding_complete(profile):
-        return
-    user_row = (await db.execute(
-        select(User).where(User.id == profile.user_id)
-    )).scalar_one_or_none()
-    if user_row is None or user_row.membership_number:
-        return
+    email. Runs on the onboarding PATCH *and* on profile reads, so a member whose
+    number was somehow never issued is self-healed on their next load. Idempotent
+    and fully best-effort — never raises into the caller."""
+    user_row = None
+    number = None
     try:
+        if not _is_onboarding_complete(profile):
+            return
+        user_row = (await db.execute(
+            select(User).where(User.id == profile.user_id)
+        )).scalar_one_or_none()
+        if user_row is None or user_row.membership_number:
+            return
         number = await assign_membership_number(db, user_row)
     except Exception as e:
-        logger.error("membership_assign_failed", user_id=str(profile.user_id), error=str(e))
+        logger.error("membership_assign_failed", user_id=str(getattr(profile, "user_id", "?")), error=str(e))
         return
     if number and user_row.email:
         display_name = " ".join(
