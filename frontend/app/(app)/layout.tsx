@@ -478,7 +478,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <lg the rail is an overlay drawer, so the content must be full
           width — `m4m-app-main` zeroes the inline margin below 1024px. */}
       <main
-        className="m4m-app-main flex-1 min-h-screen flex flex-col transition-all duration-300 w-full min-w-0"
+        className="m4m-app-main flex-1 min-h-screen flex flex-col transition-all duration-300 min-w-0"
         style={{ marginLeft: sidebarWidth, background: "#fdfbf9" }}
       >
         <style jsx global>{`

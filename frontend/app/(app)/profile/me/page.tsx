@@ -98,6 +98,9 @@ interface Employment  { company: string; designation: string; location: string; 
 
 const BASE_INPUT: React.CSSProperties = {
   width: "100%",
+  // Allow inputs to shrink below their intrinsic min-width so grid/flex tracks
+  // can narrow on smaller viewports instead of forcing horizontal overflow.
+  minWidth: 0,
   fontFamily: "var(--font-poppins, sans-serif)",
   // 16px (1rem) so iOS Safari doesn't auto-zoom on focus across this
   // long form; the prior 0.875rem is visually all-but-identical.
@@ -788,7 +791,7 @@ export default function MyProfilePage() {
       />
 
       {/* Single column on phones/tablets; 280px info rail + form from lg+. */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr] lg:items-start">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
         {/* ── Left Sidebar ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <PhotoCard name={general.name || "Your Name"} photoUrl={primaryPhotoUrl} />
@@ -1694,7 +1697,7 @@ function Field({ label, children, required }: { label: string; children: React.R
   }, [ctx, missing, fieldId, label]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
+    <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
       <label style={{ ...LABEL_STYLE, display: "inline-flex", alignItems: "center" }}>
         {label}
         {required && <span style={{ color: "#dc1e3c", marginLeft: 3, fontWeight: 700 }}>*</span>}
