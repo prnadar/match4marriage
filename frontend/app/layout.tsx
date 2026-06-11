@@ -34,12 +34,15 @@ export const metadata: Metadata = {
     title: "Match4Marriage",
   },
   formatDetection: { telephone: false },
-  // NOTE: /og-default.jpg and /apple-touch-icon.png are referenced here but
-  // the binaries themselves haven't been committed yet. Drop them into
-  // /public when the brand assets are ready — the operator handover doc
-  // calls these out.
+  // Brand icon set generated from the Match 4 Marriage "M" mark:
+  // favicon.ico (16/32/48/64) + PNG fallbacks, apple-touch-icon (180), and
+  // the /og-default.jpg social card. All committed under /public.
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon-16x16.png", type: "image/png", sizes: "16x16" },
+    ],
     apple: "/apple-touch-icon.png",
   },
   openGraph: {

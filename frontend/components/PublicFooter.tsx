@@ -10,9 +10,11 @@ export default function PublicFooter() {
         <div className="grid grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr] gap-8 mb-8">
           {/* Brand */}
           <div className="col-span-2 lg:col-span-1">
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-              <Heart style={{ width: "18px", height: "18px", color: "#dc1e3c" }} />
-              <span style={{ fontFamily: "var(--font-playfair, serif)", fontSize: "20px", fontWeight: 700, color: "#fff" }}>Match<span style={{ color: "#dc1e3c" }}>4</span>Marriage</span>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: "12px" }}>
+              <span style={{ display: "inline-flex", background: "rgba(255,255,255,0.96)", borderRadius: 12, padding: "7px 11px", boxShadow: "0 2px 12px rgba(0,0,0,0.25)" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/images/logo.png" alt="Match 4 Marriage" style={{ height: 32, width: "auto", display: "block" }} />
+              </span>
             </div>
             <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", lineHeight: 1.7, maxWidth: "260px" }}>
               Elite Indian matrimony service. Hand-picked, personally verified profiles for the global Indian community.
