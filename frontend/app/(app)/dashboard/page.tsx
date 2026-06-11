@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import {
+  motion, useReducedMotion, useInView, useMotionValue,
+  useTransform, animate, type Variants,
+} from "framer-motion";
 import {
   Shield, Heart, Clock, Sparkles, Search, ArrowRight, AlertCircle,
   Check, Plus, Crown,
@@ -21,6 +25,26 @@ function cmToFeetInches(cm: number): string {
 }
 
 const RIBBONS = ["Top Match", "Great Match", "Featured"];
+const EASE = [0.22, 1, 0.36, 1] as const;
+const MotionLink = motion(Link);
+
+/* Count-up number that animates once it scrolls into view. */
+function CountUp({
+  to, suffix = "", duration = 1.1, className,
+}: { to: number; suffix?: string; duration?: number; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true });
+  const reduce = useReducedMotion();
+  const count = useMotionValue(0);
+  const text = useTransform(count, (v) => `${Math.round(v)}${suffix}`);
+  useEffect(() => {
+    if (reduce) { count.set(to); return; }
+    if (!inView) return;
+    const controls = animate(count, to, { duration, ease: EASE });
+    return controls.stop;
+  }, [inView, to, reduce, duration, count]);
+  return <motion.span ref={ref} className={className}>{text}</motion.span>;
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function mapMatch(p: any, idx: number): ProfileCardData {
@@ -66,6 +90,23 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [interestError, setInterestError] = useState<string | null>(null);
+
+  const reduce = useReducedMotion();
+  const fadeUp: Variants = {
+    hidden: { opacity: 0, y: reduce ? 0 : 22 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE } },
+  };
+  const stagger: Variants = {
+    hidden: {},
+    show: { transition: { staggerChildren: 0.08, delayChildren: 0.04 } },
+  };
+  const reveal = {
+    variants: fadeUp,
+    initial: "hidden" as const,
+    whileInView: "show" as const,
+    viewport: { once: true, margin: "-40px" },
+  };
+  const hoverLift = reduce ? undefined : { y: -4, transition: { type: "spring" as const, stiffness: 300, damping: 22 } };
 
   useEffect(() => {
     async function load() {
@@ -136,12 +177,23 @@ export default function DashboardPage() {
   const completionScore = completion?.score ?? 0;
 
   return (
-    <div className="min-h-screen" style={{ background: "#fdfbf9" }}>
-      <div className="mx-auto max-w-[1200px] px-6 py-8 lg:px-8 lg:py-10">
+    <div className="relative min-h-screen overflow-hidden" style={{ background: "#fdfbf9" }}>
+      {/* Soft ambient accents */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <span className="m4m-dash-aurora m4m-dash-aurora-rose" />
+        <span className="m4m-dash-aurora m4m-dash-aurora-gold" />
+      </div>
+
+      <div className="relative mx-auto max-w-[1200px] px-6 py-8 lg:px-8 lg:py-10">
 
         {/* ── Hero strip ─────────────────────────────────────────────── */}
-        <section className="fade-in-up grid grid-cols-1 gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
-          <div>
+        <motion.section
+          variants={stagger}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_auto] lg:items-center"
+        >
+          <motion.div variants={fadeUp}>
             <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-[0.2em] text-rose-700/80">
               Welcome back
             </p>
@@ -157,9 +209,14 @@ export default function DashboardPage() {
               </div>
             )}
             <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-[#6a5560]">
-              {loading
-                ? "Loading the introductions our advisors selected for you today…"
-                : `${matches.length} hand-picked introductions for you, refreshed daily by our team.`}
+              {loading ? (
+                "Loading the introductions our advisors selected for you today…"
+              ) : (
+                <>
+                  <CountUp to={matches.length} className="font-semibold text-[#1a0a14]" />{" "}
+                  hand-picked introductions for you, refreshed daily by our team.
+                </>
+              )}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3 text-[12px]">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 ring-1 ring-rose-100 text-rose-700/80">
@@ -173,10 +230,12 @@ export default function DashboardPage() {
                 Browse all profiles <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
-          </div>
+          </motion.div>
 
           {/* Profile strength card */}
-          <div
+          <motion.div
+            variants={fadeUp}
+            whileHover={hoverLift}
             className="relative flex items-center gap-5 rounded-3xl border border-rose-100/70 bg-white p-5 shadow-[0_2px_18px_rgba(220,30,60,0.06)]"
             style={{ minWidth: 300 }}
           >
@@ -207,8 +266,8 @@ export default function DashboardPage() {
                 Complete your profile <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
-          </div>
-        </section>
+          </motion.div>
+        </motion.section>
 
         {/* ── Membership / upgrade ───────────────────────────────────── */}
         {(() => {
@@ -222,14 +281,21 @@ export default function DashboardPage() {
           const label = PLAN_LABEL[plan] ?? "Basic";
           const isTopTier = plan === "platinum";
           return (
-            <section
-              className="fade-in-up mt-7 flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-rose-100/70 bg-gradient-to-br from-white to-rose-50/40 p-5 shadow-[0_2px_14px_rgba(220,30,60,0.05)]"
-              style={{ animationDelay: "40ms" }}
+            <motion.section
+              {...reveal}
+              whileHover={hoverLift}
+              className="mt-7 flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-rose-100/70 bg-gradient-to-br from-white to-rose-50/40 p-5 shadow-[0_2px_14px_rgba(220,30,60,0.05)]"
             >
               <div className="flex items-center gap-4 min-w-[240px]">
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 text-rose-700 ring-1 ring-rose-100">
+                <motion.span
+                  initial={reduce ? false : { rotate: -12, scale: 0.8, opacity: 0 }}
+                  whileInView={{ rotate: 0, scale: 1, opacity: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.1 }}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 text-rose-700 ring-1 ring-rose-100"
+                >
                   <Crown className="h-5 w-5" />
-                </span>
+                </motion.span>
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700/70">
                     Your membership
@@ -251,29 +317,31 @@ export default function DashboardPage() {
                       ? "Unlock direct messaging, contact access and priority introductions."
                       : "Upgrade for more contacts, priority placement and concierge support."}
                   </p>
-                  <Link
+                  <MotionLink
                     href="/subscription"
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-[13.5px] font-semibold text-white shadow-[0_6px_18px_rgba(220,30,60,0.32)] transition-all hover:shadow-[0_12px_28px_rgba(220,30,60,0.42)]"
+                    whileHover={hoverLift}
+                    whileTap={reduce ? undefined : { scale: 0.97 }}
+                    className="group inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-[13.5px] font-semibold text-white shadow-[0_6px_18px_rgba(220,30,60,0.32)] transition-all hover:shadow-[0_12px_28px_rgba(220,30,60,0.42)]"
                     style={{ background: "linear-gradient(135deg, #dc1e3c, #a0153c)" }}
                   >
                     {plan === "free" ? "Upgrade your plan" : "See higher tiers"}
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
+                    <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                  </MotionLink>
                 </div>
               )}
-            </section>
+            </motion.section>
           );
         })()}
 
         {/* ── Profile completeness ───────────────────────────────────── */}
-        <section
-          className="fade-in-up mt-7 flex flex-wrap items-center gap-5 rounded-2xl border border-rose-100/70 bg-white p-5 shadow-[0_2px_14px_rgba(220,30,60,0.05)]"
-          style={{ animationDelay: "60ms" }}
+        <motion.section
+          {...reveal}
+          className="mt-7 flex flex-wrap items-center gap-5 rounded-2xl border border-rose-100/70 bg-white p-5 shadow-[0_2px_14px_rgba(220,30,60,0.05)]"
         >
           <div className="flex-1 min-w-[260px]">
             <div className="mb-2 flex items-center justify-between gap-3">
               <span className="text-[13px] font-semibold text-[#1a0a14]">
-                Profile completeness · <span className="font-display">{completionScore}%</span>
+                Profile completeness · <CountUp to={completionScore} suffix="%" className="font-display" />
               </span>
               {completionScore < 100 && (
                 <span className="text-[11px] font-medium text-amber-700">
@@ -282,13 +350,16 @@ export default function DashboardPage() {
               )}
             </div>
             <div className="relative h-2 overflow-hidden rounded-full bg-rose-100/60">
-              <div
-                className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-700 ease-out"
+              <motion.div
+                className="absolute inset-y-0 left-0 rounded-full"
                 style={{
-                  width: `${completionScore}%`,
                   background: "linear-gradient(90deg,#dc1e3c 0%,#C9954A 100%)",
                   boxShadow: "0 0 14px rgba(220,30,60,0.35)",
                 }}
+                initial={{ width: 0 }}
+                whileInView={{ width: `${completionScore}%` }}
+                viewport={{ once: true }}
+                transition={{ duration: 1, ease: EASE, delay: 0.1 }}
               />
             </div>
             {completion && (
@@ -331,7 +402,7 @@ export default function DashboardPage() {
               Complete profile <ArrowRight />
             </Link>
           </LuxeButton>
-        </section>
+        </motion.section>
 
         {/* ── Interest quota notice ──────────────────────────────────── */}
         {interestError && (
@@ -360,7 +431,7 @@ export default function DashboardPage() {
         )}
 
         {/* ── Section heading ────────────────────────────────────────── */}
-        <div className="mt-10 mb-5 flex items-end justify-between gap-4">
+        <motion.div {...reveal} className="mt-10 mb-5 flex items-end justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-rose-700/80">
               <Sparkles className="mr-1 inline h-3 w-3" /> Today's introductions
@@ -375,7 +446,7 @@ export default function DashboardPage() {
           >
             See all <ArrowRight className="h-3.5 w-3.5" />
           </Link>
-        </div>
+        </motion.div>
 
         {/* ── Loading skeletons ──────────────────────────────────────── */}
         {loading && (
@@ -444,6 +515,17 @@ export default function DashboardPage() {
           </>
         )}
       </div>
+
+      <style jsx>{`
+        .m4m-dash-aurora { position: absolute; border-radius: 50%; filter: blur(110px); pointer-events: none; will-change: transform; }
+        .m4m-dash-aurora-rose { width: 460px; height: 460px; top: -170px; right: -110px; background: radial-gradient(circle, rgba(220,30,60,0.13), transparent 62%); animation: m4mDashRose 28s ease-in-out infinite alternate; }
+        .m4m-dash-aurora-gold { width: 420px; height: 420px; bottom: -150px; left: -130px; background: radial-gradient(circle, rgba(201,149,74,0.15), transparent 62%); animation: m4mDashGold 34s ease-in-out infinite alternate; }
+        @keyframes m4mDashRose { from { transform: translate(0,0) scale(1); } to { transform: translate(-70px,60px) scale(1.12); } }
+        @keyframes m4mDashGold { from { transform: translate(0,0) scale(1); } to { transform: translate(60px,-50px) scale(0.9); } }
+        @media (prefers-reduced-motion: reduce) {
+          .m4m-dash-aurora-rose, .m4m-dash-aurora-gold { animation: none !important; }
+        }
+      `}</style>
     </div>
   );
 }
