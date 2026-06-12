@@ -26,7 +26,7 @@ function Toggle2({ on, onToggle }: { on: boolean; onToggle: () => void }) {
         borderRadius: 999,
         border: "none",
         cursor: "pointer",
-        background: on ? "linear-gradient(135deg,#dc1e3c,#a0153c)" : "rgba(26,10,20,0.12)",
+        background: on ? "linear-gradient(135deg,#dc1e3c,#a0153c)" : "rgba(255,255,255,0.12)",
         flexShrink: 0,
         transition: "background 0.2s",
         padding: 0,
@@ -58,12 +58,12 @@ function Row({ label, desc, children }: { label: string; desc?: string; children
         justifyContent: "space-between",
         gap: 16,
         padding: "14px 0",
-        borderBottom: "1px solid rgba(220,30,60,0.06)",
+        borderBottom: "1px solid rgba(255,255,255,0.08)",
       }}
     >
       <div>
-        <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, fontWeight: 500, color: "rgba(26,10,20,0.8)", margin: 0 }}>{label}</p>
-        {desc && <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 12, color: "rgba(26,10,20,0.4)", marginTop: 2, margin: 0 }}>{desc}</p>}
+        <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, fontWeight: 500, color: "rgba(255,255,255,0.8)", margin: 0 }}>{label}</p>
+        {desc && <p style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2, margin: 0 }}>{desc}</p>}
       </div>
       {children}
     </div>
@@ -74,11 +74,11 @@ function Card({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        background: "#fff",
-        border: "1px solid rgba(220,30,60,0.08)",
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.10)",
         borderRadius: 16,
         padding: "4px 20px",
-        boxShadow: "0 2px 12px rgba(220,30,60,0.04)",
+        boxShadow: "0 10px 30px rgba(0,0,0,0.28)",
       }}
     >
       {children}
@@ -93,7 +93,7 @@ function SectionLabel({ text }: { text: string }) {
         fontFamily: "var(--font-poppins, sans-serif)",
         fontSize: 11,
         fontWeight: 600,
-        color: "rgba(26,10,20,0.35)",
+        color: "rgba(255,255,255,0.35)",
         letterSpacing: "0.08em",
         padding: "14px 0 0",
         margin: 0,
@@ -237,38 +237,42 @@ export default function SettingsPage() {
   // 16px font keeps iOS Safari from auto-zooming the viewport when these
   // controls are focused; visually near-identical to the prior 14px.
   const selectStyle = {
-    background: "rgba(255,255,255,0.9)",
-    border: "1px solid rgba(220,30,60,0.15)",
+    background: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.12)",
     borderRadius: 10,
     padding: "6px 12px",
     fontFamily: "var(--font-poppins, sans-serif)",
     fontSize: 16,
-    color: "#1a0a14",
+    color: "#f4eef0",
     outline: "none",
   };
 
   const inputStyle = {
-    background: "rgba(255,255,255,0.9)",
-    border: "1px solid rgba(220,30,60,0.15)",
+    background: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.12)",
     borderRadius: 10,
     padding: "6px 8px",
     fontFamily: "var(--font-poppins, sans-serif)",
     fontSize: 16,
-    color: "#1a0a14",
+    color: "#f4eef0",
     outline: "none",
     width: 64,
     textAlign: "center" as const,
   };
 
   return (
-    <div className="px-4 py-6 sm:px-8 sm:py-8" style={{ background: "#fdfbf9", minHeight: "100vh" }}>
-      <div style={{ maxWidth: 896 }}>
+    <div className="px-4 py-6 sm:px-8 sm:py-8" style={{ background: "linear-gradient(165deg,#170811 0%,#220c1a 45%,#0b0509 100%)", minHeight: "100vh", position: "relative", overflow: "hidden" }}>
+      <div aria-hidden style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: -130, right: -90, width: 440, height: 440, borderRadius: "50%", background: "radial-gradient(circle, rgba(220,30,60,0.20), transparent 70%)", filter: "blur(50px)" }} />
+        <div style={{ position: "absolute", bottom: -150, left: -110, width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle, rgba(201,149,74,0.12), transparent 70%)", filter: "blur(60px)" }} />
+      </div>
+      <div style={{ maxWidth: 896, position: "relative" }}>
         <h1
           style={{
             fontFamily: "var(--font-playfair, serif)",
             fontSize: 30,
             fontWeight: 300,
-            color: "#1a0a14",
+            color: "#f4eef0",
             marginBottom: 24,
             margin: "0 0 24px",
           }}
@@ -298,12 +302,12 @@ export default function SettingsPage() {
                   textAlign: "left",
                   whiteSpace: "nowrap",
                   flexShrink: 0,
-                  background: section === n.key ? "rgba(220,30,60,0.08)" : "transparent",
-                  color: section === n.key ? "#dc1e3c" : "rgba(26,10,20,0.55)",
+                  background: section === n.key ? "rgba(220,30,60,0.18)" : "transparent",
+                  color: section === n.key ? "#ff8aa3" : "rgba(255,255,255,0.6)",
                   transition: "background 0.15s, color 0.15s",
                 }}
               >
-                <span style={{ color: section === n.key ? "#dc1e3c" : "rgba(26,10,20,0.35)" }}>
+                <span style={{ color: section === n.key ? "#ff8aa3" : "rgba(255,255,255,0.4)" }}>
                   {n.icon}
                 </span>
                 {n.label}
@@ -312,7 +316,7 @@ export default function SettingsPage() {
 
             {/* Divider only makes sense in the vertical (md+) rail. On the
                 mobile horizontal strip it's just another scrollable item. */}
-            <div className="flex-shrink-0 md:mt-4 md:pt-4 md:border-t md:border-[rgba(220,30,60,0.1)]">
+            <div className="flex-shrink-0 md:mt-4 md:pt-4 md:border-t md:border-[rgba(255,255,255,0.1)]">
               <button
                 style={{
                   display: "flex",
@@ -406,18 +410,18 @@ export default function SettingsPage() {
                     display: "flex",
                     alignItems: "flex-start",
                     gap: 12,
-                    background: "rgba(92,122,82,0.06)",
-                    border: "1px solid rgba(92,122,82,0.18)",
+                    background: "rgba(141,184,112,0.06)",
+                    border: "1px solid rgba(141,184,112,0.18)",
                   }}
                 >
-                  <Lock style={{ width: 20, height: 20, color: "#5C7A52", flexShrink: 0, marginTop: 2 }} />
+                  <Lock style={{ width: 20, height: 20, color: "#8DB870", flexShrink: 0, marginTop: 2 }} />
                   <div>
                     <p
                       style={{
                         fontFamily: "var(--font-poppins, sans-serif)",
                         fontSize: 14,
                         fontWeight: 600,
-                        color: "#5C7A52",
+                        color: "#8DB870",
                         marginBottom: 4,
                         margin: "0 0 4px",
                       }}
@@ -428,7 +432,7 @@ export default function SettingsPage() {
                       style={{
                         fontFamily: "var(--font-poppins, sans-serif)",
                         fontSize: 12,
-                        color: "rgba(92,122,82,0.7)",
+                        color: "rgba(141,184,112,0.7)",
                         margin: 0,
                       }}
                     >
@@ -465,7 +469,7 @@ export default function SettingsPage() {
                         onChange={(e) => setPrefs({ ...prefs, ageFrom: e.target.value })}
                         style={inputStyle}
                       />
-                      <span style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 12, color: "rgba(26,10,20,0.4)" }}>to</span>
+                      <span style={{ fontFamily: "var(--font-poppins, sans-serif)", fontSize: 12, color: "rgba(255,255,255,0.4)" }}>to</span>
                       <input
                         type="number"
                         value={prefs.ageTo}
@@ -497,9 +501,9 @@ export default function SettingsPage() {
                       borderRadius: 16,
                       padding: 20,
                       background: emailVerified
-                        ? "rgba(92,122,82,0.05)"
+                        ? "rgba(141,184,112,0.05)"
                         : "rgba(220,30,60,0.04)",
-                      border: `1px solid ${emailVerified ? "rgba(92,122,82,0.2)" : "rgba(220,30,60,0.18)"}`,
+                      border: `1px solid ${emailVerified ? "rgba(141,184,112,0.2)" : "rgba(220,30,60,0.18)"}`,
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: emailVerified ? 0 : 12 }}>
@@ -507,19 +511,19 @@ export default function SettingsPage() {
                         style={{
                           flexShrink: 0,
                           width: 32, height: 32, borderRadius: 999,
-                          background: emailVerified ? "rgba(92,122,82,0.15)" : "rgba(220,30,60,0.12)",
+                          background: emailVerified ? "rgba(141,184,112,0.15)" : "rgba(220,30,60,0.12)",
                           display: "inline-flex", alignItems: "center", justifyContent: "center",
                         }}
                       >
                         {emailVerified
-                          ? <CheckCircle style={{ width: 16, height: 16, color: "#5C7A52" }} />
+                          ? <CheckCircle style={{ width: 16, height: 16, color: "#8DB870" }} />
                           : <Mail style={{ width: 16, height: 16, color: "#dc1e3c" }} />}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: 0, fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, fontWeight: 600, color: "#1a0a14" }}>
+                        <p style={{ margin: 0, fontFamily: "var(--font-poppins, sans-serif)", fontSize: 14, fontWeight: 600, color: "#f4eef0" }}>
                           {emailVerified ? "Email verified" : "Verify your email"}
                         </p>
-                        <p style={{ margin: "4px 0 0", fontFamily: "var(--font-poppins, sans-serif)", fontSize: 12, color: "rgba(26,10,20,0.6)", lineHeight: 1.5 }}>
+                        <p style={{ margin: "4px 0 0", fontFamily: "var(--font-poppins, sans-serif)", fontSize: 12, color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>
                           {emailVerified
                             ? `${account.email} is confirmed. Your Trust Score includes the email signal.`
                             : `We'll send a 6-digit code to ${account.email}. Verifying boosts your Trust Score by 20 points.`}
@@ -545,11 +549,12 @@ export default function SettingsPage() {
                                 flex: "1 0 140px",
                                 padding: "10px 12px",
                                 borderRadius: 10,
-                                border: "1px solid rgba(26,10,20,0.15)",
+                                border: "1px solid rgba(255,255,255,0.15)",
                                 fontFamily: "ui-monospace, 'SF Mono', monospace",
                                 fontSize: 16,
                                 letterSpacing: "0.25em",
-                                background: "#fff",
+                                background: "rgba(255,255,255,0.05)",
+                                color: "#f4eef0",
                                 outline: "none",
                               }}
                             />
@@ -579,9 +584,9 @@ export default function SettingsPage() {
                               style={{
                                 padding: "10px 12px",
                                 borderRadius: 10,
-                                border: "1px solid rgba(26,10,20,0.12)",
-                                background: "#fff",
-                                color: "rgba(26,10,20,0.7)",
+                                border: "1px solid rgba(255,255,255,0.12)",
+                                background: "rgba(255,255,255,0.05)",
+                                color: "rgba(255,255,255,0.7)",
                                 fontFamily: "var(--font-poppins, sans-serif)",
                                 fontSize: 13, fontWeight: 500,
                                 cursor: "pointer",
@@ -627,12 +632,12 @@ export default function SettingsPage() {
                           display: "inline-flex", alignItems: "center", gap: 6,
                           background:
                             emailVerifyMsg.tone === "error" ? "rgba(220,30,60,0.08)"
-                            : emailVerifyMsg.tone === "success" ? "rgba(92,122,82,0.1)"
-                            : "rgba(26,10,20,0.05)",
+                            : emailVerifyMsg.tone === "success" ? "rgba(141,184,112,0.1)"
+                            : "rgba(255,255,255,0.05)",
                           color:
                             emailVerifyMsg.tone === "error" ? "#a0153c"
-                            : emailVerifyMsg.tone === "success" ? "#3F5937"
-                            : "rgba(26,10,20,0.7)",
+                            : emailVerifyMsg.tone === "success" ? "#8DB870"
+                            : "rgba(255,255,255,0.7)",
                         }}
                       >
                         {emailVerifyMsg.tone === "error" && <AlertCircle style={{ width: 12, height: 12 }} />}
@@ -653,7 +658,7 @@ export default function SettingsPage() {
                     { label: "Two-Factor Authentication",desc: "Add extra security"                 },
                   ].map(({ label, desc }) => (
                     <Row key={label} label={label} desc={desc}>
-                      <ChevronRight style={{ width: 16, height: 16, color: "rgba(26,10,20,0.25)" }} />
+                      <ChevronRight style={{ width: 16, height: 16, color: "rgba(255,255,255,0.25)" }} />
                     </Row>
                   ))}
                 </Card>
@@ -661,11 +666,11 @@ export default function SettingsPage() {
                 <Card>
                   {account.google ? (
                     <Row label="Linked Google Account" desc={account.google}>
-                      <CheckCircle style={{ width: 16, height: 16, color: "#5C7A52" }} />
+                      <CheckCircle style={{ width: 16, height: 16, color: "#8DB870" }} />
                     </Row>
                   ) : (
                     <Row label="Link Google Account" desc="Sign in faster with one click">
-                      <ChevronRight style={{ width: 16, height: 16, color: "rgba(26,10,20,0.25)" }} />
+                      <ChevronRight style={{ width: 16, height: 16, color: "rgba(255,255,255,0.25)" }} />
                     </Row>
                   )}
                   <Row label="Link LinkedIn" desc="Verify your professional credentials">
@@ -761,10 +766,10 @@ export default function SettingsPage() {
             {section === "data" && (
               <Card>
                 {[
-                  { label: "Download My Data",    desc: "Get a copy of all your Match4Marriage data (GDPR Article 20)", icon: <Download style={{ width: 16, height: 16, color: "rgba(26,10,20,0.35)" }} /> },
-                  { label: "Privacy Policy",      desc: "How we use and protect your data",                            icon: <Shield   style={{ width: 16, height: 16, color: "rgba(26,10,20,0.35)" }} /> },
-                  { label: "Terms of Service",    desc: "Platform terms and conditions",                               icon: <Globe    style={{ width: 16, height: 16, color: "rgba(26,10,20,0.35)" }} /> },
-                  { label: "Cookie Preferences",  desc: "Manage tracking and analytics cookies",                       icon: <Smartphone style={{ width: 16, height: 16, color: "rgba(26,10,20,0.35)" }} /> },
+                  { label: "Download My Data",    desc: "Get a copy of all your Match4Marriage data (GDPR Article 20)", icon: <Download style={{ width: 16, height: 16, color: "rgba(255,255,255,0.35)" }} /> },
+                  { label: "Privacy Policy",      desc: "How we use and protect your data",                            icon: <Shield   style={{ width: 16, height: 16, color: "rgba(255,255,255,0.35)" }} /> },
+                  { label: "Terms of Service",    desc: "Platform terms and conditions",                               icon: <Globe    style={{ width: 16, height: 16, color: "rgba(255,255,255,0.35)" }} /> },
+                  { label: "Cookie Preferences",  desc: "Manage tracking and analytics cookies",                       icon: <Smartphone style={{ width: 16, height: 16, color: "rgba(255,255,255,0.35)" }} /> },
                 ].map(({ label, desc, icon }) => (
                   <Row key={label} label={label} desc={desc}>
                     {icon}
