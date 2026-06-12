@@ -127,21 +127,56 @@ async def _ensure_verification_columns() -> None:
         "ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS brand_primary VARCHAR(9)",
         "ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS brand_accent VARCHAR(9)",
     ]
-    async with engine.begin() as conn:
+    # Run each statement on an AUTOCOMMIT connection so the AccessExclusiveLock
+    # an ALTER takes is released *immediately* after that statement — never held
+    # across the whole batch. The previous single-transaction form held a lock on
+    # `profiles` while reaching for `users`, which deadlocked live SELECTs (the
+    # DeadlockDetectedError seen on /profile/me).
+    import re as _re
+    async with engine.connect() as conn:
+        await conn.execution_options(isolation_level="AUTOCOMMIT")
+
+        # Fast-skip: if every column these statements would add already exists,
+        # the schema is current — do NO DDL, so steady-state cold boots take zero
+        # AccessExclusiveLocks (which is what was deadlocking reads). Only the
+        # first boot after a new column is appended actually runs the ALTERs.
+        wanted = []
+        for s in stmts:
+            m = _re.search(r"ALTER TABLE (\w+) ADD COLUMN IF NOT EXISTS (\w+)", s)
+            if m:
+                wanted.append((m.group(1), m.group(2)))
+        if wanted:
+            try:
+                tabs = ",".join("'%s'" % t for t in sorted({t for t, _ in wanted}))
+                res = await conn.execute(text(
+                    "SELECT table_name, column_name FROM information_schema.columns "
+                    f"WHERE table_name IN ({tabs})"
+                ))
+                existing = {(r[0], r[1]) for r in res}
+                if all(w in existing for w in wanted):
+                    return
+            except Exception:
+                pass  # couldn't introspect — fall through and attempt the DDL
+
+        # Cap how long any single ALTER waits for a table lock — *below* Postgres'
+        # 1s deadlock_timeout — so a busy table makes the ALTER back off
+        # (best-effort, logged) instead of deadlocking a live request.
+        try:
+            await conn.execute(text("SET lock_timeout = '800ms'"))
+        except Exception:
+            pass
+
         for s in stmts:
             try:
                 await conn.execute(text(s))
             except Exception as e:
                 logger.warning("schema_guard_failed", stmt=s, error=str(e))
 
-    # ALTER TYPE ADD VALUE cannot run inside a transaction on Postgres, so do
-    # it on a fresh autocommit connection. Idempotent via IF NOT EXISTS (PG 12+).
-    try:
-        async with engine.connect() as conn:
-            await conn.execution_options(isolation_level="AUTOCOMMIT")
+        # ALTER TYPE ADD VALUE can't run in a transaction; AUTOCOMMIT is fine.
+        try:
             await conn.execute(text("ALTER TYPE maritalstatus ADD VALUE IF NOT EXISTS 'awaiting_divorce'"))
-    except Exception as e:
-        logger.warning("marital_status_enum_update_failed", error=str(e))
+        except Exception as e:
+            logger.warning("marital_status_enum_update_failed", error=str(e))
 
     # PayPal added as a payment gateway — extend the two native enum types.
     # SQLAlchemy serializes the enum by MEMBER NAME, so the stored label is

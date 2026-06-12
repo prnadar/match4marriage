@@ -134,18 +134,46 @@ async def _run_schema_guard_once(db: AsyncSession) -> None:
                 return
 
             try:
+                # Fast-skip: if every column the guard would add already exists,
+                # the schema is current — take zero AccessExclusiveLocks. Only the
+                # first boot after a new column is appended runs the ALTERs.
+                import re as _re
+                _wanted = []
                 for s in _SCHEMA_GUARD_DDL:
+                    _m = _re.search(r"ALTER TABLE (\w+) ADD COLUMN IF NOT EXISTS (\w+)", s)
+                    if _m:
+                        _wanted.append((_m.group(1), _m.group(2)))
+                _current = False
+                if _wanted:
                     try:
-                        await conn.execute(sa_text(s))
-                    except Exception as e:
-                        logger.warning("schema_guard_stmt_failed", stmt=s, error=str(e))
-                for type_name, value in _SCHEMA_GUARD_ENUM_ADDITIONS:
-                    try:
-                        await conn.execute(sa_text(
-                            f"ALTER TYPE {type_name} ADD VALUE IF NOT EXISTS '{value}'"
+                        _tabs = ",".join("'%s'" % t for t in sorted({t for t, _ in _wanted}))
+                        _rows = await conn.execute(sa_text(
+                            "SELECT table_name, column_name FROM information_schema.columns "
+                            f"WHERE table_name IN ({_tabs})"
                         ))
-                    except Exception as e:
-                        logger.warning("schema_guard_enum_failed", type_name=type_name, value=value, error=str(e))
+                        _existing = {(r[0], r[1]) for r in _rows}
+                        _current = all(w in _existing for w in _wanted)
+                    except Exception:
+                        _current = False
+                if not _current:
+                    # Cap lock waits below Postgres' 1s deadlock_timeout so a busy
+                    # table makes an ALTER back off instead of deadlocking a read.
+                    try:
+                        await conn.execute(sa_text("SET lock_timeout = '800ms'"))
+                    except Exception:
+                        pass
+                    for s in _SCHEMA_GUARD_DDL:
+                        try:
+                            await conn.execute(sa_text(s))
+                        except Exception as e:
+                            logger.warning("schema_guard_stmt_failed", stmt=s, error=str(e))
+                    for type_name, value in _SCHEMA_GUARD_ENUM_ADDITIONS:
+                        try:
+                            await conn.execute(sa_text(
+                                f"ALTER TYPE {type_name} ADD VALUE IF NOT EXISTS '{value}'"
+                            ))
+                        except Exception as e:
+                            logger.warning("schema_guard_enum_failed", type_name=type_name, value=value, error=str(e))
             finally:
                 # Always release the advisory lock so other lambdas can proceed.
                 try:
