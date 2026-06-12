@@ -14,6 +14,7 @@ import { signOut } from "firebase/auth";
 import PublicHeader from "@/components/PublicHeader";
 import { useProfilePhoto } from "@/lib/profilePhoto";
 import { useEntitlements } from "@/lib/useEntitlements";
+import * as Sentry from "@sentry/nextjs";
 
 // Side-nav entries shown to authenticated members. Notification badges are
 // omitted until they're wired to real counts — fake numbers erode trust.
@@ -150,6 +151,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         const meRes = await api.get("/api/v1/auth/me");
         const d = (meRes.data as any)?.data ?? meRes.data;
         setSidebarMembership(d?.membership_number ?? null);
+        // Attribute Sentry errors to this member (id only — no PII).
+        if (d?.user_id) Sentry.setUser({ id: String(d.user_id) });
       } catch { /* leave null */ }
     }
     loadSidebar();
@@ -457,6 +460,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             onClick={async () => {
               try { await signOut(firebaseAuth); } catch {}
               clearClientState();
+              Sentry.setUser(null);  // stop attributing errors to the signed-out member
               // Send people to the marketing landing page after sign-out
               // rather than the login form — most users want to leave
               // entirely, not switch accounts.

@@ -284,6 +284,16 @@ async def get_current_user(
     claims["phone"] = _normalize_phone(phone)
     if email:
         claims["email"] = email.lower()
+
+    # Tag the Sentry scope with the user id only (NOT email/phone — the SDK runs
+    # with send_default_pii=False). Lets you see which member hit an error.
+    # No-op when Sentry isn't configured.
+    try:
+        import sentry_sdk
+        sentry_sdk.set_user({"id": str(user_uuid)})
+    except Exception:
+        pass
+
     return claims
 
 

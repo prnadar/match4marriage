@@ -38,6 +38,18 @@ def _require_admin(current_user: dict) -> None:
         raise HTTPException(status_code=403, detail="Admin required")
 
 
+@router.get("/debug/sentry-test")
+async def debug_sentry_test(current_user: dict = Depends(get_current_user)):
+    """Admin-only: deliberately raise so you can confirm Sentry captures backend
+    errors. It only 500s for an admin who calls it, so it's safe to leave in
+    place — or ask me to remove it once you've verified the connection."""
+    _require_admin(current_user)
+    raise RuntimeError(
+        "Sentry backend test error — intentionally raised from "
+        "/api/v1/admin/debug/sentry-test; safe to ignore."
+    )
+
+
 async def _tenant_uuid_from_slug(db: AsyncSession, tenant_slug: str) -> uuid.UUID:
     from app.routers.profile import _resolve_tenant_uuid
     t = await _resolve_tenant_uuid(db, tenant_slug)

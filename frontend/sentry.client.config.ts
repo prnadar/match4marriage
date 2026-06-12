@@ -21,8 +21,15 @@ if (dsn) {
     // Production runs see ~10% of transactions; lower envs sample everything
     // so debugging local repros isn't a guessing game.
     tracesSampleRate: environment === "production" ? 0.1 : 1.0,
+    // Record a privacy-masked Session Replay whenever an error fires, so you can
+    // watch what the member did right before the crash. Healthy sessions are
+    // never recorded. maskAllText / blockAllMedia keep PII + photos out of the
+    // replay (important for a matrimony app).
     replaysSessionSampleRate: 0,
-    replaysOnErrorSampleRate: 0,
+    replaysOnErrorSampleRate: 1.0,
+    integrations: [
+      Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true }),
+    ],
     // Avoid noisy ResizeObserver / framework chatter without throwing away
     // anything we'd actually want to fix.
     ignoreErrors: [
