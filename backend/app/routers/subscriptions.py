@@ -102,6 +102,21 @@ async def _resolve_tenant(db: AsyncSession, tenant_slug: str):
     return await _resolve_tenant_uuid(db, tenant_slug)
 
 
+def _frontend_base() -> str:
+    """Base URL PayPal returns the buyer to after they approve a payment.
+
+    Use FRONTEND_URL only when it's the live match4marriage.com domain; otherwise
+    fall back to the canonical site. A stale ``*.vercel.app`` project URL (or a
+    localhost value) would 404 the buyer on return — the exact
+    DEPLOYMENT_NOT_FOUND error customers were hitting after confirming payment.
+    """
+    fu = (settings.FRONTEND_URL or "").rstrip("/")
+    host = fu.split("://", 1)[-1].split("/", 1)[0].lower()
+    if host in ("www.match4marriage.com", "match4marriage.com"):
+        return fu
+    return "https://www.match4marriage.com"
+
+
 async def _activate_subscription(
     db: AsyncSession,
     *,
@@ -224,8 +239,9 @@ async def _checkout_paypal(
     custom_id = f"{user_id}|{plan}|{tenant_slug}"
     plan_display = PLAN_DISPLAY.get(plan, plan.title())
 
-    return_url = f"{settings.FRONTEND_URL}/subscription?paypal=return"
-    cancel_url = f"{settings.FRONTEND_URL}/subscription?paypal=cancel"
+    base = _frontend_base()
+    return_url = f"{base}/subscription?paypal=return"
+    cancel_url = f"{base}/subscription?paypal=cancel"
 
     try:
         order = paypal_svc.create_order(
