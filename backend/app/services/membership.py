@@ -77,11 +77,17 @@ async def assign_membership_number(
             FROM users
             WHERE tenant_id = :tid
               AND membership_number LIKE :prefix
+              -- Only rows whose suffix is purely numeric. A legacy or
+              -- hand-edited number (e.g. "M4M2026-VIP") would otherwise make
+              -- CAST(substr(...) AS INTEGER) throw, abort the transaction, and
+              -- break the profile load that triggered the self-heal.
+              AND membership_number ~ :numeric_re
             """
         ),
         {
             "tid": user.tenant_id,
             "prefix": f"{prefix}%",
+            "numeric_re": f"^{prefix}[0-9]+$",
             # SUBSTRING is 1-indexed in Postgres. ``len(prefix) + 1`` is
             # the position of the first digit of the sequence.
             "start_pos": len(prefix) + 1,

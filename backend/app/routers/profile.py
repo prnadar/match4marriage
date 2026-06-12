@@ -598,7 +598,13 @@ async def _assign_membership_if_onboarded(db: AsyncSession, profile: UserProfile
         )).scalar_one_or_none()
         if user_row is None or user_row.membership_number:
             return
-        number = await assign_membership_number(db, user_row)
+        # Run the assignment inside a SAVEPOINT so a DB error in the number
+        # query rolls back cleanly and leaves the request's outer transaction
+        # usable. Without this, a failed assignment poisons the transaction and
+        # the profile load that called us dies with "Could not load your
+        # profile" — even though this self-heal is meant to be best-effort.
+        async with db.begin_nested():
+            number = await assign_membership_number(db, user_row)
     except Exception as e:
         logger.error("membership_assign_failed", user_id=str(getattr(profile, "user_id", "?")), error=str(e))
         return
