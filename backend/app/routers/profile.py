@@ -209,13 +209,13 @@ async def browse_profiles(
             User.deleted_at.is_(None),
             User.is_active == True,  # noqa: E712
             UserProfile.user_id != caller_id,
-            # Members are visible by default. The previous strict
-            # `verification_status == "approved"` filter combined with the
-            # removed Step-3 ID-upload onboarding gate made browse return
-            # zero rows for every caller. We now only hide explicitly
-            # REJECTED profiles (admin moderation tool retained); draft +
-            # approved + unset are all browseable.
-            (UserProfile.verification_status != "rejected"),
+            # Listings are admin-gated: a profile appears in Browse only after
+            # the member submits it and an admin APPROVES it (verification_status
+            # becomes "approved"). draft / submitted / rejected / unset are all
+            # hidden. NOTE: Browse stays empty until admins approve profiles via
+            # the admin Verifications queue — that is the intended quality gate,
+            # not a bug.
+            (UserProfile.verification_status == "approved"),
         )
     )
 
