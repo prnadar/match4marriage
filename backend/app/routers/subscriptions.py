@@ -58,16 +58,17 @@ PLAN_PRICE_GBP_PENCE: dict[str, int] = {
     "platinum": settings.PLATINUM_PRICE_GBP,
 }
 
-# Canonical tier → marketing-name mapping. Mirrors app/core/entitlements.py
-# and the sidebar / pricing page. The previous mapping was off by one and
-# produced PayPal order descriptions like "Match4Marriage Basic" when the
-# member paid £300 for the **Premium** plan, and welcome notifications
-# saying "Welcome to Basic" after the same purchase.
+# Canonical tier → marketing-name mapping. Matches config.py and the DB
+# pricing_plans the cards are built from — the plans members actually pay
+# against: silver=Basic (£100), gold=Premium (£300), platinum=Elite (£1,000).
+# A prior "off by one" change shifted this to silver=Premium/gold=Elite, which
+# made a gold (Premium) buyer's current plan + welcome notification read
+# "Elite". "free" = no active subscription, shown as the Basic entry tier.
 PLAN_DISPLAY: dict[str, str] = {
     "free": "Basic",
-    "silver": "Premium",
-    "gold": "Elite",
-    "platinum": "VIP Concierge",
+    "silver": "Basic",
+    "gold": "Premium",
+    "platinum": "Elite",
 }
 
 

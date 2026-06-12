@@ -1,18 +1,19 @@
 """Subscription entitlements — the single source of truth for what each
 tier can do in software.
 
-Tier ↔ marketing-plan mapping (mirrors the pricing page and the member app):
+Tier ↔ marketing-plan mapping (matches config.py, the DB pricing_plans, the
+subscription cards, and PLAN_DISPLAY in routers/subscriptions.py):
 
-    users.subscription_tier   Plan name on /pricing
-    ───────────────────────   ─────────────────────
-    free                      Basic        (£0 / 3 months)
-    silver                    Premium      (£300 / 6 months)
-    gold                      Elite        (£1,000 / 6 months)
-    platinum                  VIP Concierge (bespoke)
+    users.subscription_tier   Plan name members pay against
+    ───────────────────────   ─────────────────────────────
+    free                      Basic        (no active subscription)
+    silver                    Basic        (£100 / 6 months — free for 3 months)
+    gold                      Premium      (£300 / 6 months)
+    platinum                  Elite        (£1,000 / 6 months)
 
-(Note: the legacy `PLAN_DISPLAY` map in routers/subscriptions.py uses a
-different, older naming — do not rely on it for gating. Gate on the raw
-tier strings via the helpers here.)
+(VIP Concierge on /pricing is bespoke / by-application — it is NOT a
+subscription_tier. Gate on the raw tier strings via the helpers here, never on
+the display names.)
 
 Only the *core* software gates are enforced today: direct messaging, photo
 access, unlimited expressions of interest, and advanced search filters.
@@ -31,7 +32,8 @@ if TYPE_CHECKING:  # avoid runtime import cycles
 # Ordered tiers — higher rank inherits everything below it.
 PLAN_RANK: dict[str, int] = {"free": 0, "silver": 1, "gold": 2, "platinum": 3}
 
-# Premium (silver) is the first paid tier; the core gates unlock there.
+# Basic (silver, £100) is the first *paid* tier; the core gates unlock there.
+# free = no active subscription and gets none of them.
 _PAID_FROM = PLAN_RANK["silver"]
 
 # Basic (free) cap on expressions of interest; paid tiers are unlimited.

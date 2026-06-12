@@ -9,7 +9,7 @@ import { api } from "@/lib/api";
  * the UI can lock features and show upgrade prompts. The backend enforces all
  * of these regardless; this is purely for presentation.
  *
- * Tier → plan name: free=Basic, silver=Premium, gold=Elite, platinum=VIP.
+ * Tier → plan name: free/silver=Basic, gold=Premium, platinum=Elite.
  */
 export interface Entitlements {
   plan: string;                 // free | silver | gold | platinum
@@ -22,11 +22,17 @@ export interface Entitlements {
   canViewContact: boolean;
 }
 
+// Tier → customer-facing plan name. Must match the DB pricing_plans the cards
+// are built from (the plans members actually pay against) and config.py:
+//   silver = Basic (£100), gold = Premium (£300), platinum = Elite (£1,000).
+// "free" = no active subscription, shown as the Basic entry tier.
+// (A prior off-by-one map labelled gold "Elite", so a Premium buyer's current
+//  plan read "Elite".)
 const PLAN_LABEL: Record<string, string> = {
   free: "Basic",
-  silver: "Premium",
-  gold: "Elite",
-  platinum: "VIP Concierge",
+  silver: "Basic",
+  gold: "Premium",
+  platinum: "Elite",
 };
 
 // Fail-closed default (everything locked) until the real limits load.

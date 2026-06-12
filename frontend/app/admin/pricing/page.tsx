@@ -25,14 +25,15 @@ interface Plan {
   sort_order: number;
 }
 
-// Tier metadata. `label` is the marketing name members see on /pricing — we
-// surface it everywhere in this admin UI so operators don't have to remember
-// the silver/gold/platinum → Premium/Elite/VIP mapping. `slug` is the raw
-// backend tier value (kept beneath the label as a subtitle for diagnostics).
+// Tier metadata. `label` is the marketing name members see on /pricing and the
+// subscription cards — we surface it everywhere in this admin UI so operators
+// don't have to remember the silver/gold/platinum → Basic/Premium/Elite mapping
+// (matches config.py + the DB pricing_plans members pay against). `slug` is the
+// raw backend tier value (kept beneath the label as a subtitle for diagnostics).
 const TIERS: Array<{ key: Tier; label: string; slug: string; color: string }> = [
-  { key: "silver",   label: "Premium",       slug: "silver",   color: "#7d8a93" },
-  { key: "gold",     label: "Elite",         slug: "gold",     color: "#c9954a" },
-  { key: "platinum", label: "VIP Concierge", slug: "platinum", color: "#5d4b8a" },
+  { key: "silver",   label: "Basic",   slug: "silver",   color: "#7d8a93" },
+  { key: "gold",     label: "Premium", slug: "gold",     color: "#c9954a" },
+  { key: "platinum", label: "Elite",   slug: "platinum", color: "#5d4b8a" },
 ];
 
 const PERIODS: Array<{ key: Period; label: string }> = [

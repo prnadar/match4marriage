@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # ── App ──────────────────────────────────────────────────────────────
     APP_NAME: str = "Match4Marriage API"
-    APP_VERSION: str = "1.1.3-paypal-return"
+    APP_VERSION: str = "1.1.4-plan-labels"
     ENVIRONMENT: Literal["development", "staging", "production"] = "development"
     DEBUG: bool = False
     API_PREFIX: str = "/api/v1"

@@ -277,12 +277,12 @@ export default function DashboardPage() {
 
         {/* ── Membership / upgrade ───────────────────────────────────── */}
         {(() => {
-          // Canonical mapping (mirrors app/core/entitlements.py + the sidebar):
-          // free=Basic, silver=Premium, gold=Elite, platinum=VIP Concierge.
-          // The previous map was off by one and rendered "Free plan" while
-          // the sidebar showed "Basic member" — fixed.
+          // Tier → plan name, matching the DB pricing_plans members pay against
+          // (config.py): silver=Basic, gold=Premium, platinum=Elite. "free" = no
+          // active subscription. (An earlier off-by-one map labelled gold
+          // "Elite", so a Premium member's dashboard + plan panel read "Elite".)
           const PLAN_LABEL: Record<string, string> = {
-            free: "Basic", silver: "Premium", gold: "Elite", platinum: "VIP Concierge",
+            free: "Basic", silver: "Basic", gold: "Premium", platinum: "Elite",
           };
           const label = PLAN_LABEL[plan] ?? "Basic";
           const isTopTier = plan === "platinum";

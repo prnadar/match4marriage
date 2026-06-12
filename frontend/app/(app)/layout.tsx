@@ -13,6 +13,7 @@ import { clearClientState, firebaseAuth, rememberSessionUid } from "@/lib/fireba
 import { signOut } from "firebase/auth";
 import PublicHeader from "@/components/PublicHeader";
 import { useProfilePhoto } from "@/lib/profilePhoto";
+import { useEntitlements } from "@/lib/useEntitlements";
 
 // Side-nav entries shown to authenticated members. Notification badges are
 // omitted until they're wired to real counts — fake numbers erode trust.
@@ -89,7 +90,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarName, setSidebarName] = useState("");
   const [sidebarInitial, setSidebarInitial] = useState("");
-  const [sidebarPlan, setSidebarPlan] = useState<string>("Basic");
+  const { entitlements } = useEntitlements();
   const [sidebarMembership, setSidebarMembership] = useState<string | null>(null);
   // Same hook PublicHeader uses; keeps the sidebar avatar in lock-step
   // with the top-bar avatar after a primary-photo change.
@@ -136,22 +137,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         setSidebarInitial(resolvedName.charAt(0).toUpperCase());
       }
 
-      // Resolve current subscription tier — `users.subscription_tier` returns
-      // free/silver/gold/platinum; we map that to the plan label users see in
-      // /pricing (Basic / Premium / Elite / VIP Concierge). Falls back to
-      // "Basic" so the badge isn't blank during the brief load window.
-      try {
-        const res = await profileApi.me();
-        const p = (res.data as any)?.data ?? res.data;
-        const tier = String(p?.subscription_tier || "free").toLowerCase();
-        const tierToLabel: Record<string, string> = {
-          free: "Basic",
-          silver: "Premium",
-          gold: "Elite",
-          platinum: "VIP Concierge",
-        };
-        setSidebarPlan(tierToLabel[tier] || "Basic");
-      } catch { /* leave default */ }
+      // Plan label now comes from useEntitlements() (GET /subscriptions/limits) —
+      // the same source the Subscription page's "current plan" panel uses — so
+      // the sidebar badge and that panel can never disagree. The old code read
+      // `subscription_tier` off the *profile* object, which doesn't carry it, so
+      // the badge was always "Basic" regardless of the member's real tier; and
+      // it used an off-by-one tier→label map (gold→"Elite").
 
       // Membership number (issued once onboarding completes) — shown under
       // the member's name in the sidebar.
@@ -312,7 +303,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 )}
                 <div className="flex items-center gap-1 mt-0.5">
                   <Shield className="w-3 h-3" style={{ color: "#8DB870" }} />
-                  <span className="text-xs font-medium" style={{ color: "#8DB870" }}>{sidebarPlan} member</span>
+                  <span className="text-xs font-medium" style={{ color: "#8DB870" }}>{entitlements.planLabel} member</span>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: "rgba(255,255,255,0.25)" }} />
@@ -345,7 +336,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               style={{ background: "rgba(220,30,60,0.10)", border: "1px solid rgba(220,30,60,0.25)" }}
             >
               <StarIcon className="w-3 h-3" style={{ color: "#dc1e3c", fill: "#dc1e3c" }} />
-              <span className="text-xs font-bold" style={{ color: "#ffd4dc" }}>{sidebarPlan} Plan</span>
+              <span className="text-xs font-bold" style={{ color: "#ffd4dc" }}>{entitlements.planLabel} Plan</span>
               <span className="ml-auto text-[10px]" style={{ color: "rgba(255,255,255,0.35)" }}>Active</span>
             </div>
           </div>
