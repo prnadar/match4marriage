@@ -185,7 +185,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const sidebarWidth = effectiveCollapsed ? "72px" : "256px";
 
   return (
-    <div className="min-h-screen flex" style={{ background: "#fdfbf9" }}>
+    <div
+      className="min-h-screen flex"
+      style={{
+        background: "#fdfbf9",
+        // Fluid app scaling (see the inline script in app/layout.tsx <head>).
+        // The whole authenticated app is laid out at a fixed 1728px design
+        // width and scaled to fit any viewport via `zoom`, so a 1366px laptop
+        // and a 1728px Mac render the IDENTICAL layout — just scaled — instead
+        // of reflowing to fewer columns / a cramped photo rail. min-height is
+        // divided by the same factor so the scaled shell still fills the
+        // viewport (otherwise a short page would leave a strip at the bottom).
+        // Below 1024px --app-zoom is 1, so phones keep the native responsive
+        // layout. The cursor + auth/marketing pages are outside this div, so
+        // they keep real (unscaled) coordinates.
+        zoom: "var(--app-zoom, 1)",
+        minHeight: "calc(100vh / var(--app-zoom, 1))",
+      }}
+    >
       {/* ── Mobile backdrop ── (only renders <lg; click to dismiss) */}
       {mobileOpen && (
         <div

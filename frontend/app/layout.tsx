@@ -102,6 +102,27 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800&family=Montserrat:wght@300;400;500;600;700&family=Open+Sans:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Great+Vibes&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700;9..144,800&family=Cormorant:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Poppins:wght@300;400;500;600;700&family=Lato:wght@300;400;700&display=swap"
           rel="stylesheet"
         />
+        {/*
+          Fluid app scaling. Every desktop lays the authenticated app out at a
+          fixed 1680px "design width" and scales it to fit the actual viewport,
+          so a 1366px laptop and a 1728px Mac see the IDENTICAL layout — just
+          scaled — instead of reflowing to fewer columns / a cramped rail.
+
+          Mechanism: set a --app-zoom CSS var from innerWidth BEFORE first paint
+          (no flash), consumed only by the (app) shell via `zoom: var(--app-zoom)`.
+          Scoped to the app (not <html>/<body>) so the heart cursor and the
+          marketing/auth pages keep real coordinates. Disabled below 1024px so
+          phones/tablets keep their native responsive layout.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){function z(){try{var w=window.innerWidth,v=1;" +
+              "if(w>=1024){v=Math.max(0.5,Math.min(1.3,w/1728));}" +
+              "document.documentElement.style.setProperty('--app-zoom',String(v));}catch(e){}}" +
+              "z();window.addEventListener('resize',z,{passive:true});})();",
+          }}
+        />
       </head>
       <body>
         <Preloader />
