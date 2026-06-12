@@ -109,6 +109,26 @@ async def get_daily_matches(
             )
             matches = result2.scalars().all()
 
+    # Show only matches whose counterpart profile is admin-approved (mirrors the
+    # Browse gate). generate_daily_matches already scores only approved
+    # candidates, but this also hides any pre-existing / stale match — or a
+    # profile that was approved when matched and un-approved later.
+    if matches:
+        from app.models.user import UserProfile
+
+        def _counterpart(m):
+            return m.user_b_id if m.user_a_id == user_uuid else m.user_a_id
+
+        other_ids = {_counterpart(m) for m in matches}
+        approved_ids = set((await db.execute(
+            select(UserProfile.user_id).where(
+                UserProfile.user_id.in_(other_ids),
+                UserProfile.verification_status == "approved",
+                UserProfile.deleted_at.is_(None),
+            )
+        )).scalars().all())
+        matches = [m for m in matches if _counterpart(m) in approved_ids]
+
     feed = DailyMatchFeed(
         matches=[MatchRead.model_validate(m) for m in matches],
         refreshes_at=next_refresh,
