@@ -31,14 +31,24 @@ type Mode = "email" | "phone";
 // the upper third of these portrait shots). Cycled on a 10s rotation.
 const STORIES = [
   {
-    src: "/images/banner1.png",
-    focal: "center 38%",
+    src: "/images/wedding-1.jpg",
+    focal: "center 26%",
     line: "Two families, one celebration — a lifetime begins.",
   },
   {
-    src: "/images/story2.png",
-    focal: "center 28%",
+    src: "/images/wedding-2.jpg",
+    focal: "center 24%",
     line: "Sacred vows, witnessed by those who love you most.",
+  },
+  {
+    src: "/images/wedding-3.jpg",
+    focal: "center 30%",
+    line: "Where tradition meets the promise of forever.",
+  },
+  {
+    src: "/images/wedding-4.jpg",
+    focal: "center 24%",
+    line: "The first day of a journey you take together.",
   },
 ];
 

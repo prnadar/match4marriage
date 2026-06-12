@@ -83,8 +83,10 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 // every 6s with a 1.2s fade.
 
 const ONB_HERO_PHOTOS: ReadonlyArray<{ src: string; objectPosition: string }> = [
-  { src: "/images/banner1.png", objectPosition: "center 35%" },
-  { src: "/images/story2.png",  objectPosition: "center 28%" },
+  { src: "/images/wedding-1.jpg", objectPosition: "center 26%" },
+  { src: "/images/wedding-2.jpg", objectPosition: "center 24%" },
+  { src: "/images/wedding-3.jpg", objectPosition: "center 30%" },
+  { src: "/images/wedding-4.jpg", objectPosition: "center 24%" },
 ];
 
 function OnboardingHeroSlideshow() {
