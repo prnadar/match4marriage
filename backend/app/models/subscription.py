@@ -45,7 +45,7 @@ class Subscription(TenantModel):
     gateway_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     amount_paise: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="GBP")
 
     current_period_start: Mapped[datetime] = mapped_column(nullable=False)
     current_period_end: Mapped[datetime] = mapped_column(nullable=False)

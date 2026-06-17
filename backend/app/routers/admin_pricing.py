@@ -95,8 +95,8 @@ def _validate_payload(payload: dict, *, partial: bool = False) -> dict:
         out["price_paise"] = price
 
     if "currency" in payload:
-        cur = (payload.get("currency") or "INR").strip().upper()[:3]
-        out["currency"] = cur or "INR"
+        cur = (payload.get("currency") or "GBP").strip().upper()[:3]
+        out["currency"] = cur or "GBP"
 
     if "period" in payload or not partial:
         per = (payload.get("period") or "monthly").strip().lower()
@@ -162,7 +162,7 @@ async def admin_create_plan(
         name=data["name"],
         tier=data["tier"],
         price_paise=data["price_paise"],
-        currency=data.get("currency", "INR"),
+        currency=data.get("currency", "GBP"),
         period=data["period"],
         features=data.get("features", []),
         is_active=data.get("is_active", True),

@@ -39,7 +39,7 @@ class PricingPlan(TenantModel):
     # Optional "was" price. When set and greater than price_paise, the UI
     # shows it struck through next to the live price (promo / inaugural offer).
     original_price_paise: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="GBP")
 
     period: Mapped[PricingPeriod] = mapped_column(
         Enum(PricingPeriod), nullable=False, default=PricingPeriod.MONTHLY

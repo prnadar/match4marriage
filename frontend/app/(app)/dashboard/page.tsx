@@ -11,6 +11,7 @@ import {
   Check, Plus, Crown,
 } from "lucide-react";
 import { matchApi, profileApi, api, ApiError } from "@/lib/api";
+import { ApprovalGate } from "@/components/ApprovalGate";
 import { ProfileCard, type ProfileCardData } from "@/components/ui/profile-card";
 import { LuxeButton } from "@/components/ui/luxe-button";
 import { RevealText } from "@/components/ui/reveal-text";
@@ -82,6 +83,14 @@ interface CompletionInfo {
 }
 
 export default function DashboardPage() {
+  return (
+    <ApprovalGate feature="view your matches">
+      <DashboardContent />
+    </ApprovalGate>
+  );
+}
+
+function DashboardContent() {
   const [interests, setInterests] = useState<Record<string, "sent" | "passed">>({});
   const [matches, setMatches] = useState<ProfileCardData[]>([]);
   const [completion, setCompletion] = useState<CompletionInfo | null>(null);

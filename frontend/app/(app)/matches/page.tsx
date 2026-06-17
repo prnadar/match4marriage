@@ -10,6 +10,7 @@ import { ProfileCard, type ProfileCardData } from "@/components/ui/profile-card"
 import { LuxeButton } from "@/components/ui/luxe-button";
 import { RevealText } from "@/components/ui/reveal-text";
 import { useEntitlements } from "@/lib/useEntitlements";
+import { ApprovalGate } from "@/components/ApprovalGate";
 
 /* ── Types & helpers ────────────────────────────────────────────────── */
 
@@ -58,6 +59,14 @@ const COUNTRIES = ["All", "United Kingdom", "India", "United States", "Canada", 
 /* ── Page ───────────────────────────────────────────────────────────── */
 
 export default function MatchesPage() {
+  return (
+    <ApprovalGate feature="browse profiles">
+      <BrowseContent />
+    </ApprovalGate>
+  );
+}
+
+function BrowseContent() {
   const [search, setSearch] = useState("");
   const [religion, setReligion] = useState("All");
   const [ageLabel, setAgeLabel] = useState("All");

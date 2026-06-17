@@ -75,11 +75,12 @@ function cmToFeetInches(cm?: number | null): string | undefined {
   return `${feet}'${inches}"`;
 }
 
-function lakhsFromInr(inr?: number | null): string | undefined {
-  if (inr == null) return undefined;
-  if (inr >= 10_000_000) return `₹${(inr / 10_000_000).toFixed(1)} Cr`;
-  if (inr >= 100_000)    return `₹${(inr / 100_000).toFixed(1)} LPA`;
-  return `₹${inr.toLocaleString("en-IN")}`;
+function formatIncome(amount?: number | null): string | undefined {
+  // Income is captured and shown in GBP across the app (the profile editor uses
+  // £ ranges; admin shows £). The DB column name is legacy `annual_income_inr`.
+  if (amount == null) return undefined;
+  if (amount >= 1_000) return `£${(amount / 1_000).toFixed(amount % 1_000 === 0 ? 0 : 1)}k`;
+  return `£${amount.toLocaleString("en-GB")}`;
 }
 
 function titleCase(s?: string | null): string | undefined {
@@ -203,7 +204,7 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
   const fullName  = `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() || "Member";
   const age       = ageFromDob(profile.date_of_birth);
   const height    = cmToFeetInches(profile.height_cm);
-  const income    = lakhsFromInr(profile.annual_income_inr);
+  const income    = formatIncome(profile.annual_income_inr);
   const isVerified = profile.verification_status === "approved";
 
   // A photo is locked when the backend masks it from this viewer: either an

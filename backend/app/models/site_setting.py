@@ -24,7 +24,7 @@ class SiteSetting(TenantModel):
     support_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     support_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Asia/Kolkata")
-    default_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+    default_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="GBP")
     default_locale: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
     # Appearance — logo + brand colors used by the public theme.
     logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

@@ -7,10 +7,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Users, Flag, Settings, LogOut,
   ChevronRight, Menu, ShieldCheck, X, Wallet, CreditCard,
-  Tag, Inbox, Bell, Search, Sparkles,
+  Tag, Inbox, Search, Sparkles,
 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { ToastProvider } from "@/components/admin/Toast";
+import NotificationBell from "@/components/admin/NotificationBell";
 import { api, ApiError } from "@/lib/api";
 import { firebaseAuth, clearClientState } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
@@ -289,13 +290,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <kbd className="hidden lg:inline-flex items-center gap-0.5 ml-1 px-1.5 h-5 rounded bg-white border border-border text-[10px] font-medium text-muted2-foreground">⌘K</kbd>
             </button>
 
-            <button
-              className="w-8 h-8 rounded-md hover:bg-secondary grid place-items-center text-foreground/70 hover:text-foreground transition-colors relative"
-              title="Notifications"
-            >
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary" />
-            </button>
+            <NotificationBell />
 
             <Link
               href="/dashboard"

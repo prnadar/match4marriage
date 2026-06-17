@@ -138,7 +138,7 @@ const TIMEZONES = [
   "Europe/London", "Europe/Berlin", "America/New_York", "America/Los_Angeles",
   "Australia/Sydney", "UTC",
 ];
-const CURRENCIES = ["INR", "USD", "GBP", "EUR", "AED", "SGD", "AUD", "CAD"];
+const CURRENCIES = ["GBP", "USD", "EUR", "INR", "AED", "SGD", "AUD", "CAD"];
 const LOCALES = ["en", "hi", "ta", "ml", "te", "bn", "kn", "mr"];
 
 function SiteTab() {

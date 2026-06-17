@@ -9,6 +9,7 @@ import {
 import { Download } from "lucide-react";
 import { PageShell, GlassCard, StatCard, Button, fadeUp } from "@/components/admin/PageShell";
 import { adminApi, ApiError, downloadCsv } from "@/lib/api";
+import { formatGBP } from "@/lib/plans";
 
 interface PaymentRow {
   id: string;
@@ -44,15 +45,6 @@ const GW_FILTERS: Array<{ key: GwFilter; label: string }> = [
   { key: "stripe",   label: "Stripe" },
   { key: "upi",      label: "UPI" },
 ];
-
-function formatRupees(paise: number): string {
-  if (!Number.isFinite(paise) || paise === 0) return "₹0";
-  const rupees = paise / 100;
-  if (rupees >= 1_00_00_000) return `₹${(rupees / 1_00_00_000).toFixed(2)} Cr`;
-  if (rupees >= 1_00_000) return `₹${(rupees / 1_00_000).toFixed(2)} L`;
-  if (rupees >= 1_000) return `₹${(rupees / 1_000).toFixed(1)}k`;
-  return `₹${rupees.toFixed(0)}`;
-}
 
 function formatShort(iso: string | null): string {
   if (!iso) return "—";
@@ -148,9 +140,9 @@ export default function AdminPaymentsPage() {
         variants={fadeUp}
         style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14, marginBottom: 20 }}
       >
-        <StatCard label="Today" value={summary ? formatRupees(summary.today_paise) : "—"} tone="info" />
-        <StatCard label="This month" value={summary ? formatRupees(summary.this_month_paise) : "—"} tone="good" />
-        <StatCard label="Lifetime" value={summary ? formatRupees(summary.lifetime_paise) : "—"} hint="All non-cancelled subscriptions" />
+        <StatCard label="Today" value={summary ? formatGBP(summary.today_paise) : "—"} tone="info" />
+        <StatCard label="This month" value={summary ? formatGBP(summary.this_month_paise) : "—"} tone="good" />
+        <StatCard label="Lifetime" value={summary ? formatGBP(summary.lifetime_paise) : "—"} hint="All non-cancelled subscriptions" />
       </motion.div>
 
       {/* Search + filters */}
@@ -243,7 +235,7 @@ export default function AdminPaymentsPage() {
 
 function TxRow({ tx, index }: { tx: PaymentRow; index: number }) {
   const isCredit = tx.amount >= 0;
-  const amountStr = `${isCredit ? "+" : "−"}${formatRupees(Math.abs(tx.amount))}`;
+  const amountStr = `${isCredit ? "+" : "−"}${formatGBP(Math.abs(tx.amount))}`;
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}

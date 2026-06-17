@@ -6,6 +6,7 @@ import {
   Shield, Search, CheckCheck, AlertCircle, MessageCircle, Loader2,
 } from "lucide-react";
 import { chatApi } from "@/lib/api";
+import { ApprovalGate } from "@/components/ApprovalGate";
 import { Portrait } from "@/components/ui/portrait";
 import { useEntitlements } from "@/lib/useEntitlements";
 import { UpgradePanel } from "@/components/ui/upgrade-lock";
@@ -41,6 +42,14 @@ function relativeTime(iso?: string | null): string {
 }
 
 export default function MessagesPage() {
+  return (
+    <ApprovalGate feature="message members">
+      <MessagesContent />
+    </ApprovalGate>
+  );
+}
+
+function MessagesContent() {
   const { entitlements, isLoading: entLoading } = useEntitlements();
   const messagingLocked = !entLoading && !entitlements.canMessage;
 

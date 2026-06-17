@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Heart, MessageCircle, X, CheckCircle, Clock, Star, Filter, Loader2 } from "lucide-react";
 import { matchApi } from "@/lib/api";
+import { ApprovalGate } from "@/components/ApprovalGate";
 
 type Tab = "received" | "sent" | "mutual";
 
@@ -114,6 +115,14 @@ const statusBadge: Record<string, { label: string; bg: string; color: string }> 
 };
 
 export default function InterestsPage() {
+  return (
+    <ApprovalGate feature="view interests">
+      <InterestsContent />
+    </ApprovalGate>
+  );
+}
+
+function InterestsContent() {
   const [tab, setTab] = useState<Tab>("received");
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [accepted, setAccepted] = useState<Set<string>>(new Set());

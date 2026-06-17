@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { PageShell, GlassCard, Button, fadeUp } from "@/components/admin/PageShell";
 import { adminApi, ApiError } from "@/lib/api";
+import { formatGBP } from "@/lib/plans";
 
 type Tier = "silver" | "gold" | "platinum";
 type Period = "monthly" | "quarterly" | "yearly";
@@ -42,20 +43,12 @@ const PERIODS: Array<{ key: Period; label: string }> = [
   { key: "yearly",    label: "Yearly" },
 ];
 
-function formatRupees(paise: number): string {
-  if (!Number.isFinite(paise) || paise === 0) return "₹0";
-  const rupees = paise / 100;
-  if (rupees >= 1_00_000) return `₹${(rupees / 1_00_000).toFixed(2)} L`;
-  if (rupees >= 1_000) return `₹${rupees.toLocaleString("en-IN")}`;
-  return `₹${rupees.toFixed(0)}`;
-}
-
 const EMPTY_PLAN: Omit<Plan, "id" | "sort_order"> = {
   key: "",
   name: "",
   tier: "silver",
   price_paise: 0,
-  currency: "INR",
+  currency: "GBP",
   period: "monthly",
   features: [""],
   is_active: true,
@@ -215,7 +208,7 @@ export default function AdminPricingPage() {
                   <GripVertical style={{ width: 14, height: 14 }} />
                 </div>
 
-                {/* Tier chip — marketing label primary, raw slug muted beneath */}
+                {/* Tier chip — marketing label (Basic / Premium / Elite) */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginLeft: 22, marginBottom: 12 }}>
                   <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
                     <span style={{
@@ -224,13 +217,6 @@ export default function AdminPricingPage() {
                       background: `${meta.color}22`, color: meta.color,
                     }}>
                       {meta.label}
-                    </span>
-                    <span style={{
-                      fontSize: 9, fontWeight: 600, color: "#a99",
-                      letterSpacing: "0.06em", fontFamily: "monospace",
-                      paddingLeft: 4,
-                    }}>
-                      {meta.slug}
                     </span>
                   </div>
                   <span style={{
@@ -258,7 +244,7 @@ export default function AdminPricingPage() {
                     fontFamily: "var(--font-playfair, serif)",
                     fontSize: 28, fontWeight: 700, color: "#1a0a14",
                   }}>
-                    {formatRupees(p.price_paise)}
+                    {formatGBP(p.price_paise)}
                   </span>
                   <span style={{ fontSize: 12, color: "#888" }}>/ {p.period.replace(/ly$/, "")}</span>
                 </div>
@@ -337,7 +323,7 @@ function PlanEditor({
         name: plan.name,
         tier: plan.tier,
         price_paise: plan.price_paise,
-        currency: plan.currency || "INR",
+        currency: plan.currency || "GBP",
         period: plan.period,
         features: plan.features.length > 0 ? plan.features : [""],
         is_active: plan.is_active,
@@ -454,7 +440,7 @@ function PlanEditor({
                   style={inputStyle}
                 >
                   {TIERS.map((t) => (
-                    <option key={t.key} value={t.key}>{t.label} ({t.slug})</option>
+                    <option key={t.key} value={t.key}>{t.label}</option>
                   ))}
                 </select>
               </Field>

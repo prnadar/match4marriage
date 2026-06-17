@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { adminApi, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { planLabel, formatGBP } from "@/lib/plans";
 
 interface Stats {
   users: { total: number; active: number; suspended: number; new_today: number; new_7d: number; new_30d: number };
@@ -28,22 +29,14 @@ interface Stats {
 }
 
 // Brand-aware plan meta. Each tier gets a distinct hue from the existing
-// rose/gold palette so plan distribution reads at a glance.
+// rose/gold palette so plan distribution reads at a glance. Labels come from
+// the shared planLabel() map (Basic / Premium / Elite).
 const PLAN_META: Record<string, { label: string; color: string; bg: string }> = {
-  free:     { label: "Free",     color: "#A78A8F", bg: "bg-[#F4ECEC]" },
-  silver:   { label: "Silver",   color: "#7D8A93", bg: "bg-[#EDEFF1]" },
-  gold:     { label: "Gold",     color: "#C9954A", bg: "bg-gold-100" },
-  platinum: { label: "Platinum", color: "#7D0A35", bg: "bg-rose-100" },
+  free:     { label: planLabel("free"),     color: "#A78A8F", bg: "bg-[#F4ECEC]" },
+  silver:   { label: planLabel("silver"),   color: "#7D8A93", bg: "bg-[#EDEFF1]" },
+  gold:     { label: planLabel("gold"),     color: "#C9954A", bg: "bg-gold-100" },
+  platinum: { label: planLabel("platinum"), color: "#7D0A35", bg: "bg-rose-100" },
 };
-
-function formatRupees(paise: number): string {
-  if (!Number.isFinite(paise) || paise === 0) return "₹0";
-  const rupees = paise / 100;
-  if (rupees >= 1_00_00_000) return `₹${(rupees / 1_00_00_000).toFixed(2)} Cr`;
-  if (rupees >= 1_00_000) return `₹${(rupees / 1_00_000).toFixed(2)} L`;
-  if (rupees >= 1_000) return `₹${(rupees / 1_000).toFixed(1)}k`;
-  return `₹${rupees.toFixed(0)}`;
-}
 
 function shortMonth(yyyymm: string): string {
   const [, m] = yyyymm.split("-");
@@ -183,8 +176,8 @@ export default function AdminDashboardPage() {
       {/* Revenue strip */}
       {earnings && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-          <KpiCard label="Lifetime earnings" value={formatRupees(earnings.total_paise)} hint="All paid plans" icon={Wallet} tone="good" />
-          <KpiCard label="This month" value={formatRupees(earnings.this_month_paise)} hint={`${earningsSeries.length} months tracked`} icon={CalendarClock} tone="gold" />
+          <KpiCard label="Lifetime earnings" value={formatGBP(earnings.total_paise)} hint="All paid plans" icon={Wallet} tone="good" />
+          <KpiCard label="This month" value={formatGBP(earnings.this_month_paise)} hint={`${earningsSeries.length} months tracked`} icon={CalendarClock} tone="gold" />
           <KpiCard label="Renewals · 14d" value={renewals.length.toLocaleString()} hint={renewals.length > 0 ? "Send reminders" : "All clear"} icon={CreditCard} tone={renewals.length > 0 ? "warn" : "neutral"} />
         </div>
       )}
@@ -200,7 +193,7 @@ export default function AdminDashboardPage() {
                   <CardTitle>Monthly earnings</CardTitle>
                   <CardDescription>Last 12 months</CardDescription>
                 </div>
-                <Badge variant="gold">{formatRupees(earnings.this_month_paise)} MTD</Badge>
+                <Badge variant="gold">{formatGBP(earnings.this_month_paise)} MTD</Badge>
               </div>
             </CardHeader>
             <CardContent>
@@ -215,7 +208,7 @@ export default function AdminDashboardPage() {
                         <div className="relative w-full flex-1 flex flex-col justify-end">
                           {d.paise > 0 && (
                             <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-foreground/70 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-                              {formatRupees(d.paise)}
+                              {formatGBP(d.paise)}
                             </span>
                           )}
                           <motion.div
@@ -245,7 +238,7 @@ export default function AdminDashboardPage() {
               <EmptyState icon={Crown} text="No members yet" />
             ) : (
               planDist.map((r, i) => {
-                const meta = PLAN_META[r.plan] || { label: r.plan, color: "#A78A8F", bg: "bg-secondary" };
+                const meta = PLAN_META[r.plan] || { label: planLabel(r.plan), color: "#A78A8F", bg: "bg-secondary" };
                 const pct = totalPlan > 0 ? (r.count / totalPlan) * 100 : 0;
                 return (
                   <div key={r.plan}>
@@ -291,7 +284,7 @@ export default function AdminDashboardPage() {
             ) : (
               <ul className="-mx-2">
                 {renewals.map((r, i) => {
-                  const meta = PLAN_META[r.plan] || { label: r.plan, color: "#A78A8F", bg: "bg-secondary" };
+                  const meta = PLAN_META[r.plan] || { label: planLabel(r.plan), color: "#A78A8F", bg: "bg-secondary" };
                   return (
                     <motion.li
                       key={r.user_id + (r.current_period_end || "")}
@@ -310,7 +303,7 @@ export default function AdminDashboardPage() {
                           <div className="min-w-0">
                             <div className="text-[13px] font-medium text-foreground truncate">{r.name}</div>
                             <div className="text-[11px] text-muted2-foreground">
-                              {meta.label} · {formatRupees(r.amount_paise)}
+                              {meta.label} · {formatGBP(r.amount_paise)}
                             </div>
                           </div>
                         </div>

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { PageShell, GlassCard, fadeUp } from "@/components/admin/PageShell";
 import { adminApi, ApiError } from "@/lib/api";
+import { planLabel, formatGBP } from "@/lib/plans";
 
 interface SubscriptionRow {
   id: string;
@@ -43,15 +44,6 @@ const PLAN_META: Record<string, { color: string; gradient: string }> = {
   gold:     { color: "#c9954a", gradient: "linear-gradient(90deg, #f0c987, #c9954a)" },
   platinum: { color: "#5d4b8a", gradient: "linear-gradient(90deg, #9c87d3, #5d4b8a)" },
 };
-
-function formatRupees(paise: number): string {
-  if (!Number.isFinite(paise) || paise === 0) return "₹0";
-  const rupees = paise / 100;
-  if (rupees >= 1_00_00_000) return `₹${(rupees / 1_00_00_000).toFixed(2)} Cr`;
-  if (rupees >= 1_00_000) return `₹${(rupees / 1_00_000).toFixed(2)} L`;
-  if (rupees >= 1_000) return `₹${(rupees / 1_000).toFixed(1)}k`;
-  return `₹${rupees.toFixed(0)}`;
-}
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -295,7 +287,7 @@ function SubRow({ sub, index }: { sub: SubscriptionRow; index: number }) {
             fontSize: 11, fontWeight: 700, textTransform: "capitalize", letterSpacing: "0.04em",
             padding: "4px 10px", borderRadius: 999,
             background: `${meta.color}1f`, color: meta.color,
-          }}>{sub.plan}</span>
+          }}>{planLabel(sub.plan)}</span>
           {sub.gateway && (
             <span style={{ marginLeft: 6, fontSize: 10, color: "#aaa", textTransform: "uppercase" }}>· {sub.gateway}</span>
           )}
@@ -304,7 +296,7 @@ function SubRow({ sub, index }: { sub: SubscriptionRow; index: number }) {
         <div><StatusChip status={sub.status} /></div>
 
         <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: "#1a0a14" }}>
-          {formatRupees(sub.amount_paise)}
+          {formatGBP(sub.amount_paise)}
         </div>
 
         <div style={{ fontSize: 11, color: "#888" }}>
