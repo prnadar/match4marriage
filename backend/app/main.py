@@ -136,6 +136,26 @@ async def _ensure_verification_columns() -> None:
     async with engine.connect() as conn:
         await conn.execution_options(isolation_level="AUTOCOMMIT")
 
+        # Native enum types gain new labels over time (SQLAlchemy serializes by
+        # MEMBER NAME, so labels are uppercase). These run on EVERY cold boot —
+        # BEFORE the column fast-skip below — so a release that only adds an enum
+        # value (no new column) still applies. `ADD VALUE IF NOT EXISTS` is a
+        # cheap no-op once present and only takes a lightweight lock on the type,
+        # never an AccessExclusiveLock on a table. (Previously these lived after
+        # the fast-skip `return` and silently never ran once columns were current.)
+        enum_adds = [
+            "ALTER TYPE maritalstatus ADD VALUE IF NOT EXISTS 'awaiting_divorce'",
+            "ALTER TYPE paymentgatewayname ADD VALUE IF NOT EXISTS 'PAYPAL'",
+            "ALTER TYPE paymentgateway ADD VALUE IF NOT EXISTS 'PAYPAL'",
+            # Half-yearly (6-month) pricing period — Premium/Elite bill per 6 months.
+            "ALTER TYPE pricingperiod ADD VALUE IF NOT EXISTS 'HALF_YEARLY'",
+        ]
+        for s in enum_adds:
+            try:
+                await conn.execute(text(s))
+            except Exception as e:
+                logger.warning("enum_guard_failed", stmt=s, error=str(e))
+
         # Fast-skip: if every column these statements would add already exists,
         # the schema is current — do NO DDL, so steady-state cold boots take zero
         # AccessExclusiveLocks (which is what was deadlocking reads). Only the
@@ -171,33 +191,6 @@ async def _ensure_verification_columns() -> None:
                 await conn.execute(text(s))
             except Exception as e:
                 logger.warning("schema_guard_failed", stmt=s, error=str(e))
-
-        # ALTER TYPE ADD VALUE can't run in a transaction; AUTOCOMMIT is fine.
-        try:
-            await conn.execute(text("ALTER TYPE maritalstatus ADD VALUE IF NOT EXISTS 'awaiting_divorce'"))
-        except Exception as e:
-            logger.warning("marital_status_enum_update_failed", error=str(e))
-
-    # PayPal added as a payment gateway — extend the two native enum types.
-    # SQLAlchemy serializes the enum by MEMBER NAME, so the stored label is
-    # 'PAYPAL' (uppercase), matching the existing RAZORPAY/STRIPE/UPI labels.
-    try:
-        async with engine.connect() as conn:
-            await conn.execution_options(isolation_level="AUTOCOMMIT")
-            await conn.execute(text("ALTER TYPE paymentgatewayname ADD VALUE IF NOT EXISTS 'PAYPAL'"))
-            await conn.execute(text("ALTER TYPE paymentgateway ADD VALUE IF NOT EXISTS 'PAYPAL'"))
-    except Exception as e:
-        logger.warning("paypal_enum_update_failed", error=str(e))
-
-    # Half-yearly (6-month) pricing period — Premium/Elite are sold per 6 months.
-    # Same MEMBER-NAME serialization → stored label is 'HALF_YEARLY', alongside
-    # the existing MONTHLY/QUARTERLY/YEARLY labels.
-    try:
-        async with engine.connect() as conn:
-            await conn.execution_options(isolation_level="AUTOCOMMIT")
-            await conn.execute(text("ALTER TYPE pricingperiod ADD VALUE IF NOT EXISTS 'HALF_YEARLY'"))
-    except Exception as e:
-        logger.warning("pricing_period_enum_update_failed", error=str(e))
 
 
 async def _ensure_schema() -> None:
