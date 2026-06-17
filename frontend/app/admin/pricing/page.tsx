@@ -11,7 +11,7 @@ import { adminApi, ApiError } from "@/lib/api";
 import { formatGBP } from "@/lib/plans";
 
 type Tier = "silver" | "gold" | "platinum";
-type Period = "monthly" | "quarterly" | "yearly";
+type Period = "monthly" | "quarterly" | "half_yearly" | "yearly";
 
 interface Plan {
   id: string;
@@ -19,12 +19,24 @@ interface Plan {
   name: string;
   tier: Tier;
   price_paise: number;
+  // Optional "was" price. When set above price_paise it renders struck through
+  // (inaugural / promo offer, e.g. Basic free now, regularly £100).
+  original_price_paise: number | null;
   currency: string;
   period: Period;
   features: string[];
   is_active: boolean;
   sort_order: number;
 }
+
+// Human period label shown on cards. Quarterly/half-yearly read as months so a
+// "6 months" plan never displays as "/ year".
+const PERIOD_LABEL: Record<Period, string> = {
+  monthly: "month",
+  quarterly: "3 months",
+  half_yearly: "6 months",
+  yearly: "year",
+};
 
 // Tier metadata. `label` is the marketing name members see on /pricing and the
 // subscription cards — we surface it everywhere in this admin UI so operators
@@ -38,9 +50,10 @@ const TIERS: Array<{ key: Tier; label: string; slug: string; color: string }> = 
 ];
 
 const PERIODS: Array<{ key: Period; label: string }> = [
-  { key: "monthly",   label: "Monthly" },
-  { key: "quarterly", label: "Quarterly" },
-  { key: "yearly",    label: "Yearly" },
+  { key: "monthly",     label: "Monthly" },
+  { key: "quarterly",   label: "Every 3 months" },
+  { key: "half_yearly", label: "Every 6 months" },
+  { key: "yearly",      label: "Yearly" },
 ];
 
 const EMPTY_PLAN: Omit<Plan, "id" | "sort_order"> = {
@@ -48,6 +61,7 @@ const EMPTY_PLAN: Omit<Plan, "id" | "sort_order"> = {
   name: "",
   tier: "silver",
   price_paise: 0,
+  original_price_paise: null,
   currency: "GBP",
   period: "monthly",
   features: [""],
@@ -239,14 +253,19 @@ export default function AdminPricingPage() {
                 </div>
 
                 {/* Price */}
-                <div style={{ marginLeft: 22, display: "flex", alignItems: "baseline", gap: 4, marginBottom: 12 }}>
+                <div style={{ marginLeft: 22, display: "flex", alignItems: "baseline", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
                   <span style={{
                     fontFamily: "var(--font-playfair, serif)",
                     fontSize: 28, fontWeight: 700, color: "#1a0a14",
                   }}>
                     {formatGBP(p.price_paise)}
                   </span>
-                  <span style={{ fontSize: 12, color: "#888" }}>/ {p.period.replace(/ly$/, "")}</span>
+                  {p.original_price_paise != null && p.original_price_paise > p.price_paise && (
+                    <span style={{ fontSize: 14, color: "#aaa", textDecoration: "line-through" }}>
+                      {formatGBP(p.original_price_paise)}
+                    </span>
+                  )}
+                  <span style={{ fontSize: 12, color: "#888" }}>/ {PERIOD_LABEL[p.period] ?? p.period}</span>
                 </div>
 
                 {/* Features */}
@@ -323,6 +342,7 @@ function PlanEditor({
         name: plan.name,
         tier: plan.tier,
         price_paise: plan.price_paise,
+        original_price_paise: plan.original_price_paise ?? null,
         currency: plan.currency || "GBP",
         period: plan.period,
         features: plan.features.length > 0 ? plan.features : [""],
@@ -475,6 +495,30 @@ function PlanEditor({
                   style={{ ...inputStyle, fontFamily: "monospace" }}
                 />
               </Field>
+            </div>
+
+            <div className="m4m-pe-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <Field label={`Regular price (${draft.currency}) — optional`}>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="Leave blank for none"
+                  value={draft.original_price_paise != null ? draft.original_price_paise / 100 : ""}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") { setDraft({ ...draft, original_price_paise: null }); return; }
+                    const v = parseFloat(raw);
+                    setDraft({ ...draft, original_price_paise: Number.isFinite(v) ? Math.max(0, Math.round(v * 100)) : null });
+                  }}
+                  style={inputStyle}
+                />
+              </Field>
+              <div style={{ display: "flex", alignItems: "flex-end" }}>
+                <p style={{ fontSize: 11, color: "#999", lineHeight: 1.4, margin: "0 0 10px" }}>
+                  Shown struck through next to the live price — e.g. a free
+                  inaugural offer that's regularly £100.
+                </p>
+              </div>
             </div>
 
             <Field label="Features">

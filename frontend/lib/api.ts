@@ -349,14 +349,14 @@ export const adminApi = {
   listPricingPlans: () => api.get("/api/v1/admin/pricing-plans"),
   createPricingPlan: (body: {
     key: string; name: string; tier: "silver" | "gold" | "platinum";
-    price_paise: number; currency?: string;
-    period: "monthly" | "quarterly" | "yearly";
+    price_paise: number; original_price_paise?: number | null; currency?: string;
+    period: "monthly" | "quarterly" | "half_yearly" | "yearly";
     features?: string[]; is_active?: boolean; sort_order?: number;
   }) => api.post("/api/v1/admin/pricing-plans", body),
   updatePricingPlan: (planId: string, body: Partial<{
     key: string; name: string; tier: "silver" | "gold" | "platinum";
-    price_paise: number; currency: string;
-    period: "monthly" | "quarterly" | "yearly";
+    price_paise: number; original_price_paise: number | null; currency: string;
+    period: "monthly" | "quarterly" | "half_yearly" | "yearly";
     features: string[]; is_active: boolean; sort_order: number;
   }>) => api.put(`/api/v1/admin/pricing-plans/${planId}`, body),
   deletePricingPlan: (planId: string) =>

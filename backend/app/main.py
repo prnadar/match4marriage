@@ -189,6 +189,16 @@ async def _ensure_verification_columns() -> None:
     except Exception as e:
         logger.warning("paypal_enum_update_failed", error=str(e))
 
+    # Half-yearly (6-month) pricing period — Premium/Elite are sold per 6 months.
+    # Same MEMBER-NAME serialization → stored label is 'HALF_YEARLY', alongside
+    # the existing MONTHLY/QUARTERLY/YEARLY labels.
+    try:
+        async with engine.connect() as conn:
+            await conn.execution_options(isolation_level="AUTOCOMMIT")
+            await conn.execute(text("ALTER TYPE pricingperiod ADD VALUE IF NOT EXISTS 'HALF_YEARLY'"))
+    except Exception as e:
+        logger.warning("pricing_period_enum_update_failed", error=str(e))
+
 
 async def _ensure_schema() -> None:
     """Create any missing tables/columns from the ORM models."""

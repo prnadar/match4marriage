@@ -94,6 +94,20 @@ def _validate_payload(payload: dict, *, partial: bool = False) -> dict:
             raise HTTPException(status_code=400, detail="price_paise must be >= 0")
         out["price_paise"] = price
 
+    # Optional "was" price (inaugural / promo strike-through). null/"" clears it.
+    if "original_price_paise" in payload:
+        raw = payload.get("original_price_paise")
+        if raw is None or raw == "":
+            out["original_price_paise"] = None
+        else:
+            try:
+                op = int(raw)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="original_price_paise must be an integer or null")
+            if op < 0:
+                raise HTTPException(status_code=400, detail="original_price_paise must be >= 0")
+            out["original_price_paise"] = op
+
     if "currency" in payload:
         cur = (payload.get("currency") or "GBP").strip().upper()[:3]
         out["currency"] = cur or "GBP"
@@ -162,6 +176,7 @@ async def admin_create_plan(
         name=data["name"],
         tier=data["tier"],
         price_paise=data["price_paise"],
+        original_price_paise=data.get("original_price_paise"),
         currency=data.get("currency", "GBP"),
         period=data["period"],
         features=data.get("features", []),

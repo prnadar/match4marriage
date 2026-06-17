@@ -16,7 +16,8 @@ from app.models.base import TenantModel
 
 class PricingPeriod(str, enum.Enum):
     MONTHLY = "monthly"
-    QUARTERLY = "quarterly"
+    QUARTERLY = "quarterly"      # 3 months
+    HALF_YEARLY = "half_yearly"  # 6 months
     YEARLY = "yearly"
 
 
