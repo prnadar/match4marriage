@@ -18,6 +18,7 @@ from app.models.notification import Notification
 from app.models.report import Report, ReportCategory, ReportStatus
 from app.models.success_story import SuccessStory
 from app.models.admin_audit_log import AdminAuditLog
+from app.models.consent import UserConsent
 from app.models.admin_crm import AdminCommunication, AdminBroadcast, AdminUserNote, UserCrmProfile
 
 __all__ = [
@@ -64,4 +65,5 @@ __all__ = [
     "AdminUserNote",
     "UserCrmProfile",
     "AdminAuditLog",
+    "UserConsent",
 ]

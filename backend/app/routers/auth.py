@@ -1188,6 +1188,7 @@ async def update_account_settings(
     await _ensure_auth_user(db, current_user, tenant_slug)
     stored = await _read_account_settings(db, uid)
     prefs = _notification_prefs(stored)
+    was_marketing = prefs.get("email_marketing")
     if payload.notifications is not None:
         for k, v in payload.notifications.model_dump(exclude_none=True).items():
             if k in _NOTIFICATION_DEFAULTS:
@@ -1195,6 +1196,23 @@ async def update_account_settings(
     stored["notifications"] = prefs
     stored["notifications_updated_at"] = datetime.now(timezone.utc).isoformat()
     await _write_account_settings(db, uid, stored)
+
+    # PECR: keep a timestamped record whenever marketing consent changes.
+    if prefs.get("email_marketing") != was_marketing:
+        try:
+            from app.routers.consents import record_consents
+            user_row = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
+            if user_row is not None:
+                async with db.begin_nested():
+                    await record_consents(
+                        db, user_id=uid, tenant_id=user_row.tenant_id,
+                        decisions={"marketing_email": bool(prefs.get("email_marketing"))},
+                        source="settings",
+                        ip=(request.headers.get("x-forwarded-for") or "").split(",")[0].strip()[:64] or None,
+                        user_agent=request.headers.get("user-agent"),
+                    )
+        except Exception as exc:  # never fail a preference save over the log
+            logger.warning("marketing_consent_log_failed", error=str(exc))
     return APIResponse(success=True, data={"notifications": prefs}, message="Preferences saved.")
 
 

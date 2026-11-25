@@ -15,6 +15,7 @@ import PublicHeader from "@/components/PublicHeader";
 import { useProfilePhoto } from "@/lib/profilePhoto";
 import { useEntitlements } from "@/lib/useEntitlements";
 import * as Sentry from "@sentry/nextjs";
+import ConsentPrompt from "@/components/ConsentPrompt";
 
 // Side-nav entries shown to authenticated members. Notification badges are
 // omitted until they're wired to real counts — fake numbers erode trust.
@@ -536,6 +537,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div style={{ flex: 1 }}>
           {children}
         </div>
+
+        {/* ── UK GDPR consent confirmation (non-blocking) ── */}
+        <ConsentPrompt />
 
         {/* ── Footer ── */}
         <footer

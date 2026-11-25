@@ -215,6 +215,17 @@ async def _ensure_crm_tables() -> None:
         await conn.run_sync(lambda c: Base.metadata.create_all(c, tables=tables, checkfirst=True))
 
 
+async def _ensure_consent_table() -> None:
+    """Idempotent: create the member consent log (new table only — no ALTER on
+    existing tables, so nothing locks `users`)."""
+    from app.models.base import Base
+    from app.models.consent import UserConsent
+    async with engine.begin() as conn:
+        await conn.run_sync(
+            lambda c: Base.metadata.create_all(c, tables=[UserConsent.__table__], checkfirst=True)
+        )
+
+
 # Module-level guard so we only run the boot DDL phase once per process. On
 # Vercel's serverless runtime each lambda instance gets a fresh module load,
 # so this still runs on every *cold* start — but never twice within the same
@@ -291,6 +302,10 @@ async def _run_boot_ddl_serialized() -> None:
                 await _ensure_crm_tables()
             except Exception as e:
                 logger.warning("crm_tables_error", error=str(e))
+            try:
+                await _ensure_consent_table()
+            except Exception as e:
+                logger.warning("consent_table_error", error=str(e))
             try:
                 await _ensure_verification_columns()
             except Exception as e:
@@ -437,6 +452,8 @@ app.include_router(subscriptions.router, prefix=PREFIX)
 app.include_router(health.router, prefix=PREFIX)
 from app.routers import admin_crm  # noqa: E402 — client CRM: contact log, messaging, notes/tags
 app.include_router(admin_crm.router, prefix=PREFIX)
+from app.routers import consents  # noqa: E402 — member consent records (UK GDPR)
+app.include_router(consents.router, prefix=PREFIX)
 
 
 # ── Health + meta ─────────────────────────────────────────────────────────────

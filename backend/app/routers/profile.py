@@ -699,6 +699,26 @@ async def patch_my_profile(
             )
 
     update_data = payload.model_dump(exclude_unset=True)
+
+    # UK matrimony: members must be 18+. Enforced server-side as well as in the
+    # onboarding UI. Only checked when the DOB is being SET or CHANGED, so an
+    # existing member re-saving their profile with an unchanged DOB is never
+    # blocked by this rule.
+    new_dob = update_data.get("date_of_birth")
+    if new_dob is not None and new_dob != profile.date_of_birth:
+        today = date.today()
+        age = today.year - new_dob.year - ((today.month, today.day) < (new_dob.month, new_dob.day))
+        if age < 18:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="You must be at least 18 years old to use Match4Marriage.",
+            )
+        if age > 100:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Please check your date of birth.",
+            )
+
     _apply_profile_patch(profile, update_data)
     profile.completeness_score = compute_profile_completeness(profile)
     try:

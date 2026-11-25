@@ -323,6 +323,23 @@ async def _deliver(
             body_text = crm_svc.merge_fields(msg.body, ctx).strip()
             body_html = crm_svc.text_to_html(body_text)
 
+        # PECR: every promotional email must tell the recipient why they got it
+        # and give a simple way to opt out.
+        email_text, email_html = body_text, body_html
+        if msg.is_marketing:
+            prefs_url = f"{settings.FRONTEND_URL.rstrip('/')}/settings?section=notifications"
+            email_text = (
+                f"{body_text}\n\n—\nYou're receiving this because you opted in to news & offers "
+                f"from Match4Marriage. To stop these emails, turn off \"News & offers\" here: {prefs_url}"
+            )
+            email_html = (
+                f"{body_html}"
+                '<p style="margin-top:24px;font-size:12px;color:#78686e;line-height:1.5">'
+                "You're receiving this because you opted in to news &amp; offers from Match4Marriage. "
+                f'<a href="{prefs_url}" style="color:#dc1e3c">Unsubscribe or change your email preferences</a>.'
+                "</p>"
+            )
+
         if "email" in channels:
             if not u.email:
                 _comm(u, CommunicationChannel.EMAIL, subject, body_text, None,
@@ -338,8 +355,8 @@ async def _deliver(
                 email_jobs.append((c, {
                     "to": u.email,
                     "subject": subject,
-                    "html": render_admin_message_html(subject, body_html),
-                    "text": body_text,
+                    "html": render_admin_message_html(subject, email_html),
+                    "text": email_text,
                     "reply_to": str(msg.reply_to) if msg.reply_to else None,
                 }))
 

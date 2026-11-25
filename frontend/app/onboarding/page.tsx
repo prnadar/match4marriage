@@ -217,7 +217,7 @@ export default function OnboardingPage() {
   const [step1Mode, setStep1Mode] = useState<"details" | "verify-email">("details");
   const [emailVerifyLoading, setEmailVerifyLoading] = useState(false);
 
-  const handleCreateAccount = useCallback(async (password: string) => {
+  const handleCreateAccount = useCallback(async (password: string, consents: SignupConsents) => {
     setLoading(true);
     setError("");
     try {
@@ -258,6 +258,15 @@ export default function OnboardingPage() {
         // Non-fatal: surface a soft warning but still let them attempt verify
         // (they can always tap "Resend" on the next screen).
         console.warn("Failed to send verification email:", e);
+      }
+
+      // UK GDPR: record the consents given on the form (timestamped, with the
+      // policy version, server-side). If this fails, stash them — the app
+      // shell retries silently on the member's first visit.
+      try {
+        await api.post("/api/v1/consents", { consents, source: "signup" });
+      } catch {
+        try { localStorage.setItem("m4m_pending_consents", JSON.stringify(consents)); } catch { /* non-fatal */ }
       }
       setStep1Mode("verify-email");
       return true;
@@ -580,7 +589,7 @@ function Step1CreateAccount({
   fullName: string; setFullName: (v: string) => void;
   email: string; setEmail: (v: string) => void;
   loading: boolean;
-  onSubmit: (password: string) => Promise<boolean>;
+  onSubmit: (password: string, consents: SignupConsents) => Promise<boolean>;
   mode: "details" | "verify-email";
   onEditDetails: () => void;
   onVerifyOtp: (code: string) => Promise<boolean>;
@@ -589,11 +598,15 @@ function Step1CreateAccount({
 }) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreeSensitive, setAgreeSensitive] = useState(false);
+  const [agreeMarketing, setAgreeMarketing] = useState(false);
 
   const passwordStrength = useMemo(() => scorePassword(password), [password]);
   const canSubmit = fullName.trim().length >= 2
     && /^[^@]+@[^@]+\.[^@]+$/.test(email.trim())
     && password.length >= 8
+    && agreeTerms && agreeSensitive
     && !loading;
 
   if (mode === "verify-email") {
@@ -622,7 +635,11 @@ function Step1CreateAccount({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (canSubmit) onSubmit(password);
+          if (canSubmit) onSubmit(password, {
+            terms_privacy: true,
+            sensitive_data: true,
+            marketing_email: agreeMarketing,
+          });
         }}
         style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 28 }}
       >
@@ -673,18 +690,25 @@ function Step1CreateAccount({
 
         {password.length > 0 && <PasswordStrength score={passwordStrength} />}
 
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+          <ConsentCheck checked={agreeTerms} onChange={setAgreeTerms} required>
+            I am 18 or over and I agree to the{" "}
+            <Link href="/terms" target="_blank" style={linkStyle}>Terms</Link> and{" "}
+            <Link href="/privacy" target="_blank" style={linkStyle}>Privacy Policy</Link>.
+          </ConsentCheck>
+          <ConsentCheck checked={agreeSensitive} onChange={setAgreeSensitive} required>
+            I explicitly consent to Match4Marriage using my religion, community and
+            horoscope details to find and show me matches. I can withdraw this at any time.
+          </ConsentCheck>
+          <ConsentCheck checked={agreeMarketing} onChange={setAgreeMarketing}>
+            Send me news and offers by email (optional).
+          </ConsentCheck>
+        </div>
+
         <SubmitBtn disabled={!canSubmit} loading={loading}>
           Continue to verify email
         </SubmitBtn>
       </form>
-
-      <p style={{
-        fontSize: 11.5, color: "#999", marginTop: 20, textAlign: "center", lineHeight: 1.6,
-      }}>
-        By continuing you agree to our{" "}
-        <Link href="/terms" style={linkStyle}>Terms</Link> and{" "}
-        <Link href="/privacy" style={linkStyle}>Privacy Policy</Link>.
-      </p>
     </motion.div>
   );
 }
@@ -1534,6 +1558,32 @@ const backBtnStyle: React.CSSProperties = {
   cursor: "pointer", fontFamily: "inherit",
   display: "inline-flex", alignItems: "center", gap: 6,
 };
+
+type SignupConsents = { terms_privacy: boolean; sensitive_data: boolean; marketing_email: boolean };
+
+function ConsentCheck({ checked, onChange, required, children }: {
+  checked: boolean; onChange: (v: boolean) => void; required?: boolean; children: React.ReactNode;
+}) {
+  return (
+    <label style={{
+      display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer",
+      fontSize: 12.5, lineHeight: 1.55, color: "#78686e", textAlign: "left",
+    }}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        required={required}
+        aria-required={required}
+        style={{ marginTop: 3, width: 16, height: 16, flexShrink: 0, accentColor: "#dc1e3c", cursor: "pointer" }}
+      />
+      <span>
+        {children}
+        {required && <span aria-hidden style={{ color: "#dc1e3c" }}> *</span>}
+      </span>
+    </label>
+  );
+}
 
 const linkStyle: React.CSSProperties = {
   color: "#dc1e3c", textDecoration: "none", fontWeight: 600,

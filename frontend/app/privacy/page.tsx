@@ -25,8 +25,9 @@ const sections = [
     title: "2. Personal Information Collection",
     content: [
       "Match4Marriage collects information from its Users at the time of registration as well as at certain specific instances of usage of our services, wherein they are requested to provide their personal information including contact information.",
-      "These forms usually seek information such as name, gender, email address, date of birth, educational qualification, employment details, photos, marital status, and your interests, contact modes and specifics.",
-      "As a User using the free or paid services of Match4Marriage, it is deemed that the User has granted Match4Marriage the right to use, without any restriction, the posted information and publish the desired details throughout its platform, including all divisions, sister concerns, ventures, directories, listing, website pages, and associated media.",
+      "These forms usually seek information such as name, gender, email address, phone number, date of birth, educational qualification, employment details, photos, marital status, partner preferences, and your interests, contact modes and specifics. To verify your identity we may also ask for an identity document (for example a passport or UK driving licence).",
+      "Some of the information you can provide is special category data under UK GDPR, such as your religion, community/caste and horoscope details. We only process this with your explicit consent, which we ask for when you register and record with the date and time. You can withdraw it at any time; we will then stop using it for matchmaking.",
+      "Your profile details and photos are shown only to other registered members of Match4Marriage to help you find a match. We do not publish your profile outside the Match4Marriage platform.",
       "The personal information requested by Match4Marriage is for usage at Match4Marriage to provide the necessary chosen services and enhancement of services by itself or by any authorised third party of Match4Marriage. If you choose to share it with some User, Visitor, or Third Party explicitly, then Match4Marriage has no role in data protection in such cases. Further, if you think that the information we hold about you is inaccurate or we are not entitled or require the same, you can contact us at enquiry@match4marriage.com.",
     ],
   },
@@ -36,6 +37,8 @@ const sections = [
     content: [
       "Match4Marriage uses your personal information to provide, personalise, and improve our matrimonial matching services, to communicate with you about your account and our services, and to send you updates, newsletters, and relevant marketing communications (with your consent).",
       "We may use aggregated, anonymised data for research and analytics purposes to improve the platform and user experience. This data will not identify you personally.",
+      "We rely on: performing our contract with you (running your account and membership); your consent (special category data and marketing emails); our legitimate interests (keeping the platform safe, preventing fraud and improving our services); and legal obligations (for example keeping payment records).",
+      "Our matching feature automatically ranks suggested profiles using your profile and partner preferences. It only suggests profiles; it does not make decisions that have legal or similarly significant effects on you.",
       "We will never sell your personal information to third parties for their own marketing purposes.",
     ],
   },
@@ -43,9 +46,9 @@ const sections = [
     id: "cookies",
     title: "4. Cookies & Tracking Technologies",
     content: [
-      "Match4Marriage uses cookies and similar tracking technologies to enhance your experience on our platform. Cookies are small text files stored on your device that help us remember your preferences and understand how you use our site.",
-      "We use essential cookies (required for the platform to function), analytical cookies (to understand usage patterns), and preference cookies (to remember your settings).",
-      "You can control and manage cookies through your browser settings. Please note that disabling certain cookies may affect the functionality of our service.",
+      "Match4Marriage only uses strictly necessary cookies and similar browser storage — for example to keep you signed in, to keep your session secure and to remember choices you make on the site. These do not require consent.",
+      "We do not use advertising or analytics cookies. If an error occurs, our error-monitoring tool may record a short, privacy-masked replay of the session (all text and images are hidden) so we can fix the problem.",
+      "If we ever introduce non-essential cookies, we will ask for your consent first. You can also control cookies through your browser settings, although blocking essential cookies will stop you being able to sign in.",
     ],
   },
   {
@@ -54,7 +57,8 @@ const sections = [
     content: [
       "Match4Marriage does not share your personal information with third parties except in the following circumstances: (a) with your explicit consent; (b) with trusted service providers who assist us in operating the platform, subject to strict confidentiality agreements; (c) where required by law, regulation, or court order; or (d) to protect the rights, property, or safety of Match4Marriage, our users, or the public.",
       "When you express interest in another member or respond to an interest, limited profile information is shared between the two parties to facilitate the introduction. Full contact details are only shared upon mutual consent.",
-      "We do not transfer your personal data outside the United Kingdom or European Economic Area without ensuring adequate protections are in place, in accordance with UK GDPR requirements.",
+      "The service providers we use to run the platform include: Google Firebase (sign-in), Neon (database), Vercel (hosting), Cloudinary (photo and document storage), Resend (email delivery), PayPal (payments) and Sentry (error monitoring). They process data only on our instructions.",
+      "Some of these providers are based in, or process data in, the United States. Where personal data is transferred outside the UK, we rely on recognised safeguards such as the UK International Data Transfer Addendum, the UK Extension to the EU–US Data Privacy Framework or other measures permitted under UK GDPR.",
     ],
   },
   {
@@ -70,7 +74,7 @@ const sections = [
     id: "retention",
     title: "7. Data Retention",
     content: [
-      "We retain your personal information for as long as your account is active or as needed to provide you with our services. You may request deletion of your account and personal data at any time by contacting us at enquiry@match4marriage.com.",
+      "We retain your personal information for as long as your account is active or as needed to provide you with our services. You can delete your account at any time in Settings → Data & Privacy, or by contacting us at enquiry@match4marriage.com. When you delete your account your profile is removed from the platform straight away and your sign-in is deleted.",
       "Even after deletion, we may retain certain information as required by law or for legitimate business purposes such as fraud prevention, resolving disputes, and enforcing our agreements.",
       "Anonymised and aggregated data, which cannot identify you personally, may be retained indefinitely for analytical purposes.",
     ],
@@ -80,7 +84,8 @@ const sections = [
     title: "8. Your Rights Under UK GDPR",
     content: [
       "As a data subject under UK GDPR, you have the following rights: (a) the right to access the personal data we hold about you; (b) the right to rectify inaccurate or incomplete data; (c) the right to erasure ('right to be forgotten'); (d) the right to restrict processing; (e) the right to data portability; (f) the right to object to processing; and (g) rights in relation to automated decision making and profiling.",
-      "To exercise any of these rights, please contact us at enquiry@match4marriage.com. We will respond to your request within 30 days as required by law.",
+      "You can download a copy of your data, update your details, change your email preferences and delete your account yourself in Settings. You can withdraw any consent you have given at any time; this does not affect processing carried out before you withdrew it.",
+      "To exercise any of these rights, or if you need help, please contact us at enquiry@match4marriage.com. We will respond to your request within one month as required by law.",
       "You also have the right to lodge a complaint with the Information Commissioner's Office (ICO) at ico.org.uk if you believe your data protection rights have been violated.",
     ],
   },
@@ -135,7 +140,7 @@ export default function PrivacyPage() {
             Privacy Policy
           </h1>
           <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", margin: 0 }}>
-            Last updated: 23 March 2026 &nbsp;·&nbsp; Match4Marriage Limited (Co. No. 15272378)
+            Last updated: 25 November 2026 &nbsp;·&nbsp; Match4Marriage Limited (Co. No. 15272378)
           </p>
         </div>
       </div>
