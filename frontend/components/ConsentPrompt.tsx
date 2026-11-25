@@ -8,10 +8,16 @@
  * member browsing, messaging or paying. "Later" hides it for this session.
  * Any error (API down, table not created yet) → renders nothing.
  *
+ * Presentation: a dark card in the bottom-right corner from 640px up. On
+ * phones it first appears as a small pill beside the Menu button (so it never
+ * sits on top of a page's primary action) and opens into a bottom sheet with
+ * exactly the same choices when tapped.
+ *
  * Also flushes consents stashed by onboarding if the signup-time POST failed.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -25,6 +31,10 @@ export default function ConsentPrompt() {
   const [marketing, setMarketing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Phones start collapsed to a pill; everything else shows the card straight away.
+  const [expanded, setExpanded] = useState(true);
+  const openedByTap = useRef(false);
+  const reduce = useReducedMotion();
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +59,9 @@ export default function ConsentPrompt() {
         try { snoozed = sessionStorage.getItem(SNOOZE_KEY) === "1"; } catch { /* ignore */ }
         if (!cancelled && !snoozed) {
           setMarketing(!!data?.consents?.marketing_email?.granted);
+          let phone = false;
+          try { phone = window.matchMedia("(max-width: 639px)").matches; } catch { /* ignore */ }
+          setExpanded(!phone);
           setOpen(true);
         }
       } catch {
@@ -57,8 +70,6 @@ export default function ConsentPrompt() {
     })();
     return () => { cancelled = true; };
   }, []);
-
-  if (!open) return null;
 
   const snooze = () => {
     try { sessionStorage.setItem(SNOOZE_KEY, "1"); } catch { /* ignore */ }
@@ -81,93 +92,116 @@ export default function ConsentPrompt() {
     }
   };
 
+  const blocked = !terms || !sensitive || saving;
+  const enter = reduce ? { opacity: 0 } : { opacity: 0, y: 18 };
+  const rest = { opacity: 1, y: 0 };
+  const leave = reduce ? { opacity: 0 } : { opacity: 0, y: 14 };
+
   return (
-    <div
-      role="dialog"
-      aria-modal="false"
-      aria-labelledby="consent-title"
-      style={{
-        position: "fixed", right: 16, bottom: 16, zIndex: 60,
-        width: "min(420px, calc(100vw - 32px))",
-        background: "#fff", borderRadius: 16,
-        border: "1px solid rgba(26,10,20,0.08)",
-        boxShadow: "0 24px 60px -20px rgba(26,10,20,0.35), 0 2px 8px rgba(26,10,20,0.06)",
-        padding: "18px 18px 16px",
-      }}
-    >
-      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
-        <span style={{
-          width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
-          background: "rgba(220,30,60,0.08)", display: "inline-flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <ShieldCheck style={{ width: 16, height: 16, color: "#dc1e3c" }} strokeWidth={2} />
-        </span>
-        <h2 id="consent-title" style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#1a0a14" }}>
-          Your privacy choices
-        </h2>
-      </div>
-      <p style={{ margin: "0 0 12px", fontSize: 13, lineHeight: 1.55, color: "#78686e" }}>
-        We&apos;ve updated how we record consent under UK data protection law. Please confirm to keep things up to date.
-      </p>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-        <Check checked={terms} onChange={setTerms}>
-          I agree to the{" "}
-          <Link href="/terms" target="_blank" style={link}>Terms</Link> and{" "}
-          <Link href="/privacy" target="_blank" style={link}>Privacy Policy</Link>.
-        </Check>
-        <Check checked={sensitive} onChange={setSensitive}>
-          I explicitly consent to Match4Marriage using my religion, community and horoscope
-          details to find and show me matches.
-        </Check>
-        <Check checked={marketing} onChange={setMarketing}>
-          Send me news and offers by email (optional).
-        </Check>
-      </div>
-
-      {error && <p role="alert" style={{ margin: "10px 0 0", fontSize: 12.5, color: "#a0153c" }}>{error}</p>}
-
-      <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
-        <button
+    <AnimatePresence mode="wait" initial>
+      {open && !expanded && (
+        <motion.button
+          key="consent-pill"
           type="button"
-          onClick={snooze}
-          style={{
-            background: "none", border: "1px solid rgba(26,10,20,0.12)", borderRadius: 999,
-            padding: "8px 14px", fontSize: 13, fontWeight: 600, color: "#78686e", cursor: "pointer",
-          }}
+          aria-label="Review your privacy choices"
+          aria-expanded={false}
+          onClick={() => { openedByTap.current = true; setExpanded(true); }}
+          initial={enter}
+          animate={rest}
+          exit={leave}
+          transition={{ duration: 0.3, ease: EASE_OUT, delay: 0.3 }}
+          className={`fixed right-4 z-[60] inline-flex h-12 max-w-[calc(100vw-9.5rem)] items-center gap-2 rounded-full border border-white/15 bg-[#1a0a14] pl-3.5 pr-4 text-[13px] font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.45)] ${FOCUS_RING}`}
+          style={{ bottom: "calc(1.25rem + env(safe-area-inset-bottom, 0px))" }}
         >
-          Later
-        </button>
-        <button
-          type="button"
-          onClick={save}
-          disabled={!terms || !sensitive || saving}
-          style={{
-            background: "#dc1e3c", border: "none", borderRadius: 999,
-            padding: "8px 16px", fontSize: 13, fontWeight: 700, color: "#fff",
-            cursor: !terms || !sensitive || saving ? "not-allowed" : "pointer",
-            opacity: !terms || !sensitive || saving ? 0.5 : 1,
+          <ShieldCheck aria-hidden className="h-4 w-4 flex-shrink-0 text-[#f3c9a8]" strokeWidth={1.75} />
+          <span className="truncate">Privacy choices</span>
+        </motion.button>
+      )}
+
+      {open && expanded && (
+        <motion.div
+          key="consent-panel"
+          // When the member opens the sheet from the pill, move focus into it (once).
+          ref={(el) => {
+            if (el && openedByTap.current) { openedByTap.current = false; el.focus(); }
           }}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby="consent-title"
+          initial={enter}
+          animate={rest}
+          exit={leave}
+          transition={{ duration: 0.4, ease: EASE_OUT }}
+          className="fixed inset-x-0 bottom-0 z-[60] max-h-[85vh] overflow-y-auto rounded-t-[20px] border border-b-0 border-white/[0.14] bg-[#1a0a14] px-5 pt-5 text-[#e7dde0] shadow-[0_-12px_40px_rgba(0,0,0,0.5)] outline-none sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-[min(420px,calc(100vw-32px))] sm:rounded-[16px] sm:border-b sm:px-[22px] sm:pt-[20px] sm:shadow-[0_18px_44px_rgba(0,0,0,0.5)]"
+          style={{ paddingBottom: "calc(18px + env(safe-area-inset-bottom, 0px))", colorScheme: "dark" }}
         >
-          {saving ? "Saving…" : "Confirm"}
-        </button>
-      </div>
-    </div>
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck aria-hidden className="h-[18px] w-[18px] flex-shrink-0 text-[#f3c9a8]" strokeWidth={1.75} />
+            <h2 id="consent-title" className="m-0 font-display text-[18px] font-semibold leading-tight text-white">
+              Your privacy choices
+            </h2>
+          </div>
+          <p className="mb-0 mt-2.5 text-[13px] leading-[1.6] text-white/70">
+            We&apos;ve updated how we record consent under UK data protection law. Please confirm to keep things up to date.
+          </p>
+
+          <div className="mt-3.5 border-t border-white/10">
+            <Check checked={terms} onChange={setTerms}>
+              I agree to the{" "}
+              <Link href="/terms" target="_blank" className={LINK}>Terms</Link> and{" "}
+              <Link href="/privacy" target="_blank" className={LINK}>Privacy Policy</Link>.
+            </Check>
+            <Check checked={sensitive} onChange={setSensitive}>
+              I explicitly consent to Match4Marriage using my religion, community and horoscope
+              details to find and show me matches.
+            </Check>
+            <Check checked={marketing} onChange={setMarketing}>
+              Send me news and offers by email (optional).
+            </Check>
+          </div>
+
+          {error && <p role="alert" className="mb-0 mt-3 text-[12.5px] text-[#ff8aa3]">{error}</p>}
+
+          <div className="mt-4 flex justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={snooze}
+              className={`rounded-full border border-white/20 bg-transparent px-4 py-2.5 text-[13px] font-semibold text-white/80 transition-colors duration-200 hover:border-white/35 hover:text-white ${FOCUS_RING}`}
+            >
+              Later
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={blocked}
+              className={`rounded-full border-0 bg-[#dc1e3c] px-5 py-2.5 text-[13px] font-bold text-white transition-[filter,opacity] duration-200 enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45 ${FOCUS_RING}`}
+            >
+              {saving ? "Saving…" : "Confirm"}
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
-const link: React.CSSProperties = { color: "#dc1e3c", fontWeight: 600, textDecoration: "none" };
+const EASE_OUT = [0.22, 1, 0.36, 1] as const;
+const FOCUS_RING =
+  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffd4dc]";
+const LINK = `font-semibold text-[#ffd4dc] underline decoration-[rgba(255,212,220,0.45)] underline-offset-2 hover:decoration-[#ffd4dc] ${FOCUS_RING}`;
 
 function Check({ checked, onChange, children }: {
   checked: boolean; onChange: (v: boolean) => void; children: React.ReactNode;
 }) {
   return (
-    <label style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 12.5, lineHeight: 1.5, color: "#1a0a14", cursor: "pointer" }}>
+    <label className="flex cursor-pointer items-start gap-3 border-b border-white/10 py-3 text-[13px] leading-[1.55] text-white/90">
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        style={{ marginTop: 2, width: 15, height: 15, flexShrink: 0, accentColor: "#dc1e3c", cursor: "pointer" }}
+        className={`mt-[3px] h-4 w-4 flex-shrink-0 cursor-pointer ${FOCUS_RING}`}
+        style={{ accentColor: "#dc1e3c" }}
       />
       <span>{children}</span>
     </label>

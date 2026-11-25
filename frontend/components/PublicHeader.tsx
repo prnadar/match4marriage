@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
-import { Mail, ChevronDown, Heart, Bell, MessageCircle } from "lucide-react";
+import { Mail, ChevronDown, Heart, Bell, MessageCircle, Menu } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { firebaseAuth } from "@/lib/firebase";
 import { useProfilePhoto } from "@/lib/profilePhoto";
@@ -29,6 +29,12 @@ interface PublicHeaderProps {
    * (Bell / Messages / Avatar) remain.
    */
   variant?: "public" | "app";
+  /**
+   * App variant only. When provided, the header renders a menu button below
+   * 1024px that calls this — it opens the member sidebar drawer owned by
+   * app/(app)/layout.tsx. Ignored by the public variant.
+   */
+  onMenuClick?: () => void;
 }
 
 type AuthSnapshot =
@@ -36,7 +42,7 @@ type AuthSnapshot =
   | { status: "anonymous" }
   | { status: "signed-in"; initial: string };
 
-export default function PublicHeader({ transparent = false, transparentUntil, variant = "public" }: PublicHeaderProps = {}) {
+export default function PublicHeader({ transparent = false, transparentUntil, variant = "public", onMenuClick }: PublicHeaderProps = {}) {
   const isAppVariant = variant === "app";
   const pathname = usePathname();
   const [helpOpen, setHelpOpen] = useState(false);
@@ -114,7 +120,10 @@ export default function PublicHeader({ transparent = false, transparentUntil, va
       {/* ── Top Announcement Bar — brand provenance line on the left, direct
               enquiry line on the right. Plain text only: no emoji/flag glyphs
               (they render inconsistently across platforms and read as noisy
-              on a premium brand bar). Shared by every public + member page. ─── */}
+              on a premium brand bar). Public pages only: inside the member
+              shell the provenance line and enquiry address are folded into
+              the dark app header below, so the red strip is not rendered. ─── */}
+      {!isAppVariant && (
       <div className={`m4m-top-bar${transparent ? " m4m-top-bar--overlay" : ""}${floating ? " is-floating" : ""}`}>
         <span className="m4m-top-bar__shine" aria-hidden />
         <div className="m4m-top-bar__row max-w-7xl mx-auto">
@@ -128,15 +137,38 @@ export default function PublicHeader({ transparent = false, transparentUntil, va
           </a>
         </div>
       </div>
+      )}
 
       {/* ── Main Nav ── */}
-      <nav className={`m4m-nav${transparent ? " m4m-nav--overlay" : ""}${scrolled ? " is-scrolled" : ""}${floating ? " is-floating" : ""}`}>
+      <nav className={`m4m-nav${isAppVariant ? " m4m-nav--app" : ""}${transparent ? " m4m-nav--overlay" : ""}${scrolled ? " is-scrolled" : ""}${floating ? " is-floating" : ""}`}>
         <div className="m4m-nav__row max-w-7xl mx-auto px-4 sm:px-6">
           {/* Logo — single JPEG mark, used on every page (including the
               cinematic homepage hero). */}
+          {isAppVariant ? (
+            <div className="m4m-nav__app-brand">
+              {onMenuClick && (
+                <button
+                  type="button"
+                  className="m4m-nav__app-menu"
+                  onClick={onMenuClick}
+                  aria-label="Open menu"
+                >
+                  <Menu className="h-5 w-5" strokeWidth={1.6} />
+                </button>
+              )}
+              <Link href="/" className="m4m-nav__logo" aria-label="Match4Marriage home">
+                <img className="m4m-nav__logo-img" src="/images/logo.png" alt="Match4Marriage" />
+              </Link>
+              <p className="m4m-nav__app-tag">
+                <span className="m4m-nav__app-tag-line">Elite Indian Matrimony</span>
+                <span className="m4m-nav__app-tag-sub">Established in the UK</span>
+              </p>
+            </div>
+          ) : (
           <Link href="/" className="m4m-nav__logo" aria-label="Match4Marriage home">
             <img className="m4m-nav__logo-img" src="/images/logo.png" alt="Match4Marriage" />
           </Link>
+          )}
 
           {/* Desktop nav (centre column — auto-centred regardless of side widths).
               Display + layout owned by the .m4m-nav__center rule in globals.css.
@@ -208,6 +240,12 @@ export default function PublicHeader({ transparent = false, transparentUntil, va
           <div className="m4m-nav__right">
             {auth.status === "signed-in" ? (
               <>
+                {isAppVariant && (
+                  <a href="mailto:enquiry@match4marriage.com" className="m4m-nav__app-mail">
+                    <Mail className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.6} />
+                    <span>enquiry@match4marriage.com</span>
+                  </a>
+                )}
                 <Link href="/notifications" className="m4m-nav__icon-btn hidden sm:inline-flex" aria-label="Notifications">
                   <Bell className="h-[18px] w-[18px]" strokeWidth={1.8} />
                 </Link>

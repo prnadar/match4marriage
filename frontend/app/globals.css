@@ -1057,6 +1057,141 @@
 /* Help dropdown chevron inherits the link colour automatically */
 
 /* ================================================================
+   Member-shell header — PublicHeader variant="app" only. Every rule
+   is scoped under .m4m-nav--app, so the public marketing header is
+   untouched. The bar belongs to the dark aubergine shell: translucent
+   so page content stays legible beneath it while sticky, one hairline
+   below, no glow. Sits under the sidebar drawer + its backdrop.
+   ================================================================ */
+.m4m-nav--app,
+.m4m-nav--app.is-scrolled {
+  z-index: 30;
+  background: rgba(23,8,17,0.97);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  box-shadow: none;
+}
+.m4m-nav--app .m4m-nav__row {
+  max-width: none;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+@media (min-width: 640px) {
+  .m4m-nav--app .m4m-nav__row { padding-left: 24px; padding-right: 24px; }
+}
+@media (min-width: 1024px) {
+  .m4m-nav--app .m4m-nav__row { padding-left: 40px; padding-right: 40px; }
+}
+.m4m-nav__app-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.m4m-nav__app-menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-left: -10px;
+  margin-right: -8px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255,255,255,0.78);
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.m4m-nav__app-menu:hover { background: rgba(255,255,255,0.06); color: #fff; }
+@media (min-width: 1024px) {
+  .m4m-nav__app-menu { display: none; }
+}
+/* The mark is two-colour artwork drawn for a light ground, so in the dark
+   bar it sits on a small ivory plate (the in-app footer does the same). */
+.m4m-nav--app .m4m-nav__logo {
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.96);
+}
+.m4m-nav--app .m4m-nav__logo img { height: 34px; }
+.m4m-nav--app .m4m-nav__logo:hover img { transform: none; filter: none; }
+.m4m-nav__app-tag {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding-left: 16px;
+  border-left: 1px solid rgba(255,255,255,0.10);
+  line-height: 1;
+  white-space: nowrap;
+}
+@media (min-width: 768px) {
+  .m4m-nav__app-tag { display: flex; }
+}
+.m4m-nav__app-tag-line {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(201,149,74,0.95);
+}
+.m4m-nav__app-tag-sub {
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: rgba(255,255,255,0.56);
+}
+.m4m-nav__app-mail {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-right: 12px;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  color: rgba(255,255,255,0.6);
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+.m4m-nav__app-mail:hover { color: #f3c9a8; }
+@media (min-width: 1280px) {
+  .m4m-nav__app-mail { display: inline-flex; }
+}
+.m4m-nav--app .m4m-nav__icon-btn {
+  width: 40px;
+  height: 40px;
+  color: rgba(255,255,255,0.72);
+}
+.m4m-nav--app .m4m-nav__icon-btn:hover {
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  transform: none;
+}
+/* Avatar: champagne hairline ring instead of the rose glow. The ::after
+   pads the tap area to 44px without growing the visual. */
+.m4m-nav--app .m4m-nav__avatar {
+  position: relative;
+  margin-left: 8px;
+  box-shadow: 0 0 0 2px #170811, 0 0 0 3px rgba(201,149,74,0.5);
+}
+.m4m-nav--app .m4m-nav__avatar::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+}
+.m4m-nav--app .m4m-nav__avatar:hover {
+  transform: none;
+  box-shadow: 0 0 0 2px #170811, 0 0 0 3px rgba(243,201,168,0.9);
+}
+/* Only seen for the instant before the auth gate redirects a signed-out
+   visitor; keeps the link legible on the dark bar. */
+.m4m-nav--app .m4m-nav__login { color: rgba(255,255,255,0.82); }
+.m4m-nav--app :focus-visible { outline-color: #ff8aa3; }
+
+/* ================================================================
    Editorial reveal — used across the public pages (about, pricing,
    contact, faq, success-stories) for the on-scroll fade-up effect.
    Apply `.editorial-reveal` to any section; the page-level

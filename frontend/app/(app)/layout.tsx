@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  LayoutDashboard, Heart, MessageCircle, User, Star, Globe,
-  Shield, Bell, Settings, LogOut, ChevronRight, Users, Star as StarIcon,
-  CreditCard, Home, Menu, X, AlertTriangle, Mail, MapPin, ArrowRight,
+  LayoutDashboard, Heart, MessageCircle, User, Star, Bell, Settings, LogOut,
+  ChevronRight, CreditCard, Home, X, AlertTriangle, Mail, ArrowRight,
+  PanelLeftClose, PanelLeftOpen, type LucideIcon,
 } from "lucide-react";
+import { motion, AnimatePresence, useReducedMotion, type Variants } from "framer-motion";
 import { profileApi, api } from "@/lib/api";
 import { clearClientState, firebaseAuth, rememberSessionUid } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
@@ -17,17 +18,46 @@ import { useEntitlements } from "@/lib/useEntitlements";
 import * as Sentry from "@sentry/nextjs";
 import ConsentPrompt from "@/components/ConsentPrompt";
 
-// Side-nav entries shown to authenticated members. Notification badges are
-// omitted until they're wired to real counts — fake numbers erode trust.
+// Side-nav entries shown to authenticated members, grouped into labelled
+// sections. Notification badges are omitted until they're wired to real
+// counts — fake numbers erode trust (the layout has no unread data today).
 // /nri-hub and /family are hidden until those features ship.
-const navItems = [
-  { href: "/profile/me",   label: "My Profile",   icon: User            },
-  { href: "/dashboard",    label: "My Matches",   icon: LayoutDashboard },
-  { href: "/matches",      label: "Browse",        icon: Heart           },
-  { href: "/interests",    label: "Interests",     icon: Star            },
-  { href: "/messages",     label: "Messages",      icon: MessageCircle   },
-  { href: "/subscription", label: "Subscription",  icon: CreditCard      },
+// `exact` keeps the original matching rule for the account links (exact path
+// only); the rest also match their sub-routes.
+type NavItem = { href: string; label: string; icon: LucideIcon; exact?: boolean };
+const navSections: { label: string; items: NavItem[] }[] = [
+  {
+    label: "Introductions",
+    items: [
+      { href: "/dashboard", label: "My Matches", icon: LayoutDashboard },
+      { href: "/matches",   label: "Browse",     icon: Heart           },
+      { href: "/interests", label: "Interests",  icon: Star            },
+      { href: "/messages",  label: "Messages",   icon: MessageCircle   },
+    ],
+  },
+  {
+    label: "Membership",
+    items: [
+      { href: "/profile/me",   label: "My Profile",   icon: User       },
+      { href: "/subscription", label: "Subscription", icon: CreditCard },
+    ],
+  },
+  {
+    label: "Account",
+    items: [
+      { href: "/notifications", label: "Notifications", icon: Bell,     exact: true },
+      { href: "/settings",      label: "Settings",      icon: Settings, exact: true },
+    ],
+  },
 ];
+
+// Fixed row geometry (px). Every row in the nav column has an explicit
+// height so the active marker's offset can be computed arithmetically and
+// animated with a plain transform — no DOM measuring, which would be thrown
+// off by the shell's `zoom` scaling.
+const NAV_ROW_H = 44;
+const NAV_LABEL_H = 40;
+const EASE_OUT: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 function VerificationBanner() {
   const [verified, setVerified] = useState(true);
@@ -48,36 +78,34 @@ function VerificationBanner() {
   if (verified || dismissed) return null;
 
   return (
-    <div style={{
-      background: "linear-gradient(135deg, #1a0a14 0%, #2d0f20 60%, #3b1428 100%)",
-      padding: "12px 24px",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: "16px",
-      flexShrink: 0,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <span style={{
-          flexShrink: 0,
-          width: 30, height: 30, borderRadius: "50%",
-          background: "rgba(255,212,220,0.18)",
-          display: "inline-flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <AlertTriangle style={{ width: 16, height: 16, color: "#ffd4dc" }} strokeWidth={2} />
-        </span>
-        <p style={{ margin: 0, color: "#fff", fontSize: "14px", lineHeight: 1.5 }}>
-          <strong>Complete your profile.</strong> Members with full profiles get far more interest. Finish yours to get noticed.{" "}
-          <a href="/profile/me" style={{ color: "#ffd4dc", fontWeight: 700, textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: 3 }}>
-            Complete now <ArrowRight size={12} strokeWidth={2.4} />
+    <div
+      className="flex items-center justify-between gap-3 pl-4 pr-1 sm:pl-6 sm:pr-3 lg:pl-10 lg:pr-7"
+      style={{
+        background: "#1a0a14",
+        borderBottom: "1px solid rgba(255,255,255,0.08)",
+        flexShrink: 0,
+      }}
+    >
+      <div className="flex items-start gap-3 py-3 min-w-0">
+        <AlertTriangle
+          aria-hidden
+          style={{ width: 16, height: 16, color: "#f3c9a8", flexShrink: 0, marginTop: 3 }}
+          strokeWidth={1.6}
+        />
+        <p style={{ margin: 0, color: "rgba(255,255,255,0.78)", fontSize: "13.5px", lineHeight: 1.55 }}>
+          <strong style={{ color: "#fff", fontWeight: 600 }}>Complete your profile.</strong> Members with full profiles get far more interest. Finish yours to get noticed.{" "}
+          <a href="/profile/me" style={{ color: "#ffd4dc", fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3, display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
+            Complete now <ArrowRight size={12} strokeWidth={2} />
           </a>
         </p>
       </div>
       <button
         onClick={() => setDismissed(true)}
-        style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: "18px", flexShrink: 0, padding: "0 4px" }}
+        className="m4m-shell-iconbtn"
         aria-label="Dismiss"
-      >×</button>
+      >
+        <X style={{ width: 16, height: 16 }} strokeWidth={1.6} />
+      </button>
     </div>
   );
 }
@@ -179,6 +207,67 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Desktop margin tracks the rail width; on mobile the CSS below zeroes it.
   const sidebarWidth = effectiveCollapsed ? "72px" : "256px";
 
+  // Escape closes the mobile drawer.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMobileOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
+
+  // Motion. Everything below animates transform/opacity only and collapses
+  // to instant changes when the member prefers reduced motion.
+  const reduceMotion = useReducedMotion();
+  const tween = (duration: number, delay = 0) =>
+    reduceMotion ? { duration: 0 } : { type: "tween" as const, duration, delay, ease: EASE_OUT };
+  // The sidebar's groups arrive in a short stagger: once on desktop load, and
+  // each time the drawer opens on mobile.
+  const sidebarShown = isDesktop || mobileOpen;
+  const groupsVariants: Variants = {
+    hidden: {},
+    show: { transition: reduceMotion ? {} : { staggerChildren: 0.045, delayChildren: 0.05 } },
+  };
+  const groupVariants: Variants = reduceMotion
+    ? { hidden: { opacity: 1, x: 0 }, show: { opacity: 1, x: 0 } }
+    : {
+        hidden: { opacity: 0, x: -8, transition: { duration: 0, delay: 0.32 } },
+        show: { opacity: 1, x: 0, transition: { type: "tween", duration: 0.32, ease: EASE_OUT } },
+      };
+
+  const isNavActive = (item: NavItem) =>
+    pathname === item.href ||
+    (!item.exact && item.href !== "/dashboard" && pathname.startsWith(item.href));
+
+  // Offset of the active row inside the nav column (see NAV_ROW_H above).
+  // The marker keeps its last position while fading out on routes that match
+  // no nav item (e.g. another member's profile).
+  let navCursor = 0;
+  let markerY: number | null = null;
+  for (const section of navSections) {
+    navCursor += NAV_LABEL_H;
+    for (const item of section.items) {
+      if (markerY === null && isNavActive(item)) markerY = navCursor;
+      navCursor += NAV_ROW_H;
+    }
+  }
+  const lastMarkerY = useRef(0);
+  if (markerY !== null) lastMarkerY.current = markerY;
+
+  const avatarBackground = sidebarPhotoUrl
+    ? `url(${sidebarPhotoUrl}) center/cover no-repeat, linear-gradient(135deg,#dc1e3c,#a0153c)`
+    : "linear-gradient(135deg,#dc1e3c,#a0153c)";
+  const avatarRing = "0 0 0 2px #170811, 0 0 0 3px rgba(201,149,74,0.5)";
+
+  const handleSignOut = async () => {
+    try { await signOut(firebaseAuth); } catch {}
+    clearClientState();
+    Sentry.setUser(null);  // stop attributing errors to the signed-out member
+    // Send people to the marketing landing page after sign-out
+    // rather than the login form — most users want to leave
+    // entirely, not switch accounts.
+    window.location.href = "/";
+  };
+
   return (
     <div
       className="min-h-screen flex"
@@ -199,292 +288,330 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       }}
     >
       {/* ── Mobile backdrop ── (only renders <lg; click to dismiss) */}
-      {mobileOpen && (
-        <div
-          onClick={() => setMobileOpen(false)}
-          className="lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-          aria-hidden
-        />
-      )}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            key="m4m-drawer-backdrop"
+            onClick={() => setMobileOpen(false)}
+            className="lg:hidden fixed inset-0 z-40 bg-black/60"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={tween(0.2)}
+            aria-hidden
+          />
+        )}
+      </AnimatePresence>
 
       {/* ── Sidebar ──
-          <lg: off-canvas drawer — fixed, full-height, slid out of view via
-          -translate-x-full until `mobileOpen`. lg+: unchanged collapsible
-          rail (256px / 72px) that's always on screen. */}
-      <aside
-        className={
-          "m4m-app-sidebar fixed top-0 left-0 h-full z-50 flex flex-col transition-transform duration-300 lg:transition-all lg:translate-x-0 " +
-          (mobileOpen ? "translate-x-0" : "-translate-x-full")
-        }
+          <lg: off-canvas drawer — fixed, full-height, slid in and out by
+          Framer Motion (x: -100% ↔ 0) and inert while closed. lg+: the
+          collapsible rail (256px / 72px) that's always on screen; the CSS
+          below pins its transform to none there, so the server-rendered
+          closed-drawer transform can never hide the desktop rail. */}
+      <motion.aside
+        aria-label="Member navigation"
+        data-collapsed={effectiveCollapsed ? "true" : "false"}
+        className="m4m-app-sidebar fixed top-0 left-0 h-full z-50"
+        initial={false}
+        animate={{ x: mobileOpen ? "0%" : "-100%" }}
+        transition={tween(0.32)}
         style={{
           width: sidebarWidth,
-          background:
-            "linear-gradient(160deg, #150812 0%, #220e1c 50%, #2e1224 100%)",
-          borderRight: "1px solid rgba(255,255,255,0.06)",
+          background: "linear-gradient(180deg, #170811 0%, #1a0a14 55%, #0b0509 100%)",
+          borderRight: "1px solid rgba(255,255,255,0.08)",
           overflow: "hidden",
         }}
+        {...((!isDesktop && !mobileOpen ? { inert: "" } : {}) as object)}
       >
-        {/* Soft rose aura — drifts very slowly */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-70"
-          style={{
-            background:
-              "radial-gradient(60% 40% at 30% 18%, rgba(220,30,60,0.20) 0%, transparent 70%)," +
-              "radial-gradient(50% 35% at 80% 90%, rgba(201,149,74,0.12) 0%, transparent 70%)",
-          }}
-        />
-        {/* Subtle vertical hairline — suggests an editorial column */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute right-0 top-0 h-full w-px"
-          style={{
-            background:
-              "linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.10) 30%, rgba(220,30,60,0.20) 50%, rgba(255,255,255,0.10) 70%, transparent 100%)",
-          }}
-        />
-        {/* Burger / Close toggle — replaces logo */}
-        <div className="flex items-center px-4 border-b" style={{ borderColor: "rgba(255,255,255,0.08)", height: "60px", flexShrink: 0 }}>
-          {/* Desktop: collapse/expand the rail (unchanged affordance). */}
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="hidden lg:flex items-center justify-center rounded-xl transition-colors"
+        <motion.div
+          className="flex flex-col h-full"
+          variants={groupsVariants}
+          initial="hidden"
+          animate={sidebarShown ? "show" : "hidden"}
+        >
+          {/* Top row — same 64px height as the app header so the two
+              hairlines meet in one line across the shell. Desktop: collapse /
+              expand the rail. Mobile: close the drawer. */}
+          <div
+            className="flex items-center flex-shrink-0"
             style={{
-              width: "36px", height: "36px", flexShrink: 0,
-              color: "rgba(255,255,255,0.7)",
-              background: "transparent",
-              border: "none", cursor: "pointer",
-            }}
-            onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)"}
-            onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.background = "transparent"}
-          >
-            {collapsed ? <Menu className="w-5 h-5" /> : <X className="w-5 h-5" />}
-          </button>
-          {/* Mobile: close the drawer. */}
-          <button
-            onClick={() => setMobileOpen(false)}
-            aria-label="Close menu"
-            className="lg:hidden flex items-center justify-center rounded-xl transition-colors"
-            style={{
-              width: "36px", height: "36px", flexShrink: 0,
-              color: "rgba(255,255,255,0.7)",
-              background: "transparent",
-              border: "none", cursor: "pointer",
+              height: 64,
+              padding: effectiveCollapsed ? "0 14px" : "0 10px 0 26px",
+              justifyContent: effectiveCollapsed ? "center" : "space-between",
+              borderBottom: "1px solid rgba(255,255,255,0.08)",
             }}
           >
-            <X className="w-5 h-5" />
-          </button>
-          {/* Brand wordmark removed from the sidebar — the shared
-              PublicHeader at the top of the page now owns the brand bar
-              across every page (public and authenticated). The burger
-              toggle alone is enough here. */}
-        </div>
-
-        {/* Profile mini */}
-        {!effectiveCollapsed && (
-          <div className="px-4 py-4 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-            <Link href="/profile/me" className="flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-colors" style={{ minHeight: "auto" }}
-              onMouseEnter={(e) => (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.06)"}
-              onMouseLeave={(e) => (e.currentTarget as HTMLAnchorElement).style.background = "transparent"}
-            >
-              <div
-                className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm flex-shrink-0"
-                style={{
-                  background: sidebarPhotoUrl
-                    ? `url(${sidebarPhotoUrl}) center/cover no-repeat, linear-gradient(135deg,#dc1e3c,#a0153c)`
-                    : "linear-gradient(135deg,#dc1e3c,#a0153c)",
-                  color: sidebarPhotoUrl ? "transparent" : "#fff",
-                }}
+            {!effectiveCollapsed && (
+              <motion.span
+                className="m4m-shell-eyebrow"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={tween(0.2, 0.12)}
               >
-                {sidebarPhotoUrl ? "" : (sidebarInitial || "?")}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate" style={{ color: "#ffffff" }}>{sidebarName || "My Profile"}</p>
-                {sidebarMembership && (
-                  <p className="truncate" style={{ fontFamily: "ui-monospace, monospace", fontSize: "10px", letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)", margin: "1px 0 0" }}>
-                    {sidebarMembership}
-                  </p>
-                )}
-                <div className="flex items-center gap-1 mt-0.5">
-                  <Shield className="w-3 h-3" style={{ color: "#8DB870" }} />
-                  <span className="text-xs font-medium" style={{ color: "#8DB870" }}>{entitlements.planLabel} member</span>
-                </div>
-              </div>
-              <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: "rgba(255,255,255,0.25)" }} />
-            </Link>
-          </div>
-        )}
-
-        {/* Collapsed avatar */}
-        {effectiveCollapsed && (
-          <div className="flex justify-center py-3 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm"
-              style={{
-                background: sidebarPhotoUrl
-                  ? `url(${sidebarPhotoUrl}) center/cover no-repeat, linear-gradient(135deg,#dc1e3c,#a0153c)`
-                  : "linear-gradient(135deg,#dc1e3c,#a0153c)",
-                color: sidebarPhotoUrl ? "transparent" : "#fff",
-              }}
-            >{sidebarPhotoUrl ? "" : (sidebarInitial || "?")}</div>
-          </div>
-        )}
-
-        {/* Current plan badge — reflects the user's actual subscription_tier
-            (Basic, Premium, Elite, VIP). The Basic tier is the default for
-            new accounts (free for the first 3 months per /pricing). */}
-        {!effectiveCollapsed && (
-          <div className="px-4 pt-3">
-            <div
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
-              style={{ background: "rgba(220,30,60,0.10)", border: "1px solid rgba(220,30,60,0.25)" }}
+                Members&rsquo; Area
+              </motion.span>
+            )}
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!collapsed}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className="m4m-shell-iconbtn m4m-shell-iconbtn--desktop"
             >
-              <StarIcon className="w-3 h-3" style={{ color: "#dc1e3c", fill: "#dc1e3c" }} />
-              <span className="text-xs font-bold" style={{ color: "#ffd4dc" }}>{entitlements.planLabel} Plan</span>
-              <span className="ml-auto text-[10px]" style={{ color: "rgba(255,255,255,0.35)" }}>Active</span>
-            </div>
+              {collapsed
+                ? <PanelLeftOpen style={{ width: 18, height: 18 }} strokeWidth={1.5} />
+                : <PanelLeftClose style={{ width: 18, height: 18 }} strokeWidth={1.5} />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Close menu"
+              className="m4m-shell-iconbtn m4m-shell-iconbtn--drawer"
+            >
+              <X style={{ width: 18, height: 18 }} strokeWidth={1.5} />
+            </button>
           </div>
-        )}
 
-        {/* Nav */}
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
-            const badge: number | undefined = undefined;
-            return (
+          {/* Member card — avatar, name, membership number, tier. */}
+          <motion.div
+            variants={groupVariants}
+            className="flex-shrink-0"
+            style={{
+              padding: effectiveCollapsed ? "14px 0" : "14px 12px",
+              borderBottom: "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            {effectiveCollapsed ? (
               <Link
-                key={href}
-                href={href}
-                title={effectiveCollapsed ? label : undefined}
-                className="relative group"
-                style={{
-                  minHeight: "auto",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: effectiveCollapsed ? "center" : "flex-start",
-                  gap: "12px",
-                  padding: effectiveCollapsed ? "10px" : "10px 12px",
-                  borderRadius: "12px",
-                  fontSize: "13.5px",
-                  fontWeight: 500,
-                  letterSpacing: "0.005em",
-                  transition: "background 0.18s ease, color 0.18s ease",
-                  background: active
-                    ? "linear-gradient(95deg, rgba(220,30,60,0.32) 0%, rgba(220,30,60,0.18) 50%, rgba(220,30,60,0.06) 100%)"
-                    : "transparent",
-                  color: active ? "#ffffff" : "rgba(255,255,255,0.62)",
-                  textDecoration: "none",
-                  boxShadow: active
-                    ? "inset 0 1px 0 rgba(255,255,255,0.10), 0 6px 18px rgba(220,30,60,0.18)"
-                    : "none",
-                }}
-                onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.05)"; }}
-                onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; }}
+                href="/profile/me"
+                title={sidebarName || "My Profile"}
+                aria-label="My profile"
+                className="m4m-side-member flex items-center justify-center mx-auto"
+                style={{ width: 48, height: 48, minHeight: "auto", borderRadius: 12 }}
               >
-                {/* Active-state vertical accent on the left edge */}
-                {active && !effectiveCollapsed && (
+                <span
+                  className="font-display flex items-center justify-center rounded-full"
+                  style={{
+                    width: 34, height: 34, fontSize: 14, fontWeight: 600,
+                    background: avatarBackground,
+                    color: sidebarPhotoUrl ? "transparent" : "#fff",
+                    boxShadow: avatarRing,
+                  }}
+                >
+                  {sidebarPhotoUrl ? "" : (sidebarInitial || "?")}
+                </span>
+              </Link>
+            ) : (
+              <Link
+                href="/profile/me"
+                className="m4m-side-member flex items-center gap-3"
+                style={{ minHeight: "auto", padding: "10px 6px 10px 14px", borderRadius: 12 }}
+              >
+                <span
+                  className="font-display flex items-center justify-center rounded-full flex-shrink-0"
+                  style={{
+                    width: 44, height: 44, fontSize: 17, fontWeight: 600,
+                    background: avatarBackground,
+                    color: sidebarPhotoUrl ? "transparent" : "#fff",
+                    boxShadow: avatarRing,
+                  }}
+                >
+                  {sidebarPhotoUrl ? "" : (sidebarInitial || "?")}
+                </span>
+                <motion.span
+                  className="flex-1 min-w-0 flex flex-col"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={tween(0.2, 0.12)}
+                >
                   <span
-                    aria-hidden
+                    className="font-display truncate"
+                    style={{ fontSize: 17, fontWeight: 500, lineHeight: 1.25, color: "#fff", letterSpacing: "0.005em" }}
+                  >
+                    {sidebarName || "My Profile"}
+                  </span>
+                  {sidebarMembership && (
+                    <span
+                      className="truncate"
+                      style={{ fontFamily: "ui-monospace, monospace", fontSize: 10.5, letterSpacing: "0.12em", color: "rgba(255,255,255,0.55)", marginTop: 3 }}
+                    >
+                      {sidebarMembership}
+                    </span>
+                  )}
+                  <span className="m4m-shell-eyebrow truncate" style={{ marginTop: 6 }}>
+                    {entitlements.planLabel} member
+                  </span>
+                </motion.span>
+                <ChevronRight className="flex-shrink-0" style={{ width: 16, height: 16, color: "rgba(255,255,255,0.3)" }} strokeWidth={1.5} />
+              </Link>
+            )}
+          </motion.div>
+
+          {/* Scrolling column: the nav sections and the plan module. Rows
+              never shrink (see NAV_ROW_H), so on short screens this column
+              scrolls instead of squeezing. */}
+          <div
+            className="m4m-side-scroll relative flex-1 min-h-0 flex flex-col overflow-y-auto overflow-x-hidden"
+            style={{ padding: "0 12px" }}
+          >
+            {/* Active marker — one element that glides between rows. */}
+            <motion.span
+              aria-hidden
+              className="pointer-events-none absolute"
+              style={{
+                top: 0, left: 12, right: 12, height: NAV_ROW_H,
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.055)",
+                boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.07)",
+              }}
+              initial={false}
+              animate={{ y: lastMarkerY.current, opacity: markerY === null ? 0 : 1 }}
+              transition={tween(0.28)}
+            >
+              <span
+                style={{
+                  position: "absolute", left: 0, top: 13, bottom: 13,
+                  width: 2, borderRadius: 2, background: "#dc1e3c",
+                }}
+              />
+            </motion.span>
+
+            <nav aria-label="Member" className="flex-shrink-0">
+              {navSections.map((section) => (
+                <motion.div key={section.label} variants={groupVariants}>
+                  <div
+                    className="flex items-end"
                     style={{
-                      position: "absolute",
-                      left: -2, top: 8, bottom: 8,
-                      width: 3, borderRadius: 4,
-                      background: "linear-gradient(to bottom, #dc1e3c, #ffd87a)",
-                      boxShadow: "0 0 12px rgba(220,30,60,0.55)",
-                    }}
-                  />
-                )}
-                <Icon
-                  className="w-4 h-4 flex-shrink-0 transition-colors"
-                  style={{ color: active ? "#ffd6dd" : "rgba(255,255,255,0.55)" }}
-                />
-                {!effectiveCollapsed && <span className="flex-1 truncate">{label}</span>}
-                {!effectiveCollapsed && badge !== undefined && (
-                  <span
-                    className="text-[10px] font-bold text-white rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0"
-                    style={{
-                      background: "linear-gradient(135deg,#dc1e3c,#7d0a35)",
-                      boxShadow: "0 4px 10px rgba(220,30,60,0.45)",
+                      height: NAV_LABEL_H,
+                      padding: effectiveCollapsed ? "0 0 13px" : "0 14px 9px",
+                      justifyContent: effectiveCollapsed ? "center" : "flex-start",
                     }}
                   >
-                    {badge}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+                    {effectiveCollapsed ? (
+                      <span aria-hidden style={{ width: 16, height: 1, background: "rgba(201,149,74,0.45)" }} />
+                    ) : (
+                      <motion.span
+                        className="m4m-shell-eyebrow truncate"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={tween(0.2, 0.12)}
+                      >
+                        {section.label}
+                      </motion.span>
+                    )}
+                  </div>
+                  {section.items.map((item) => {
+                    const active = isNavActive(item);
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        title={effectiveCollapsed ? item.label : undefined}
+                        aria-label={effectiveCollapsed ? item.label : undefined}
+                        aria-current={active ? "page" : undefined}
+                        data-active={active ? "true" : "false"}
+                        className="m4m-side-link"
+                        style={{ height: NAV_ROW_H }}
+                      >
+                        <motion.span
+                          className="m4m-side-link__row"
+                          whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+                          transition={{ duration: 0.12 }}
+                        >
+                          <Icon className="m4m-side-link__icon" strokeWidth={1.5} />
+                          {!effectiveCollapsed && <span className="flex-1 truncate">{item.label}</span>}
+                        </motion.span>
+                      </Link>
+                    );
+                  })}
+                </motion.div>
+              ))}
+            </nav>
 
-        {/* Bottom actions */}
-        <div className="px-2 py-4 space-y-0.5" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-          {[
-            { href: "/notifications", label: "Notifications", icon: Bell     },
-            { href: "/settings",      label: "Settings",      icon: Settings },
-            { href: "/",              label: "Home",          icon: Home     },
-          ].map(({ href, label, icon: Icon }) => {
-            const badge: number | undefined = undefined;
-            const active = pathname === href;
-            return (
-              <Link
-                key={href}
-                href={href}
-                title={effectiveCollapsed ? label : undefined}
-                style={{
-                  minHeight: "auto",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: effectiveCollapsed ? "center" : "flex-start",
-                  gap: "12px",
-                  padding: effectiveCollapsed ? "10px" : "10px 12px",
-                  borderRadius: "12px",
-                  fontSize: "14px",
-                  fontWeight: "500",
-                  transition: "all 0.15s ease",
-                  background: active ? "rgba(220,30,60,0.20)" : "transparent",
-                  color: active ? "#ffffff" : "rgba(255,255,255,0.55)",
-                  textDecoration: "none",
-                }}
-                onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.06)"; }}
-                onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.background = "transparent"; }}
+            {/* Plan module — reflects the member's actual tier (Basic,
+                Premium, Elite) from useEntitlements(), the same source the
+                Subscription page uses. Hidden on the collapsed rail. */}
+            {!effectiveCollapsed && (
+              <motion.div
+                variants={groupVariants}
+                className="flex-shrink-0"
+                style={{ marginTop: "auto", paddingTop: 24, paddingBottom: 14 }}
               >
-                <Icon className="w-4 h-4" />
-                {!effectiveCollapsed && <span className="flex-1">{label}</span>}
-                {!effectiveCollapsed && badge !== undefined && (
-                  <span className="text-[10px] font-bold text-white rounded-full w-5 h-5 flex items-center justify-center" style={{ background: "#dc1e3c" }}>
-                    {badge}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-          <button
-            onClick={async () => {
-              try { await signOut(firebaseAuth); } catch {}
-              clearClientState();
-              Sentry.setUser(null);  // stop attributing errors to the signed-out member
-              // Send people to the marketing landing page after sign-out
-              // rather than the login form — most users want to leave
-              // entirely, not switch accounts.
-              window.location.href = "/";
-            }}
-            title={effectiveCollapsed ? "Sign Out" : undefined}
-            className="w-full flex items-center rounded-xl text-sm transition-colors"
-            style={{
-              justifyContent: effectiveCollapsed ? "center" : "flex-start",
-              gap: "12px",
-              padding: effectiveCollapsed ? "10px" : "10px 12px",
-              color: "rgba(255,100,100,0.7)",
-              background: "transparent",
-              border: "none", cursor: "pointer",
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#ff6b6b"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,80,80,0.08)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,100,100,0.7)"; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                <div
+                  style={{
+                    padding: "14px 14px 4px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(201,149,74,0.24)",
+                    background: "rgba(255,255,255,0.025)",
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="m4m-shell-eyebrow">Your plan</span>
+                    <span className="inline-flex items-center gap-1.5" style={{ fontSize: 11, letterSpacing: "0.04em", color: "rgba(255,255,255,0.6)" }}>
+                      <span aria-hidden style={{ width: 5, height: 5, borderRadius: "50%", background: "#c89020" }} />
+                      Active
+                    </span>
+                  </div>
+                  <p
+                    className="font-display truncate"
+                    style={{ margin: "8px 0 0", fontSize: 21, fontWeight: 500, lineHeight: 1.2, color: "#f3c9a8" }}
+                  >
+                    {entitlements.planLabel}
+                  </p>
+                  <Link href="/subscription" className="m4m-side-planlink">
+                    <span>{entitlements.plan === "platinum" ? "Manage membership" : "View membership plans"}</span>
+                    <ArrowRight className="m4m-side-planlink__arrow" style={{ width: 13, height: 13 }} strokeWidth={1.6} />
+                  </Link>
+                </div>
+              </motion.div>
+            )}
+          </div>
+
+          {/* Leaving: back to the public site, or sign out. */}
+          <motion.div
+            variants={groupVariants}
+            className="flex-shrink-0"
+            style={{ padding: "8px 12px 12px", borderTop: "1px solid rgba(255,255,255,0.08)" }}
           >
-            <LogOut className="w-4 h-4 flex-shrink-0" />
-            {!effectiveCollapsed && <span>Sign Out</span>}
-          </button>
-        </div>
-      </aside>
+            <Link
+              href="/"
+              title={effectiveCollapsed ? "Home" : undefined}
+              aria-label={effectiveCollapsed ? "Home" : undefined}
+              className="m4m-side-link"
+              style={{ height: NAV_ROW_H }}
+            >
+              <motion.span
+                className="m4m-side-link__row"
+                whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+                transition={{ duration: 0.12 }}
+              >
+                <Home className="m4m-side-link__icon" strokeWidth={1.5} />
+                {!effectiveCollapsed && <span className="flex-1 truncate">Home</span>}
+              </motion.span>
+            </Link>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              title={effectiveCollapsed ? "Sign Out" : undefined}
+              aria-label={effectiveCollapsed ? "Sign Out" : undefined}
+              className="m4m-side-link m4m-side-link--quiet"
+              style={{ height: NAV_ROW_H }}
+            >
+              <motion.span
+                className="m4m-side-link__row"
+                whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+                transition={{ duration: 0.12 }}
+              >
+                <LogOut className="m4m-side-link__icon" strokeWidth={1.5} />
+                {!effectiveCollapsed && <span className="flex-1 truncate text-left">Sign Out</span>}
+              </motion.span>
+            </button>
+          </motion.div>
+        </motion.div>
+      </motion.aside>
 
       {/* ── Main ──
           Desktop keeps the inline marginLeft (matches the rail width). On
@@ -501,34 +628,132 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                desktop "collapsed" rail width (72px) was carried over. */
             .m4m-app-sidebar { width: min(280px, 82vw) !important; }
           }
+          @media (min-width: 1024px) {
+            /* The rail is always on screen at lg+: the drawer's slide
+               transform (set inline by Framer Motion) must never apply. */
+            .m4m-app-sidebar { transform: none !important; }
+          }
+          .m4m-app-sidebar { transition: width 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+          .m4m-app-sidebar :focus-visible { outline-color: #ff8aa3; outline-offset: -2px; border-radius: 10px; }
+
+          /* Small-caps label — the one gold accent in the shell. */
+          .m4m-shell-eyebrow {
+            font-family: var(--font-nav);
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: rgba(201,149,74,0.95);
+            white-space: nowrap;
+          }
+          .m4m-shell-iconbtn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            min-height: auto;
+            flex-shrink: 0;
+            border: 0;
+            border-radius: 10px;
+            background: transparent;
+            color: rgba(255,255,255,0.6);
+            cursor: pointer;
+            transition: background 0.18s ease, color 0.18s ease;
+          }
+          /* Desktop-only / drawer-only variants (own rules, because this
+             class sets display and would otherwise beat Tailwind's hidden). */
+          .m4m-shell-iconbtn--desktop { display: none; }
+          @media (min-width: 1024px) {
+            .m4m-shell-iconbtn--desktop { display: inline-flex; }
+            .m4m-shell-iconbtn--drawer { display: none; }
+          }
+          .m4m-shell-iconbtn:hover { background: rgba(255,255,255,0.06); color: #fff; }
+
+          .m4m-side-member { text-decoration: none; transition: background 0.18s ease; }
+          .m4m-side-member:hover { background: rgba(255,255,255,0.04); }
+
+          .m4m-side-scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.14) transparent; }
+
+          .m4m-side-link {
+            display: block;
+            width: 100%;
+            min-height: auto;
+            padding: 0;
+            border: 0;
+            border-radius: 10px;
+            background: transparent;
+            color: rgba(255,255,255,0.66);
+            text-decoration: none;
+            cursor: pointer;
+            transition: background 0.18s ease, color 0.18s ease;
+          }
+          .m4m-side-link:hover { background: rgba(255,255,255,0.035); color: #fff; }
+          .m4m-side-link[data-active="true"] { background: transparent; color: #fff; }
+          .m4m-side-link--quiet { color: rgba(255,255,255,0.5); }
+          .m4m-side-link--quiet:hover { color: #ff8aa3; }
+          .m4m-side-link__row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            height: 100%;
+            padding: 0 14px;
+            font-family: var(--font-nav);
+            font-size: 13.5px;
+            font-weight: 500;
+            letter-spacing: 0.01em;
+          }
+          .m4m-app-sidebar[data-collapsed="true"] .m4m-side-link__row { justify-content: center; padding: 0; }
+          .m4m-side-link__icon { width: 17px; height: 17px; flex-shrink: 0; opacity: 0.8; transition: color 0.18s ease, opacity 0.18s ease; }
+          .m4m-side-link:hover .m4m-side-link__icon { opacity: 1; }
+          .m4m-side-link[data-active="true"] .m4m-side-link__icon { color: #ff8aa3; opacity: 1; }
+
+          .m4m-side-planlink {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            height: 44px;
+            min-height: auto;
+            margin-top: 6px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            font-family: var(--font-nav);
+            font-size: 12.5px;
+            font-weight: 500;
+            letter-spacing: 0.01em;
+            color: rgba(255,255,255,0.78);
+            text-decoration: none;
+            transition: color 0.18s ease;
+          }
+          .m4m-side-planlink:hover { color: #fff; }
+          .m4m-side-planlink__arrow { color: #f3c9a8; transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1); }
+          .m4m-side-planlink:hover .m4m-side-planlink__arrow { transform: translateX(3px); }
+
+          .m4m-shell-footlink {
+            display: block;
+            min-height: auto;
+            padding: 5px 0;
+            font-size: 13px;
+            color: rgba(255,255,255,0.6);
+            text-decoration: none;
+            transition: color 0.18s ease;
+          }
+          .m4m-shell-footlink:hover { color: #fff; }
+          @media (max-width: 1023px) {
+            .m4m-shell-footlink { padding: 12px 0; }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .m4m-side-planlink:hover .m4m-side-planlink__arrow { transform: none; }
+          }
         `}</style>
 
-        {/* Mobile drawer opener — a fixed floating control rather than a
-            sticky bar: PublicHeader's own nav is `position:sticky; top:0`,
-            so a second sticky bar would collide with it after any scroll and
-            get covered. A pinned FAB stays reachable at every scroll position
-            and never fights the header. Hidden at lg+ (rail is always shown).
-            z below the drawer backdrop (z-40) so the open drawer covers it. */}
-        <button
-          onClick={() => setMobileOpen(true)}
-          aria-label="Open menu"
-          className="lg:hidden fixed left-4 z-30 inline-flex items-center gap-2 rounded-full pl-3 pr-4 h-12 shadow-lg active:scale-95 transition-transform"
-          style={{
-            bottom: "calc(1.25rem + env(safe-area-inset-bottom, 0px))",
-            background: "linear-gradient(135deg, #dc1e3c 0%, #a0153c 100%)",
-            color: "#fff",
-            boxShadow: "0 8px 24px rgba(220,30,60,0.4)",
-          }}
-        >
-          <Menu className="w-5 h-5" strokeWidth={2.2} />
-          <span className="text-sm font-semibold">Menu</span>
-        </button>
-
         {/* Shared brand bar — same component the public site uses, but the
-            "app" variant suppresses the marketing nav (Home / Browse Profiles
-            / Pricing / About / Help) since the sidebar already covers member
-            navigation. Logo, top brand bar and signed-in actions remain. */}
-        <PublicHeader variant="app" />
+            "app" variant renders the dark member-shell header: no red
+            utility strip, no marketing nav (the sidebar covers member
+            navigation). Below lg it also carries the drawer opener, so the
+            menu lives in the sticky header rather than a floating button. */}
+        <PublicHeader variant="app" onMenuClick={() => setMobileOpen(true)} />
 
         {/* ── ID Verification Warning Banner ── */}
         <VerificationBanner />
@@ -545,7 +770,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <footer
           className="px-5 py-8 sm:px-8 sm:py-8"
           style={{
-            borderTop: "1px solid rgba(220,30,60,0.10)",
+            borderTop: "1px solid rgba(255,255,255,0.08)",
             background: "#1a0a14",
           }}
         >
@@ -559,37 +784,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <img src="/images/logo.png" alt="Match 4 Marriage" style={{ height: 30, width: "auto", display: "block" }} />
                   </span>
                 </div>
-                <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", lineHeight: 1.6 }}>
+                <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)", lineHeight: 1.6 }}>
                   Elite Indian Matrimony<br />United Kingdom
                 </p>
               </div>
               <div>
-                <p style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: "0.1em", marginBottom: "10px" }}>Quick Links</p>
+                <p className="m4m-shell-eyebrow" style={{ marginBottom: "12px" }}>Quick Links</p>
                 {[
                   { label: "My Profile", href: "/profile/me" },
                   { label: "Browse Matches", href: "/matches" },
                   { label: "Messages", href: "/messages" },
                   { label: "Subscription", href: "/subscription" },
                 ].map(({ label, href }) => (
-                  <Link key={href} href={href} style={{ display: "block", fontSize: "13px", color: "rgba(255,255,255,0.45)", textDecoration: "none", marginBottom: "6px", minHeight: "auto" }}
-                    onMouseEnter={(e) => (e.currentTarget as HTMLAnchorElement).style.color = "#fff"}
-                    onMouseLeave={(e) => (e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.45)"}
-                  >{label}</Link>
+                  <Link key={href} href={href} className="m4m-shell-footlink">{label}</Link>
                 ))}
               </div>
               <div>
-                <p style={{ fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: "0.1em", marginBottom: "10px" }}>Support</p>
+                <p className="m4m-shell-eyebrow" style={{ marginBottom: "12px" }}>Support</p>
                 {[
                   { label: "Privacy Policy", href: "/privacy" },
                   { label: "Terms of Service", href: "/terms" },
                   { label: "Settings", href: "/settings" },
                 ].map(({ label, href }) => (
-                  <Link key={href} href={href} style={{ display: "block", fontSize: "13px", color: "rgba(255,255,255,0.45)", textDecoration: "none", marginBottom: "6px", minHeight: "auto" }}
-                    onMouseEnter={(e) => (e.currentTarget as HTMLAnchorElement).style.color = "#fff"}
-                    onMouseLeave={(e) => (e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.45)"}
-                  >{label}</Link>
+                  <Link key={href} href={href} className="m4m-shell-footlink">{label}</Link>
                 ))}
-                <a href="mailto:enquiry@match4marriage.com" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "rgba(255,255,255,0.45)", textDecoration: "none", marginBottom: 6 }}>
+                <a href="mailto:enquiry@match4marriage.com" className="m4m-shell-footlink" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <Mail style={{ width: 13, height: 13 }} strokeWidth={1.6} /> enquiry@match4marriage.com
                 </a>
               </div>
@@ -598,10 +817,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
               style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "16px" }}
             >
-              <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)" }}>
+              <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)" }}>
                 © {new Date().getFullYear()} Match4Marriage. All rights reserved.
               </p>
-              <p style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(255,255,255,0.25)" }}>
+              <p style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(255,255,255,0.5)" }}>
                 Made with <Heart style={{ width: 12, height: 12, color: "#dc1e3c", fill: "#dc1e3c" }} /> for love
               </p>
             </div>
