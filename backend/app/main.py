@@ -154,6 +154,8 @@ async def _ensure_verification_columns() -> None:
             "ALTER TYPE pricingperiod ADD VALUE IF NOT EXISTS 'HALF_YEARLY'",
             # Offline payments recorded by staff (admin membership management).
             "ALTER TYPE paymentgateway ADD VALUE IF NOT EXISTS 'MANUAL'",
+            # Spam bucket for public enquiries (bot filtering).
+            "ALTER TYPE enquirystatus ADD VALUE IF NOT EXISTS 'SPAM'",
         ]
         for s in enum_adds:
             try:

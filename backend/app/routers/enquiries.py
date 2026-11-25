@@ -4,25 +4,26 @@ Enquiries — public submission + admin inbox.
 Public POST /api/v1/enquiries (no auth) — accepts contact-form / landing leads.
 Admin GET /api/v1/admin/enquiries / PUT /api/v1/admin/enquiries/{id} — manage.
 """
-from __future__ import annotations
 
 import csv
 import io
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
+from app.core.database import engine, get_db
 from app.core.logging import get_logger
+from app.core.rate_limit import limiter
 from app.core.security import get_current_user, has_admin_role
 from app.core.tenancy import get_current_tenant_slug
 from app.models.enquiry import Enquiry, EnquirySource, EnquiryStatus
 from app.schemas.common import APIResponse, PaginatedResponse
+from app.services.spam import is_certain_bot, spam_reason
 
 router = APIRouter(tags=["enquiries"])
 logger = get_logger(__name__)
@@ -62,13 +63,44 @@ def _serialize(e: Enquiry) -> dict[str, Any]:
 # ─── Public submission ───────────────────────────────────────────────────────
 
 
+def _client_ip(request: Request) -> str:
+    """Real visitor IP behind Vercel's proxy (first X-Forwarded-For hop)."""
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    real = request.headers.get("x-real-ip")
+    if real:
+        return real.strip()
+    return request.client.host if request.client else "unknown"
+
+
+async def _ensure_spam_label() -> None:
+    """Add the SPAM enum label if the boot guard hasn't (e.g. RUN_BOOT_DDL=false)."""
+    async with engine.connect() as conn:
+        await conn.execution_options(isolation_level="AUTOCOMMIT")
+        await conn.execute(text("ALTER TYPE enquirystatus ADD VALUE IF NOT EXISTS 'SPAM'"))
+
+
+def _fake_ok() -> APIResponse:
+    # Same shape a real submission gets, so bots learn nothing.
+    return APIResponse(success=True, data={"id": str(uuid.uuid4()), "status": "new"})
+
+
 @router.post("/enquiries", response_model=APIResponse[dict])
+@limiter.limit("3/minute;10/hour", key_func=_client_ip)
 async def public_create_enquiry(
+    request: Request,
     payload: dict,
     db: Annotated[AsyncSession, Depends(get_db)],
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
     """Unauthenticated submission. Validate hard, never trust client metadata."""
+    # Tier 1 — certain bots (hidden field filled / inhumanly fast): drop silently.
+    bot = is_certain_bot(payload.get("website"), payload.get("elapsed_ms"))
+    if bot:
+        logger.info("enquiry_bot_dropped", reason=bot)
+        return _fake_ok()
+
     name = (payload.get("name") or "").strip()
     message = (payload.get("message") or "").strip()
     if not name:
@@ -96,16 +128,61 @@ async def public_create_enquiry(
         source = EnquirySource.OTHER
 
     tenant_uuid = await _tenant_uuid(db, tenant_slug)
-    e = Enquiry(
-        tenant_id=tenant_uuid,
-        source=source,
-        status=EnquiryStatus.NEW,
-        name=name[:120],
-        email=email[:255] if email else None,
-        phone=phone[:32] if phone else None,
-        subject=subject,
-        message=message,
+
+    # Same person re-sending the same message within a day → don't duplicate.
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    dup_q = select(Enquiry.id).where(
+        Enquiry.tenant_id == tenant_uuid,
+        Enquiry.deleted_at.is_(None),
+        Enquiry.created_at >= since,
+        Enquiry.message == message,
     )
+    dup_q = dup_q.where(Enquiry.email == email) if email else dup_q.where(Enquiry.phone == phone)
+    if (await db.execute(dup_q.limit(1))).scalar_one_or_none():
+        logger.info("enquiry_duplicate_dropped")
+        return _fake_ok()
+
+    # Tier 2 — content heuristics: keep, but file under Spam with no team email.
+    reason = spam_reason(name, email, subject, message)
+
+    def _build(status: EnquiryStatus, notes: str | None) -> Enquiry:
+        return Enquiry(
+            tenant_id=tenant_uuid,
+            source=source,
+            status=status,
+            name=name[:120],
+            email=email[:255] if email else None,
+            phone=phone[:32] if phone else None,
+            subject=subject,
+            message=message,
+            admin_notes=notes,
+        )
+
+    if reason:
+        note = f"Auto-flagged as spam: {reason}"
+        e = _build(EnquiryStatus.SPAM, note)
+        try:
+            async with db.begin_nested():
+                db.add(e)
+                await db.flush()
+        except Exception as first_exc:  # SPAM label missing → add it and retry once
+            logger.warning("enquiry_spam_insert_retry", error=str(first_exc))
+            try:
+                await _ensure_spam_label()
+                e = _build(EnquiryStatus.SPAM, note)
+                async with db.begin_nested():
+                    db.add(e)
+                    await db.flush()
+            except Exception as exc:
+                # Never lose a submission: fall back to Closed with the note.
+                logger.error("enquiry_spam_label_unavailable", error=str(exc))
+                e = _build(EnquiryStatus.CLOSED, note)
+                db.add(e)
+                await db.flush()
+        logger.info("public_enquiry_flagged_spam", id=str(e.id), reason=reason)
+        return APIResponse(success=True, data={"id": str(e.id), "status": "new"})
+
+    e = _build(EnquiryStatus.NEW, None)
     db.add(e)
     await db.flush()
     await db.refresh(e)
@@ -189,6 +266,8 @@ async def admin_list_enquiries(
             base = base.where(Enquiry.status == EnquiryStatus(status_filter))
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Unknown status {status_filter!r}")
+    else:
+        base = base.where(Enquiry.status != EnquiryStatus.SPAM)
     if source:
         try:
             base = base.where(Enquiry.source == EnquirySource(source))
@@ -243,7 +322,7 @@ async def admin_enquiry_counts(
     counts = {s.value: 0 for s in EnquiryStatus}
     for status, c in rows:
         counts[status.value] = int(c)
-    counts["total"] = sum(counts.values())
+    counts["total"] = sum(v for k, v in counts.items() if k != EnquiryStatus.SPAM.value)
     return APIResponse(success=True, data=counts)
 
 
@@ -329,3 +408,84 @@ async def admin_delete_enquiry(
     await db.flush()
     logger.info("admin_delete_enquiry", id=str(enquiry_id), by=current_user.get("sub"))
     return APIResponse(success=True, data={"id": str(enquiry_id)})
+
+
+# ─── Spam management (admin) ─────────────────────────────────────────────────
+
+
+@router.post("/admin/enquiries/spam/scan", response_model=APIResponse[dict])
+async def admin_scan_enquiries_for_spam(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    """Run the spam heuristics over existing New / In review enquiries and file
+    matches under Spam. Responded/closed ones are left alone (staff touched them)."""
+    _require_admin(current_user)
+    tenant_uuid = await _tenant_uuid(db, tenant_slug)
+    rows = (await db.execute(
+        select(Enquiry).where(
+            Enquiry.tenant_id == tenant_uuid,
+            Enquiry.deleted_at.is_(None),
+            Enquiry.status.in_([EnquiryStatus.NEW, EnquiryStatus.IN_REVIEW]),
+        ).limit(5000)
+    )).scalars().all()
+
+    flagged = 0
+    for e in rows:
+        reason = spam_reason(e.name, e.email, e.subject, e.message)
+        if reason:
+            e.status = EnquiryStatus.SPAM
+            e.resolved_at = None
+            note = f"Auto-flagged as spam: {reason}"
+            e.admin_notes = f"{e.admin_notes}\n{note}" if e.admin_notes else note
+            flagged += 1
+    try:
+        await db.flush()
+    except Exception:
+        await db.rollback()
+        await _ensure_spam_label()
+        raise HTTPException(status_code=503, detail="Spam folder was just set up — please run the scan again.")
+
+    try:
+        from app.services.audit import record_admin_action
+        await record_admin_action(
+            db, current_user, "enquiry.spam_scan", tenant_id=tenant_uuid,
+            target_type="enquiry", details={"scanned": len(rows), "flagged": flagged},
+        )
+    except Exception as exc:  # audit must never fail the action
+        logger.warning("enquiry_spam_scan_audit_failed", error=str(exc))
+    logger.info("admin_enquiry_spam_scan", scanned=len(rows), flagged=flagged, by=current_user.get("sub"))
+    return APIResponse(success=True, data={"scanned": len(rows), "flagged": flagged})
+
+
+@router.post("/admin/enquiries/spam/empty", response_model=APIResponse[dict])
+async def admin_empty_enquiry_spam(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    """Soft-delete every enquiry currently in Spam."""
+    _require_admin(current_user)
+    tenant_uuid = await _tenant_uuid(db, tenant_slug)
+    rows = (await db.execute(
+        select(Enquiry).where(
+            Enquiry.tenant_id == tenant_uuid,
+            Enquiry.deleted_at.is_(None),
+            Enquiry.status == EnquiryStatus.SPAM,
+        )
+    )).scalars().all()
+    now = datetime.now(timezone.utc)
+    for e in rows:
+        e.deleted_at = now
+    await db.flush()
+    try:
+        from app.services.audit import record_admin_action
+        await record_admin_action(
+            db, current_user, "enquiry.spam_emptied", tenant_id=tenant_uuid,
+            target_type="enquiry", details={"deleted": len(rows)},
+        )
+    except Exception as exc:
+        logger.warning("enquiry_spam_empty_audit_failed", error=str(exc))
+    logger.info("admin_enquiry_spam_emptied", deleted=len(rows), by=current_user.get("sub"))
+    return APIResponse(success=True, data={"deleted": len(rows)})

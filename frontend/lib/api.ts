@@ -430,6 +430,8 @@ export const adminApi = {
   updateEnquiry: (id: string, body: Partial<{ status: string; admin_notes: string | null; assign_to_me: boolean; assigned_admin_id: string | null }>) =>
     api.put(`/api/v1/admin/enquiries/${id}`, body),
   deleteEnquiry: (id: string) => api.delete(`/api/v1/admin/enquiries/${id}`),
+  scanEnquiriesForSpam: () => api.post("/api/v1/admin/enquiries/spam/scan", {}),
+  emptyEnquirySpam: () => api.post("/api/v1/admin/enquiries/spam/empty", {}),
 
   // Site settings
   getSiteSettings: () => api.get("/api/v1/admin/settings/site"),

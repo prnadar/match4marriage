@@ -26,6 +26,9 @@ class EnquiryStatus(str, enum.Enum):
     IN_REVIEW = "in_review"
     RESPONDED = "responded"
     CLOSED = "closed"
+    # Auto-flagged (or staff-flagged) bot/spam submission. Kept, not deleted,
+    # so a false positive can be restored with "Not spam".
+    SPAM = "spam"
 
 
 class Enquiry(TenantModel):

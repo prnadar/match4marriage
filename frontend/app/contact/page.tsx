@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Mail, MapPin, MessageCircle, ArrowRight, Check,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
 
@@ -27,6 +27,10 @@ export default function ContactPage() {
   const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Bot defences: a hidden field people never see (bots fill every input) and
+  // how long the form was open before sending (bots submit instantly).
+  const [website, setWebsite] = useState("");
+  const openedAt = useRef<number>(Date.now());
 
   useEffect(() => {
     const els = document.querySelectorAll<HTMLElement>(".editorial-reveal");
@@ -60,11 +64,15 @@ export default function ContactPage() {
         subject: form.subject || undefined,
         message: form.message.trim(),
         source: "contact_form",
+        website,
+        elapsed_ms: Date.now() - openedAt.current,
       });
       setSent(true);
     } catch (err: unknown) {
       setSubmitError(
-        err instanceof Error
+        err instanceof ApiError && err.status === 429
+          ? "You've sent a few messages in a short time. Please wait a little and try again, or email us at enquiry@match4marriage.com."
+          : err instanceof Error
           ? err.message
           : "Could not send your enquiry. Please try again or email us directly.",
       );
@@ -280,6 +288,20 @@ export default function ContactPage() {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 22 }}>
+                  {/* Honeypot: invisible to people and screen readers, irresistible to bots. */}
+                  <div aria-hidden="true" style={{ position: "absolute", left: "-10000px", top: "auto", width: 1, height: 1, overflow: "hidden" }}>
+                    <label>
+                      Website
+                      <input
+                        type="text"
+                        name="m4m_hp_url"
+                        tabIndex={-1}
+                        autoComplete="off"
+                        value={website}
+                        onChange={(e) => setWebsite(e.target.value)}
+                      />
+                    </label>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 18 }}>
                     <div>
                       <label htmlFor="cf-firstname" style={labelStyle}>First Name</label>

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Inbox, Mail, Phone,
   CheckCircle2, MessageSquareReply, Trash2, UserCheck, Download, RotateCcw, Reply,
+  ShieldAlert, ShieldCheck, ScanSearch,
 } from "lucide-react";
 import { PageShell, Button, fadeUp } from "@/components/admin/PageShell";
 import { ErrorState, Pagination, TABLE_CARD } from "@/components/admin/primitives";
@@ -16,7 +17,7 @@ import { useToast } from "@/components/admin/Toast";
 import { adminApi, ApiError, downloadCsv } from "@/lib/api";
 import { usePersistentState, oneOf } from "../_lib/view-state";
 
-type Status = "new" | "in_review" | "responded" | "closed";
+type Status = "new" | "in_review" | "responded" | "closed" | "spam";
 type Source = "contact_form" | "landing" | "profile_interest" | "other";
 
 interface Enquiry {
@@ -36,10 +37,10 @@ interface Enquiry {
 }
 
 interface Counts {
-  new: number; in_review: number; responded: number; closed: number; total: number;
+  new: number; in_review: number; responded: number; closed: number; spam?: number; total: number;
 }
 
-const FILTER_KEYS = ["all", "new", "in_review", "responded", "closed"] as const;
+const FILTER_KEYS = ["all", "new", "in_review", "responded", "closed", "spam"] as const;
 type Filter = (typeof FILTER_KEYS)[number];
 
 const STATUS_FILTERS: Array<{ value: Filter; label: string }> = [
@@ -48,6 +49,7 @@ const STATUS_FILTERS: Array<{ value: Filter; label: string }> = [
   { value: "responded", label: "Responded" },
   { value: "closed",    label: "Closed" },
   { value: "all",       label: "All" },
+  { value: "spam",      label: "Spam" },
 ];
 
 const STATUS_META: Record<Status, { label: string; tone: Tone }> = {
@@ -55,6 +57,7 @@ const STATUS_META: Record<Status, { label: string; tone: Tone }> = {
   in_review: { label: "In review", tone: "warn" },
   responded: { label: "Responded", tone: "good" },
   closed:    { label: "Closed",    tone: "neutral" },
+  spam:      { label: "Spam",      tone: "bad" },
 };
 
 const SOURCE_LABEL: Record<Source, string> = {
@@ -78,6 +81,9 @@ export default function AdminEnquiriesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [counts, setCounts] = useState<Counts>({ new: 0, in_review: 0, responded: 0, closed: 0, total: 0 });
   const [exporting, setExporting] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [emptying, setEmptying] = useState(false);
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
 
   // Deep link from the ⌘K palette: /admin/enquiries?q=<email or name>.
   useEffect(() => {
@@ -173,6 +179,38 @@ export default function AdminEnquiriesPage() {
     }
   };
 
+  const scanForSpam = async () => {
+    setScanning(true);
+    try {
+      const res = await adminApi.scanEnquiriesForSpam();
+      const d = (res.data as any)?.data ?? {};
+      const n = Number(d.flagged ?? 0);
+      toast("success", n > 0
+        ? `Moved ${n} bot ${n === 1 ? "enquiry" : "enquiries"} to Spam (checked ${d.scanned ?? 0}).`
+        : `No spam found in ${d.scanned ?? 0} open enquiries.`);
+      load(); loadCounts();
+    } catch (e) {
+      toast("error", e instanceof Error ? `Scan failed: ${e.message}` : "Scan failed");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const emptySpam = async () => {
+    setConfirmEmpty(false);
+    setEmptying(true);
+    try {
+      const res = await adminApi.emptyEnquirySpam();
+      const n = Number(((res.data as any)?.data ?? {}).deleted ?? 0);
+      toast("success", `Deleted ${n} spam ${n === 1 ? "enquiry" : "enquiries"}.`);
+      load(); loadCounts();
+    } catch (e) {
+      toast("error", e instanceof Error ? `Couldn't empty spam: ${e.message}` : "Couldn't empty spam");
+    } finally {
+      setEmptying(false);
+    }
+  };
+
   const countFor = (k: Filter) => (k === "all" ? counts.total : counts[k] ?? 0);
 
   return (
@@ -181,9 +219,19 @@ export default function AdminEnquiriesPage() {
       subtitle="Leads from the contact form and landing pages. Reply, assign and close them here."
       meta={counts.new > 0 ? <Pill tone="brand" dot>{counts.new} new</Pill> : undefined}
       actions={
-        <Button size="sm" onClick={exportCsv} loading={exporting} title="Exports every enquiry matching the current filters">
-          <Download className="h-3.5 w-3.5" aria-hidden /> Export CSV
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {filter === "spam" && (counts.spam ?? 0) > 0 && (
+            <Button size="sm" variant="danger" onClick={() => setConfirmEmpty(true)} loading={emptying}>
+              <Trash2 className="h-3.5 w-3.5" aria-hidden /> Empty spam
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" onClick={scanForSpam} loading={scanning} title="Check open enquiries for bot and sales spam and move matches to Spam">
+            <ScanSearch className="h-3.5 w-3.5" aria-hidden /> Scan for spam
+          </Button>
+          <Button size="sm" onClick={exportCsv} loading={exporting} title="Exports every enquiry matching the current filters">
+            <Download className="h-3.5 w-3.5" aria-hidden /> Export CSV
+          </Button>
+        </div>
       }
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
@@ -210,8 +258,8 @@ export default function AdminEnquiriesPage() {
           ) : items.length === 0 ? (
             <EmptyState
               icon={filter === "new" && !q ? CheckCircle2 : Inbox}
-              title={q ? `No enquiries matching “${q}”` : filter === "new" ? "Inbox zero" : "No enquiries in this view"}
-              description={q ? "Try a different name, email or subject." : filter === "new" ? "Every new lead has been picked up." : "Switch status to see other enquiries."}
+              title={q ? `No enquiries matching “${q}”` : filter === "new" ? "Inbox zero" : filter === "spam" ? "No spam" : "No enquiries in this view"}
+              description={q ? "Try a different name, email or subject." : filter === "new" ? "Every new lead has been picked up." : filter === "spam" ? "Bot and sales messages land here instead of your inbox, and no email is sent for them." : "Switch status to see other enquiries."}
             />
           ) : (
             <ul role="listbox" aria-label="Enquiries" className="flex flex-col p-1.5">
@@ -250,6 +298,14 @@ export default function AdminEnquiriesPage() {
           </AnimatePresence>
         </div>
       </motion.div>
+      <ConfirmModal
+        open={confirmEmpty}
+        title="Delete all spam?"
+        message={`All ${counts.spam ?? 0} enquiries in Spam will be removed. Check the list for any real enquiry first and use “Not spam” to keep it.`}
+        confirmLabel="Delete spam"
+        onConfirm={emptySpam}
+        onCancel={() => setConfirmEmpty(false)}
+      />
     </PageShell>
   );
 }
@@ -416,23 +472,32 @@ function DetailPane({
             <Reply className="h-3.5 w-3.5" aria-hidden /> Reply by email
           </a>
         )}
-        {enquiry.status !== "in_review" && enquiry.status !== "closed" && (
+        {enquiry.status !== "in_review" && enquiry.status !== "closed" && enquiry.status !== "spam" && (
           <Button size="sm" variant="secondary" onClick={() => updateStatus("in_review")} disabled={!!saving}>
             <UserCheck className="h-3.5 w-3.5" aria-hidden /> Mark in review
           </Button>
         )}
-        {enquiry.status !== "responded" && enquiry.status !== "closed" && (
+        {enquiry.status !== "responded" && enquiry.status !== "closed" && enquiry.status !== "spam" && (
           <Button size="sm" variant="secondary" onClick={() => updateStatus("responded")} disabled={!!saving}>
             <MessageSquareReply className="h-3.5 w-3.5" aria-hidden /> Mark responded
           </Button>
         )}
-        {enquiry.status !== "closed" ? (
+        {enquiry.status === "spam" ? (
+          <Button size="sm" onClick={() => updateStatus("new")} disabled={!!saving}>
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> Not spam
+          </Button>
+        ) : enquiry.status !== "closed" ? (
           <Button size="sm" onClick={() => updateStatus("closed")} disabled={!!saving}>
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Close
           </Button>
         ) : (
           <Button size="sm" onClick={() => updateStatus("new")} disabled={!!saving}>
             <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Reopen
+          </Button>
+        )}
+        {enquiry.status !== "spam" && (
+          <Button size="sm" variant="ghost" onClick={() => updateStatus("spam")} disabled={!!saving} title="Move to Spam (no further emails for this one)">
+            <ShieldAlert className="h-3.5 w-3.5" aria-hidden /> Spam
           </Button>
         )}
         {!enquiry.assigned_admin_id && (
