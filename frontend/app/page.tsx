@@ -287,9 +287,9 @@ export default function HomePage() {
             {/* Quiet credentials line — matches editorial restraint */}
             <p style={{
               marginTop: 48,
-              fontSize: 12.5,
+              fontSize: 12,
               fontWeight: 500,
-              letterSpacing: "0.12em",
+              letterSpacing: "0.08em",
               color: "rgba(253,249,244,0.6)",
               fontFamily: "var(--font-body, 'Inter', sans-serif)",
             }}>

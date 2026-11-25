@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  AlertTriangle, Inbox, Mail, Phone, ChevronLeft, ChevronRight,
+  Inbox, Mail, Phone,
   CheckCircle2, MessageSquareReply, Trash2, UserCheck, Download, RotateCcw, Reply,
 } from "lucide-react";
 import { PageShell, Button, fadeUp } from "@/components/admin/PageShell";
+import { ErrorState, Pagination, TABLE_CARD } from "@/components/admin/primitives";
 import {
   Segmented, SearchField, EmptyState, SkeletonRows, Pill, Kbd, relTime, formatDateTime, type Tone,
 } from "@/components/admin/primitives";
@@ -186,7 +187,7 @@ export default function AdminEnquiriesPage() {
       }
       toolbar={
         <div className="flex flex-wrap items-center gap-2">
-          <SearchField value={qLive} onChange={setQLive} placeholder="Search name, email, subject…" className="w-full max-w-xs" />
+          <SearchField value={qLive} onChange={setQLive} placeholder="Search name, email, subject…" className="w-full sm:max-w-xs" />
           <div className="max-w-full overflow-x-auto">
             <Segmented<Filter>
               ariaLabel="Filter by status"
@@ -201,14 +202,11 @@ export default function AdminEnquiriesPage() {
     >
       <motion.div variants={fadeUp} className="grid items-start gap-4 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
         {/* Left: list */}
-        <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]">
+        <div className={TABLE_CARD}>
           {loading ? (
             <div className="p-3"><SkeletonRows rows={6} /></div>
           ) : error ? (
-            <div role="alert" className="flex items-center gap-2 px-4 py-5 text-[13px] text-[#9F1239]">
-              <AlertTriangle className="h-4 w-4" aria-hidden /> {error}
-              <Button size="sm" variant="ghost" onClick={load}>Retry</Button>
-            </div>
+            <ErrorState title="Couldn't load enquiries" message={error} onRetry={load} />
           ) : items.length === 0 ? (
             <EmptyState
               icon={filter === "new" && !q ? CheckCircle2 : Inbox}
@@ -223,29 +221,7 @@ export default function AdminEnquiriesPage() {
             </ul>
           )}
 
-          {pageCount > 1 && (
-            <nav aria-label="Pagination" className="flex items-center justify-center gap-2 border-t border-border/60 px-3 py-2">
-              <button
-                type="button"
-                aria-label="Previous page"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="grid h-7 w-7 place-items-center rounded-md text-foreground hover:bg-secondary disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="text-[12px] text-muted2-foreground tabular-nums">{page} / {pageCount}</span>
-              <button
-                type="button"
-                aria-label="Next page"
-                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                disabled={page >= pageCount}
-                className="grid h-7 w-7 place-items-center rounded-md text-foreground hover:bg-secondary disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </nav>
-          )}
+          {pageCount > 1 && <Pagination page={page} pageCount={pageCount} onPage={setPage} />}
           {!loading && items.length > 1 && (
             <div className="hidden items-center gap-1.5 border-t border-border/60 px-3 py-2 text-[11px] text-muted2-foreground lg:flex">
               <Kbd>j</Kbd><Kbd>k</Kbd> to move between enquiries
@@ -254,7 +230,7 @@ export default function AdminEnquiriesPage() {
         </div>
 
         {/* Right: detail panel */}
-        <div className="rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]">
+        <div className="rounded-xl border border-border/70 bg-card shadow-[var(--adm-shadow-card)]">
           <AnimatePresence mode="wait">
             {selected ? (
               <motion.div
@@ -427,7 +403,7 @@ function DetailPane({
       </div>
 
       {err && (
-        <div role="alert" className="mb-4 rounded-lg border border-[#F7CCD5] bg-[#FDECEF] px-3 py-2 text-[12.5px] text-[#9F1239]">{err}</div>
+        <ErrorState compact message={err} className="mb-4" />
       )}
 
       {/* Quick actions */}
@@ -441,12 +417,12 @@ function DetailPane({
           </a>
         )}
         {enquiry.status !== "in_review" && enquiry.status !== "closed" && (
-          <Button size="sm" variant="warn" onClick={() => updateStatus("in_review")} disabled={!!saving}>
+          <Button size="sm" variant="secondary" onClick={() => updateStatus("in_review")} disabled={!!saving}>
             <UserCheck className="h-3.5 w-3.5" aria-hidden /> Mark in review
           </Button>
         )}
         {enquiry.status !== "responded" && enquiry.status !== "closed" && (
-          <Button size="sm" variant="success" onClick={() => updateStatus("responded")} disabled={!!saving}>
+          <Button size="sm" variant="secondary" onClick={() => updateStatus("responded")} disabled={!!saving}>
             <MessageSquareReply className="h-3.5 w-3.5" aria-hidden /> Mark responded
           </Button>
         )}
@@ -478,7 +454,7 @@ function DetailPane({
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Notes for the team. Never shown to the enquirer."
           rows={4}
-          className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2.5 text-[13px] leading-relaxed text-foreground outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+          className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2.5 text-[13px] leading-relaxed text-foreground outline-none focus:border-primary/50 focus:ring-2 focus:ring-ring/20"
         />
         <div className="mt-2 flex justify-end">
           <Button size="sm" onClick={saveNotes} disabled={!!saving || (notes === (enquiry.admin_notes || ""))} loading={saving === "notes"}>

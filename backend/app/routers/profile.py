@@ -362,7 +362,11 @@ async def _resolve_tenant_uuid(db: AsyncSession, tenant_slug: str) -> uuid.UUID 
     row = (await db.execute(
         sa_text("SELECT id FROM tenants WHERE slug = :slug LIMIT 1"), {"slug": tenant_slug}
     )).fetchone()
-    return row[0] if row else None
+    if not row:
+        return None
+    # Postgres hands back a UUID; SQLite (tests / local dev) a hex string.
+    # Normalise so callers can bind it against Uuid() columns on either.
+    return row[0] if isinstance(row[0], uuid.UUID) else uuid.UUID(str(row[0]))
 
 
 async def _get_or_create_own_profile(
@@ -671,6 +675,26 @@ async def _assign_membership_if_onboarded(db: AsyncSession, profile: UserProfile
             )
 
 
+def validate_dob_change(
+    new_dob: date | None,
+    current_dob: date | None,
+    *,
+    under_age_detail: str = "You must be at least 18 years old to use Match4Marriage.",
+    too_old_detail: str = "Please check your date of birth.",
+) -> None:
+    """The 18+ rule, shared by the member PATCH, the legacy PUT and the admin
+    edit-on-behalf endpoint. Only enforced when the DOB is being SET or CHANGED,
+    so re-saving a profile with an unchanged DOB is never blocked."""
+    if new_dob is None or new_dob == current_dob:
+        return
+    today = date.today()
+    age = today.year - new_dob.year - ((today.month, today.day) < (new_dob.month, new_dob.day))
+    if age < 18:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=under_age_detail)
+    if age > 100:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=too_old_detail)
+
+
 @router.patch("/me", response_model=APIResponse[ProfileRead])
 async def patch_my_profile(
     payload: ProfileUpdate,
@@ -704,20 +728,7 @@ async def patch_my_profile(
     # onboarding UI. Only checked when the DOB is being SET or CHANGED, so an
     # existing member re-saving their profile with an unchanged DOB is never
     # blocked by this rule.
-    new_dob = update_data.get("date_of_birth")
-    if new_dob is not None and new_dob != profile.date_of_birth:
-        today = date.today()
-        age = today.year - new_dob.year - ((today.month, today.day) < (new_dob.month, new_dob.day))
-        if age < 18:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="You must be at least 18 years old to use Match4Marriage.",
-            )
-        if age > 100:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Please check your date of birth.",
-            )
+    validate_dob_change(update_data.get("date_of_birth"), profile.date_of_birth)
 
     _apply_profile_patch(profile, update_data)
     profile.completeness_score = compute_profile_completeness(profile)
@@ -1341,6 +1352,8 @@ async def update_profile(
 
     profile = await _get_or_create_own_profile(db, current_user, tenant_slug)
     update_data = payload.model_dump(exclude_unset=True)
+    # Same 18+ rule as PATCH /me — this legacy route used to skip it.
+    validate_dob_change(update_data.get("date_of_birth"), profile.date_of_birth)
     _apply_profile_patch(profile, update_data)
     profile.completeness_score = compute_profile_completeness(profile)
     try:

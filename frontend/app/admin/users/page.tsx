@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, X, ChevronLeft, ChevronRight, AlertTriangle, Users as UsersIcon,
+  Search, X, Users as UsersIcon,
   Download, UserX, UserCheck, BadgeCheck, Send, Megaphone, Tag as TagIcon, CalendarClock, MessageCircle,
 } from "lucide-react";
 import { PageShell, GlassCard, Button, fadeUp } from "@/components/admin/PageShell";
+import { Pagination, ErrorState } from "@/components/admin/primitives";
 import { useToast } from "@/components/admin/Toast";
 import ConfirmModal from "@/components/admin/ConfirmModal";
 import { adminApi, adminCrmApi, ApiError, downloadCsv } from "@/lib/api";
@@ -66,7 +67,7 @@ const PLAN_FILTERS = [
   { value: "gold", label: "Premium" }, { value: "platinum", label: "Elite" },
 ];
 
-const GRID = "36px minmax(210px, 1.5fr) minmax(250px, 1.7fr) minmax(130px, 0.9fr) minmax(150px, 1fr) minmax(104px, 0.7fr) 84px";
+const GRID = "36px minmax(200px, 1.4fr) minmax(300px, 1.8fr) minmax(120px, 0.8fr) minmax(150px, 1fr) minmax(104px, 0.7fr) 84px";
 
 export default function AdminUsersPage() {
   const { toast } = useToast();
@@ -236,14 +237,15 @@ export default function AdminUsersPage() {
   return (
     <PageShell
       title="Users"
-      subtitle={`${total.toLocaleString()} member${total === 1 ? "" : "s"}${filtersActive ? " match these filters" : ""}`}
+      subtitle={filtersActive ? "Members matching the current filters." : "Everyone registered, with contact details, plan and follow-ups."}
+      meta={!loading ? <span className="inline-flex items-center rounded-full border border-border/70 bg-muted2 px-2 py-[2px] text-[11px] font-medium leading-4 text-muted2-foreground">{total.toLocaleString("en-GB")}</span> : undefined}
       actions={
         <>
-          <Button variant="secondary" onClick={exportCsv} title="Export the filtered list with contact details">
-            <Download style={{ width: 13, height: 13 }} /> Export CSV
+          <Button size="sm" variant="secondary" onClick={exportCsv} title="Export the filtered list with contact details">
+            <Download style={{ width: 14, height: 14 }} aria-hidden /> Export CSV
           </Button>
-          <Button variant="primary" onClick={() => setCompose({ target: { kind: "audience" } })}>
-            <Megaphone style={{ width: 13, height: 13 }} /> Broadcast
+          <Button size="sm" variant="primary" onClick={() => setCompose({ target: { kind: "audience" } })}>
+            <Megaphone style={{ width: 14, height: 14 }} aria-hidden /> Broadcast
           </Button>
         </>
       }
@@ -300,8 +302,8 @@ export default function AdminUsersPage() {
             else if (plan && !q && filter === "all" && !tag && !followUp) setCompose({ target: { kind: "audience", audience: { type: "segment", segment: "plan", value: plan } } });
             else setCompose({ target: { kind: "audience", audience: { type: "users", user_ids: items.map((u) => u.id) } } });
           }} style={{
-            marginLeft: "auto", border: `1px solid ${C.lineStrong}`, background: "#fff", color: C.ink2, fontSize: 12.5, fontWeight: 600,
-            borderRadius: 9, padding: "6px 11px", cursor: "pointer", display: "inline-flex", gap: 6, alignItems: "center", fontFamily: "inherit",
+            marginLeft: "auto", border: `1px solid ${C.line}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 500,
+            borderRadius: 10, height: 32, padding: "0 12px", cursor: "pointer", display: "inline-flex", gap: 6, alignItems: "center", fontFamily: "inherit",
           }}>
             <Send style={{ width: 13, height: 13 }} /> Message these members
           </button>
@@ -312,7 +314,7 @@ export default function AdminUsersPage() {
       <motion.div variants={fadeUp}>
         <GlassCard padding={0} style={{ overflow: "hidden" }}>
           <div style={{ overflow: "auto", maxHeight: "calc(100vh - 250px)", minHeight: 280 }}>
-            <div style={{ minWidth: 1040 }} role="table" aria-label="Members">
+            <div style={{ minWidth: 1090 }} role="table" aria-label="Members">
               <div role="row" style={tableHeadStyle}>
                 <div style={{ display: "grid", placeItems: "center" }}>
                   <input
@@ -339,10 +341,7 @@ export default function AdminUsersPage() {
                   ))}
                 </div>
               ) : error ? (
-                <div role="alert" style={{ padding: 20, color: C.wineDeep, fontSize: 13, display: "flex", gap: 8, alignItems: "center" }}>
-                  <AlertTriangle style={{ width: 15, height: 15 }} /> {error}
-                  <button type="button" onClick={load} className="crm-focus" style={{ marginLeft: 8, border: `1px solid ${C.wineLine}`, background: "#fff", color: C.wineDeep, borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>Retry</button>
-                </div>
+                <ErrorState title="Couldn't load members" message={error} onRetry={load} />
               ) : items.length === 0 ? (
                 <EmptyState
                   icon={UsersIcon}
@@ -369,16 +368,8 @@ export default function AdminUsersPage() {
       </motion.div>
 
       {pageCount > 1 && (
-        <motion.div variants={fadeUp} style={{ marginTop: 16, display: "flex", justifyContent: "center", alignItems: "center", gap: 10 }}>
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="crm-focus" style={paginationBtn(page <= 1)}>
-            <ChevronLeft style={{ width: 14, height: 14 }} /> Prev
-          </button>
-          <span style={{ fontSize: 13, color: C.muted }}>
-            Page <strong style={{ color: C.ink }}>{page}</strong> of {pageCount}
-          </span>
-          <button onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount} className="crm-focus" style={paginationBtn(page >= pageCount)}>
-            Next <ChevronRight style={{ width: 14, height: 14 }} />
-          </button>
+        <motion.div variants={fadeUp} className="mt-3">
+          <Pagination bare page={page} pageCount={pageCount} onPage={setPage} total={total} pageSize={limit} />
         </motion.div>
       )}
 
@@ -398,7 +389,7 @@ export default function AdminUsersPage() {
               padding: "8px 10px 8px 16px", maxWidth: "calc(100vw - 32px)",
               background: "rgba(26,10,20,0.96)", borderRadius: 999,
               boxShadow: "0 14px 38px rgba(0,0,0,0.32), 0 0 0 1px rgba(255,255,255,0.06) inset",
-              fontFamily: "var(--font-poppins, sans-serif)",
+              fontFamily: "var(--font-body)",
             }}
           >
             <span style={{ fontSize: 13, color: "#fff", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{selected.size} selected</span>
@@ -489,9 +480,9 @@ function FilterSelect({ label, value, onChange, options, icon: Icon }: {
   const active = !!value;
   return (
     <label style={{
-      display: "inline-flex", alignItems: "center", gap: 6, padding: "0 4px 0 10px", height: 34, borderRadius: 9,
-      background: active ? "#fff" : "rgba(255,255,255,0.7)", border: `1px solid ${active ? C.wineLine : C.lineStrong}`,
-      fontSize: 12.5, color: active ? C.wineDeep : C.ink2, fontWeight: 600,
+      display: "inline-flex", alignItems: "center", gap: 6, padding: "0 4px 0 10px", height: 32, borderRadius: 10,
+      background: active ? C.wineTint : C.surface, border: `1px solid ${active ? C.wineLine : C.line}`,
+      fontSize: 12.5, color: active ? C.wineDeep : C.ink, fontWeight: 500,
     }}>
       {Icon && <Icon aria-hidden style={{ width: 13, height: 13 }} />}
       <span className="sr-only" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>{label}</span>
@@ -500,7 +491,7 @@ function FilterSelect({ label, value, onChange, options, icon: Icon }: {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="crm-focus"
-        style={{ border: "none", background: "transparent", fontSize: 12.5, fontWeight: 600, color: "inherit", cursor: "pointer", fontFamily: "inherit", outline: "none", padding: "6px 4px" }}
+        style={{ border: "none", background: "transparent", fontSize: 12.5, fontWeight: 500, color: "inherit", cursor: "pointer", fontFamily: "inherit", outline: "none", padding: "6px 4px" }}
       >
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
@@ -563,14 +554,14 @@ function UserRow({
       <div role="cell" style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
         <span aria-hidden style={{
           width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
-          background: user.primary_photo_url ? `center / cover no-repeat url(${user.primary_photo_url})` : "linear-gradient(135deg,#dc1e3c,#a0153c)",
-          color: "#fff", fontSize: 13, fontWeight: 700, display: "grid", placeItems: "center",
-          boxShadow: `0 0 0 2px #fff, 0 0 0 3.5px ${user.verification_status === "approved" ? "#8DB870" : user.verification_status === "submitted" ? "#E8C04B" : "rgba(26,10,20,0.08)"}`,
+          background: user.primary_photo_url ? `center / cover no-repeat url(${user.primary_photo_url})` : "hsl(var(--secondary))",
+          color: C.ink2, fontSize: 12.5, fontWeight: 600, display: "grid", placeItems: "center",
+          boxShadow: `0 0 0 1px ${C.line}`,
         }}>
           {!user.primary_photo_url && (name[0]?.toUpperCase() || "?")}
         </span>
         <div style={{ minWidth: 0 }}>
-          <Link href={`/admin/users/${user.id}`} className="crm-focus" style={{ fontSize: 13.5, fontWeight: 650, color: C.ink, textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", borderRadius: 4 }}>
+          <Link href={`/admin/users/${user.id}`} className="crm-focus" style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", borderRadius: 4 }}>
             {name}
           </Link>
           <div style={{ fontSize: 11.5, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -585,15 +576,15 @@ function UserRow({
           {user.email ? (
             <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
               <span title={user.email} style={{ color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</span>
-              {user.is_email_verified && <BadgeCheck aria-label="Email verified" size={13} strokeWidth={2.2} style={{ color: "#5C7A52", flexShrink: 0 }} />}
+              {user.is_email_verified && <BadgeCheck aria-label="Email verified" size={13} strokeWidth={2.2} style={{ color: "var(--adm-good)", flexShrink: 0 }} />}
             </div>
           ) : <div style={{ color: C.faint }}>No email</div>}
           {phone ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 5, color: C.ink2, fontVariantNumeric: "tabular-nums" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, color: C.ink2, fontVariantNumeric: "tabular-nums", minWidth: 0, overflow: "hidden" }}>
               <span style={{ whiteSpace: "nowrap" }}>{formatPhone(phone, user.phone_country_code)}</span>
-              {user.is_phone_verified && <BadgeCheck aria-label="Phone verified" size={13} strokeWidth={2.2} style={{ color: "#5C7A52", flexShrink: 0 }} />}
+              {user.is_phone_verified && <BadgeCheck aria-label="Phone verified" size={13} strokeWidth={2.2} style={{ color: "var(--adm-good)", flexShrink: 0 }} />}
               {user.whatsapp_preferred && (
-                <span title="Prefers WhatsApp" style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 10.5, fontWeight: 700, color: C.wa, background: C.waTint, padding: "0 5px", borderRadius: 4 }}>
+                <span title="Prefers WhatsApp" style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 10.5, fontWeight: 600, color: C.wa, background: C.waTint, padding: "0 5px", borderRadius: 4 }}>
                   <MessageCircle style={{ width: 10, height: 10 }} /> WA
                 </span>
               )}
@@ -622,7 +613,7 @@ function UserRow({
         {tags.length > 3 && <span style={{ fontSize: 11, color: C.muted }}>+{tags.length - 3}</span>}
         {fu && (
           <span title={user.follow_up_at || ""} style={{
-            display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 650, padding: "2px 7px", borderRadius: 99,
+            display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 99,
             color: fu.tone === "bad" ? C.wineDeep : fu.tone === "warn" ? C.warn : C.ink2,
             background: fu.tone === "bad" ? C.wineTint : fu.tone === "warn" ? C.warnTint : C.sunken,
           }}>
@@ -644,30 +635,30 @@ function UserRow({
 }
 
 function StatusChip({ user }: { user: AdminUserRow }) {
-  let label = "Active", color = "#3F5937", bg = "rgba(92,122,82,0.12)";
-  if (user.deleted_at) { label = "Deleted"; color = "#555"; bg = "rgba(0,0,0,0.06)"; }
-  else if (!user.is_active) { label = "Suspended"; color = "#a0153c"; bg = "rgba(220,30,60,0.08)"; }
-  else if (user.verification_status === "approved") { label = "Verified"; color = "#2544a8"; bg = "rgba(90,120,230,0.09)"; }
-  else if (user.verification_status === "submitted") { label = "Pending"; color = "#7a5400"; bg = "rgba(200,144,32,0.15)"; }
+  // Same roles as the console Pill: good = live, info = verified, warn = waiting, bad = blocked.
+  let label = "Active", tone = "good";
+  if (user.deleted_at) { label = "Deleted"; tone = "neutral"; }
+  else if (!user.is_active) { label = "Suspended"; tone = "bad"; }
+  else if (user.verification_status === "approved") { label = "Verified"; tone = "info"; }
+  else if (user.verification_status === "submitted") { label = "Pending"; tone = "warn"; }
   return (
-    <span style={{
-      fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em",
-      padding: "2px 8px", borderRadius: 999, background: bg, color,
-    }}>{label}</span>
+    <span
+      className={tone === "neutral" ? "border border-border/70 bg-muted2 text-muted2-foreground" : `border adm-soft-${tone}`}
+      style={{ fontSize: 11, fontWeight: 500, lineHeight: "16px", padding: "1px 8px", borderRadius: 999, whiteSpace: "nowrap" }}
+    >{label}</span>
   );
 }
 
 const searchBoxStyle: React.CSSProperties = {
   display: "flex", alignItems: "center", gap: 8,
-  background: "#fff",
-  border: `1px solid ${C.lineStrong}`,
-  borderRadius: 11, padding: "8px 12px", width: 360, maxWidth: "100%",
-  boxShadow: "0 1px 2px rgba(26,10,20,0.04)",
+  background: C.surface,
+  border: `1px solid ${C.line}`,
+  borderRadius: 10, padding: "0 12px", height: 36, boxSizing: "border-box", width: 360, maxWidth: "100%",
 };
 
 const searchInputStyle: React.CSSProperties = {
   flex: 1, border: "none", outline: "none", minWidth: 0,
-  fontSize: 13.5, color: C.ink, background: "transparent",
+  fontSize: 13, color: C.ink, background: "transparent",
   fontFamily: "inherit",
 };
 
@@ -676,10 +667,10 @@ const tableHeadStyle: React.CSSProperties = {
   gridTemplateColumns: GRID,
   gap: 12,
   position: "sticky", top: 0, zIndex: 2,
-  background: "#faf7f5",
+  background: "hsl(18 40% 97%)",
   borderBottom: `1px solid ${C.line}`,
   padding: "10px 16px",
-  fontSize: 11.5, fontWeight: 650, color: C.muted,
+  fontSize: 11.5, fontWeight: 500, color: C.muted,
 };
 
 const tableRowStyle: React.CSSProperties = {
@@ -690,16 +681,3 @@ const tableRowStyle: React.CSSProperties = {
   borderBottom: `1px solid ${C.line}`,
   alignItems: "center",
 };
-
-function paginationBtn(disabled: boolean): React.CSSProperties {
-  return {
-    padding: "8px 14px", borderRadius: 10,
-    background: "#fff", border: `1px solid ${C.lineStrong}`,
-    color: disabled ? C.faint : C.ink,
-    fontSize: 13, fontWeight: 600,
-    display: "inline-flex", alignItems: "center", gap: 4,
-    cursor: disabled ? "not-allowed" : "pointer",
-    opacity: disabled ? 0.55 : 1,
-    fontFamily: "inherit",
-  };
-}

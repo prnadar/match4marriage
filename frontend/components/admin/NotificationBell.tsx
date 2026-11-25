@@ -38,7 +38,7 @@ function deriveNotifs(stats: any): AdminNotif[] {
     items.push({
       id: "pending-verifications",
       icon: <ShieldCheck className="w-4 h-4" />,
-      iconBg: "bg-amber-50", iconFg: "text-amber-600",
+      iconBg: "adm-soft-warn border", iconFg: "",
       title: `${pending} profile${pending === 1 ? "" : "s"} awaiting verification`,
       body: "Review and approve members so they appear in Browse.",
       href: "/admin/verifications",
@@ -51,7 +51,7 @@ function deriveNotifs(stats: any): AdminNotif[] {
     items.push({
       id: "open-reports",
       icon: <Flag className="w-4 h-4" />,
-      iconBg: "bg-rose-50", iconFg: "text-rose-600",
+      iconBg: "adm-soft-bad border", iconFg: "",
       title: `${openReports} open report${openReports === 1 ? "" : "s"} need attention`,
       body: "Members have flagged content or behaviour for review.",
       href: "/admin/reports",
@@ -64,7 +64,7 @@ function deriveNotifs(stats: any): AdminNotif[] {
     items.push({
       id: "new-enquiries",
       icon: <Inbox className="w-4 h-4" />,
-      iconBg: "bg-sky-50", iconFg: "text-sky-700",
+      iconBg: "adm-soft-info border", iconFg: "",
       title: `${newEnquiries} new enquir${newEnquiries === 1 ? "y" : "ies"}`,
       body: "Contact-form messages waiting for a reply.",
       href: "/admin/enquiries",
@@ -77,7 +77,7 @@ function deriveNotifs(stats: any): AdminNotif[] {
     items.push({
       id: "renewals-due",
       icon: <CreditCard className="w-4 h-4" />,
-      iconBg: "bg-emerald-50", iconFg: "text-emerald-600",
+      iconBg: "adm-soft-good border", iconFg: "",
       title: `${renewals.length} subscription${renewals.length === 1 ? "" : "s"} renewing soon`,
       body: "Renewals due within 14 days — follow up to reduce churn.",
       href: "/admin/subscriptions",
@@ -95,7 +95,7 @@ function deriveNotifs(stats: any): AdminNotif[] {
       items.push({
         id: `recent-${a.user_id ?? i}`,
         icon: <UserPlus className="w-4 h-4" />,
-        iconBg: "bg-sky-50", iconFg: "text-sky-600",
+        iconBg: "adm-soft-info border", iconFg: "",
         title: `${a.name || "A member"} submitted their profile`,
         body: a.submitted_at ? `Submitted ${timeAgo(a.submitted_at)}.` : "Awaiting your review.",
         href: "/admin/verifications",
@@ -175,7 +175,7 @@ export default function NotificationBell() {
     <div className="relative" ref={ref}>
       <button
         onClick={toggle}
-        className="w-8 h-8 rounded-md hover:bg-secondary grid place-items-center text-foreground/70 hover:text-foreground transition-colors relative"
+        className="w-8 h-8 rounded-md hover:bg-secondary grid place-items-center text-foreground/70 hover:text-foreground transition-colors relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         title="Notifications"
         aria-label={attentionCount > 0 ? `Notifications, ${attentionCount} need attention` : "Notifications"}
         aria-haspopup="true"
@@ -183,7 +183,7 @@ export default function NotificationBell() {
       >
         <Bell className="w-4 h-4" />
         {attentionCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold grid place-items-center leading-none">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold tabular-nums grid place-items-center leading-none">
             {attentionCount}
           </span>
         )}
@@ -191,7 +191,7 @@ export default function NotificationBell() {
 
       {open && (
         <div
-          className="absolute right-0 mt-2 w-[360px] max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-popover shadow-xl overflow-hidden z-50"
+          className="absolute right-0 mt-2 w-[360px] max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-popover shadow-[var(--adm-shadow-pop)] overflow-hidden z-50"
           role="menu"
         >
           {/* Header */}
@@ -199,7 +199,7 @@ export default function NotificationBell() {
             <div className="flex items-center gap-2">
               <span className="text-[13px] font-semibold text-foreground">Notifications</span>
               {attentionCount > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                <span className="px-1.5 py-0.5 rounded-full adm-soft-brand border text-[10px] font-semibold tabular-nums">
                   {attentionCount} need attention
                 </span>
               )}
@@ -217,7 +217,7 @@ export default function NotificationBell() {
 
             {loaded && notifs.length === 0 && (
               <div className="px-4 py-10 text-center">
-                <CheckCircle2 className="w-8 h-8 text-emerald-500/70 mx-auto mb-2" />
+                <CheckCircle2 className="w-8 h-8 adm-fg-good mx-auto mb-2" />
                 <p className="text-[13px] font-medium text-foreground">You're all caught up</p>
                 <p className="text-[12px] text-muted2-foreground mt-0.5">
                   No verifications, reports, or renewals need attention.
@@ -239,7 +239,7 @@ export default function NotificationBell() {
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-medium text-foreground leading-snug">{n.title}</p>
                   <p className="text-[12px] text-muted2-foreground mt-0.5 leading-snug">{n.body}</p>
-                  <span className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-semibold text-primary">
+                  <span className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-semibold adm-fg-brand">
                     {n.cta} <ArrowRight className="w-3 h-3" />
                   </span>
                 </div>

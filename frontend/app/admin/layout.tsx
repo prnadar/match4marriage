@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, MotionConfig } from "framer-motion";
 import {
   LayoutDashboard, Users, Flag, Settings, LogOut,
   ChevronRight, Menu, ShieldCheck, X, Wallet, CreditCard,
   Tag, Inbox, Search, Sparkles, HeartHandshake, MessagesSquare,
   ScrollText, PanelLeftClose, PanelLeftOpen,
+  FileCheck2, FileLock2, BookHeart, Plug,
 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { ToastProvider } from "@/components/admin/Toast";
@@ -26,29 +27,30 @@ type NavItem = {
   g?: string;
 };
 
-// Sectioned by how a bureau actually works: the daily queue first, then the
-// people work (members + matchmaking), then money, then the system.
+// Sectioned by how a bureau actually works: the daily queues first, then the
+// people work, then money, then the compliance record, then the system.
 const navSections: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "Overview",
     items: [
-      { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, g: "d", keywords: "home kpi stats overview" },
+      { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, g: "d", keywords: "home kpi stats overview today" },
+    ],
+  },
+  {
+    label: "Queues",
+    items: [
+      { href: "/admin/verifications", label: "Verifications", icon: ShieldCheck, badge: "pending_verifications", g: "v", keywords: "approve review queue id documents" },
+      { href: "/admin/enquiries",     label: "Enquiries",     icon: Inbox,       badge: "new_enquiries",         g: "e", keywords: "contact leads questions inbox" },
+      { href: "/admin/reports",       label: "Reports",       icon: Flag,        badge: "open_reports",          g: "r", keywords: "abuse safety flagged moderation" },
     ],
   },
   {
     label: "Members",
     items: [
-      { href: "/admin/verifications",  label: "Verifications",  icon: ShieldCheck,     badge: "pending_verifications", g: "v", keywords: "approve review queue id documents" },
-      { href: "/admin/users",          label: "Users",          icon: Users,           g: "u", keywords: "members people crm" },
-      { href: "/admin/matchmaking",    label: "Matchmaking",    icon: HeartHandshake,  g: "m", keywords: "suggest match introduce compatibility" },
-      { href: "/admin/communications", label: "Communications", icon: MessagesSquare,  g: "c", keywords: "email message broadcast contact" },
-    ],
-  },
-  {
-    label: "Inbox",
-    items: [
-      { href: "/admin/enquiries", label: "Enquiries", icon: Inbox, badge: "new_enquiries", g: "e", keywords: "contact leads questions" },
-      { href: "/admin/reports",   label: "Reports",   icon: Flag,  badge: "open_reports",  g: "r", keywords: "abuse safety flagged moderation" },
+      { href: "/admin/users",           label: "Users",           icon: Users,          g: "u", keywords: "members people crm" },
+      { href: "/admin/matchmaking",     label: "Matchmaking",     icon: HeartHandshake, g: "m", keywords: "suggest match introduce compatibility" },
+      { href: "/admin/communications",  label: "Communications",  icon: MessagesSquare, g: "c", keywords: "email message broadcast contact follow-up" },
+      { href: "/admin/success-stories", label: "Success stories", icon: BookHeart,      keywords: "testimonials couples weddings engaged married" },
     ],
   },
   {
@@ -60,10 +62,18 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
     ],
   },
   {
+    label: "Compliance",
+    items: [
+      { href: "/admin/consents",      label: "Consents",      icon: FileCheck2, keywords: "gdpr consent records privacy terms marketing 18+" },
+      { href: "/admin/data-requests", label: "Data requests", icon: FileLock2,  keywords: "gdpr dsar subject access erasure export delete my data" },
+      { href: "/admin/audit-log",     label: "Audit log",     icon: ScrollText, g: "l", keywords: "history actions who changed" },
+    ],
+  },
+  {
     label: "System",
     items: [
-      { href: "/admin/audit-log", label: "Audit log", icon: ScrollText, g: "l", keywords: "history actions who changed" },
-      { href: "/admin/settings",  label: "Settings",  icon: Settings,   keywords: "site admins mail seo appearance gateway" },
+      { href: "/admin/integrations", label: "Integrations", icon: Plug,     keywords: "connections api keys webhooks email sms whatsapp services status" },
+      { href: "/admin/settings",     label: "Settings",     icon: Settings, keywords: "site admins mail seo appearance gateway" },
     ],
   },
 ];
@@ -229,13 +239,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (authenticated === null) {
     return (
-      <div className="min-h-screen grid place-items-center bg-background">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 0.9, ease: "linear" }}
-          className="w-7 h-7 rounded-full border-[2.5px] border-primary/20 border-t-primary"
-          aria-label="Loading"
-        />
+      <div className="admin-console grid min-h-screen place-items-center bg-background font-body" role="status" aria-live="polite">
+        <div className="flex flex-col items-center gap-3">
+          <span className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-primary" aria-hidden />
+          <span className="text-[12.5px] text-muted2-foreground">Checking your admin access…</span>
+        </div>
       </div>
     );
   }
@@ -244,15 +252,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const railW = collapsed ? 68 : 248;
 
   return (
+    <MotionConfig reducedMotion="user">
     <ToastProvider>
-    <div className="min-h-screen flex bg-background font-body text-foreground">
+    <div className="admin-console min-h-screen flex bg-background font-body text-foreground">
+      <a
+        href="#admin-main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[120] focus:rounded-lg focus:bg-card focus:px-3 focus:py-2 focus:text-[13px] focus:font-medium focus:text-foreground focus:shadow-[var(--adm-shadow-pop)] focus:outline-none focus:ring-2 focus:ring-ring/50"
+      >
+        Skip to content
+      </a>
       {/* ── Mobile backdrop ──────────────────────────────────────────────── */}
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => setMobileOpen(false)}
-            className="lg:hidden fixed inset-0 z-40 bg-black/40"
+            className="lg:hidden fixed inset-0 z-40 bg-[#0b0509]/60"
           />
         )}
       </AnimatePresence>
@@ -261,7 +276,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside
         aria-label="Admin navigation"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex flex-col bg-sidebar text-sidebar-foreground",
+          "adm-rail fixed inset-y-0 left-0 z-50 flex flex-col border-r border-white/[0.08] text-white",
           "transition-[transform,width] duration-200 ease-out",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
           "lg:translate-x-0",
@@ -271,20 +286,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         )}
       >
         {/* Logo */}
-        <div className={cn("h-14 flex items-center gap-2.5 border-b border-sidebar-border/70", collapsed ? "lg:justify-center lg:px-0 px-4" : "px-4")}>
+        <div className={cn("h-14 flex shrink-0 items-center gap-2.5 border-b border-white/[0.08]", collapsed ? "lg:justify-center lg:px-0 px-4" : "px-4")}>
           <span className={cn("inline-flex items-center rounded-md bg-white/95 px-1.5 py-1", collapsed && "lg:px-1")}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/logo.png" alt="Match 4 Marriage" className={cn("block w-auto", collapsed ? "h-6 lg:h-5" : "h-6")} />
           </span>
           <div className={cn("flex-1 min-w-0", collapsed && "lg:hidden")}>
-            <div className="text-[11px] font-medium text-sidebar-muted">Admin console</div>
+            <div className="adm-kicker">Admin console</div>
           </div>
           <button
             onClick={() => setMobileOpen(false)}
             aria-label="Close navigation"
-            className="lg:hidden w-7 h-7 rounded-md bg-white/5 hover:bg-white/10 grid place-items-center text-sidebar-muted hover:text-white transition-colors"
+            className="lg:hidden w-9 h-9 rounded-md hover:bg-white/10 grid place-items-center text-white/70 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffd4dc]/70"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -296,25 +311,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             title="Search (⌘K)"
             aria-label="Open search"
             className={cn(
-              "flex h-9 w-full items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-[12.5px] text-sidebar-muted",
-              "transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30",
+              "flex h-9 w-full items-center gap-2 rounded-md border border-white/[0.12] bg-white/[0.04] px-2.5 text-[12.5px] text-white/65",
+              "transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffd4dc]/70",
               collapsed && "lg:justify-center lg:px-0",
             )}
           >
             <Search className="h-3.5 w-3.5 shrink-0" />
             <span className={cn("flex-1 text-left", collapsed && "lg:hidden")}>Search…</span>
-            <span className={cn("rounded border border-white/10 px-1 text-[10px] text-sidebar-muted", collapsed && "lg:hidden")}>⌘K</span>
+            <span className={cn("rounded border border-white/[0.14] px-1 text-[10px] text-white/60", collapsed && "lg:hidden")}>⌘K</span>
           </button>
         </div>
 
         {/* Nav — sectioned */}
-        <nav className={cn("flex-1 overflow-y-auto py-3 px-3 space-y-4", collapsed && "lg:px-2")}>
+        <nav data-admin-rail-scroll className={cn("flex-1 overflow-y-auto py-3.5 px-3 space-y-4", collapsed && "lg:px-2 lg:space-y-3")}>
           {navSections.map((section) => (
             <div key={section.label}>
-              <div className={cn("px-2.5 pb-1 text-[11px] font-medium text-sidebar-muted/70", collapsed && "lg:hidden")}>
+              <div className={cn("adm-kicker px-2.5 pb-1", collapsed && "lg:hidden")}>
                 {section.label}
               </div>
-              {collapsed && <div aria-hidden className="mx-2 mb-1.5 hidden h-px bg-white/[0.06] lg:block" />}
+              {collapsed && <div aria-hidden className="mx-2 mb-2 hidden h-px bg-[rgba(201,149,74,0.28)] lg:block" />}
               <ul className="space-y-0.5">
                 {section.items.map((item) => {
                   const active = pathname === item.href || pathname.startsWith(item.href + "/");
@@ -328,9 +343,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         title={collapsed ? `${item.label}${count ? ` · ${count}` : ""}` : undefined}
                         aria-current={active ? "page" : undefined}
                         className={cn(
-                          "relative flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] font-medium",
-                          "transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30",
-                          active ? "text-white" : "text-sidebar-muted hover:text-white hover:bg-white/[0.05]",
+                          "group relative flex min-h-[32px] items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium",
+                          "transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffd4dc]/70",
+                          active ? "text-white" : "text-white/65 hover:text-white hover:bg-white/[0.04]",
                           collapsed && "lg:justify-center lg:px-0",
                         )}
                       >
@@ -338,17 +353,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                           <motion.span
                             layoutId="admin-nav-active-bg"
                             transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                            className="absolute inset-0 rounded-md bg-white/[0.09] ring-1 ring-inset ring-white/[0.08]"
-                          />
+                            className="absolute inset-0 rounded-md bg-white/[0.06] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)]"
+                          >
+                            {/* the rose marker: same active signal as the member shell */}
+                            <span aria-hidden className="absolute bottom-[6px] left-0 top-[6px] w-[2px] rounded-full bg-[#dc1e3c]" />
+                          </motion.span>
                         )}
-                        <Icon className="relative z-10 h-4 w-4 shrink-0" aria-hidden />
+                        <Icon className={cn("relative z-10 h-4 w-4 shrink-0 transition-colors", active ? "text-[#ff8aa3]" : "opacity-80 group-hover:opacity-100")} strokeWidth={1.75} aria-hidden />
                         <span className={cn("relative z-10 flex-1 truncate", collapsed && "lg:hidden")}>{item.label}</span>
                         {count > 0 && (
                           <span
                             aria-label={`${count} ${item.badge === "pending_verifications" ? "pending" : item.badge === "open_reports" ? "open" : "new"}`}
                             className={cn(
                               "relative z-10 min-w-[20px] rounded-full px-1.5 text-center text-[10.5px] font-semibold tabular-nums leading-[18px]",
-                              urgent || item.badge === "open_reports" ? "bg-sidebar-accent text-white" : "bg-white/[0.12] text-white",
+                              urgent || item.badge === "open_reports" ? "bg-[#dc1e3c] text-white" : "bg-white/[0.12] text-white",
                               collapsed && "lg:absolute lg:-right-0.5 lg:-top-0.5 lg:min-w-[16px] lg:px-1 lg:text-[9.5px] lg:leading-[15px]",
                             )}
                           >
@@ -365,15 +383,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </nav>
 
         {/* Collapse toggle (desktop) */}
-        <div className="hidden px-3 pb-2 lg:block">
+        <div className="hidden shrink-0 border-t border-white/[0.08] px-3 py-2 lg:block">
           <button
             type="button"
             onClick={toggleCollapsed}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={cn(
-              "flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-[12px] text-sidebar-muted transition-colors hover:bg-white/[0.05] hover:text-white",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30",
+              "flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-[12px] text-white/60 transition-colors hover:bg-white/[0.05] hover:text-white",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffd4dc]/70",
               collapsed && "justify-center px-0",
             )}
           >
@@ -383,22 +401,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         {/* User pill at bottom */}
-        <div className={cn("border-t border-sidebar-border/70 p-3", collapsed && "lg:p-2")}>
+        <div className={cn("shrink-0 border-t border-white/[0.08] p-3", collapsed && "lg:p-2")}>
           <div className={cn("flex items-center gap-2.5 rounded-md p-1.5", collapsed && "lg:flex-col lg:gap-1.5")}>
-            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sidebar-accent text-xs font-semibold text-white" title={adminEmail || ""}>
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/[0.06] text-xs font-semibold text-[#f3c9a8] shadow-[0_0_0_1px_rgba(201,149,74,0.5)]" title={adminEmail || ""}>
               {initial}
             </div>
             <div className={cn("min-w-0 flex-1", collapsed && "lg:hidden")}>
               <div className="truncate text-[12px] font-medium" title={adminEmail || ""}>
                 {adminEmail || "Admin"}
               </div>
-              <div className="text-[11px] text-sidebar-muted">Administrator</div>
+              <div className="text-[11px] text-white/60">Administrator</div>
             </div>
             <button
               onClick={handleLogout}
               title="Sign out"
               aria-label="Sign out"
-              className="grid h-7 w-7 place-items-center rounded-md text-sidebar-muted transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+              className="grid h-8 w-8 place-items-center rounded-md text-white/65 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffd4dc]/70"
             >
               <LogOut className="h-3.5 w-3.5" />
             </button>
@@ -412,20 +430,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         style={{ ["--rail" as any]: `${railW}px` }}
       >
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/90 px-4 backdrop-blur-md lg:px-8">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/95 px-3 backdrop-blur-sm sm:gap-3 sm:px-4 lg:px-8">
           <button
             onClick={() => setMobileOpen(true)}
             aria-label="Open navigation"
-            className="lg:hidden w-9 h-9 rounded-md hover:bg-secondary grid place-items-center text-foreground"
+            className="lg:hidden w-10 h-10 -ml-1 rounded-md hover:bg-secondary grid place-items-center text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
-            <Menu className="w-4 h-4" />
+            <Menu className="w-[18px] h-[18px]" />
           </button>
 
           {/* Breadcrumb */}
           <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5">
-            <Link href="/admin/dashboard" className="text-[12.5px] text-muted2-foreground hover:text-foreground">Admin</Link>
-            <ChevronRight className="h-3 w-3 shrink-0 text-muted2-foreground/50" aria-hidden />
-            <span className="truncate text-[13px] font-medium text-foreground">{pageTitle}</span>
+            <Link href="/admin/dashboard" className="hidden rounded text-[12.5px] text-muted2-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 sm:inline">Admin</Link>
+            <ChevronRight className="hidden h-3 w-3 shrink-0 text-muted2-foreground/50 sm:block" aria-hidden />
+            <span className="truncate text-[13px] font-medium text-foreground" aria-current="page">{pageTitle}</span>
           </nav>
 
           <div className="ml-auto flex items-center gap-1.5">
@@ -443,7 +461,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               type="button"
               onClick={() => setPaletteOpen(true)}
               aria-label="Search"
-              className="grid h-9 w-9 place-items-center rounded-md text-foreground hover:bg-secondary md:hidden"
+              className="grid h-10 w-10 place-items-center rounded-md text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 md:hidden"
             >
               <Search className="h-4 w-4" />
             </button>
@@ -452,7 +470,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
             <Link
               href="/dashboard"
-              className="hidden h-8 items-center gap-1.5 rounded-md px-3 text-[12.5px] font-medium text-muted2-foreground transition-colors hover:bg-secondary hover:text-foreground md:inline-flex"
+              className="hidden h-8 items-center gap-1.5 rounded-md px-3 text-[12.5px] font-medium text-muted2-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 md:inline-flex"
               title="Switch to the member-facing app"
             >
               <Sparkles className="h-3.5 w-3.5" aria-hidden />
@@ -462,7 +480,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </header>
 
         {/* Content surface */}
-        <main id="admin-main" className="flex-1 px-4 py-5 lg:px-8 lg:py-7">
+        <main id="admin-main" tabIndex={-1} className="flex-1 px-4 py-5 focus:outline-none lg:px-8 lg:py-7">
           {children}
         </main>
       </div>
@@ -476,13 +494,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
             transition={{ duration: 0.15 }}
             role="status"
-            className="fixed bottom-4 left-1/2 z-[70] -translate-x-1/2 rounded-lg border border-border bg-card px-3 py-2 text-[12px] text-muted2-foreground shadow-[0_8px_24px_rgba(26,10,20,0.12)]"
+            className="fixed bottom-4 left-1/2 z-[70] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-border bg-card px-3 py-2 text-[12px] text-muted2-foreground shadow-[var(--adm-shadow-pop)]"
           >
-            Go to… <Kbd>D</Kbd> dashboard · <Kbd>V</Kbd> verifications · <Kbd>U</Kbd> users · <Kbd>M</Kbd> matchmaking · <Kbd>E</Kbd> enquiries · <Kbd>R</Kbd> reports · <Kbd>L</Kbd> audit log
+            <span className="font-medium text-foreground">Go to</span>
+            {allItems.filter((i) => i.g).map((i) => (
+              <span key={i.href} className="inline-flex items-center gap-1 whitespace-nowrap">
+                <Kbd>{i.g!.toUpperCase()}</Kbd> {i.label}
+              </span>
+            ))}
           </motion.div>
         )}
       </AnimatePresence>
     </div>
     </ToastProvider>
+    </MotionConfig>
   );
 }

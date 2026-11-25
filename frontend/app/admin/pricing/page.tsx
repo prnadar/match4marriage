@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { PageShell, Button, fadeUp } from "@/components/admin/PageShell";
 import { Segmented, EmptyState, Skeleton, Pill } from "@/components/admin/primitives";
+import { FIELD } from "@/components/admin/primitives";
 import ConfirmModal from "@/components/admin/ConfirmModal";
 import { useToast } from "@/components/admin/Toast";
 import { adminApi, ApiError } from "@/lib/api";
@@ -204,7 +205,7 @@ export default function AdminPricingPage() {
       }
     >
       {error && (
-        <div role="alert" className="mb-4 flex items-center gap-2 rounded-lg border border-[#F7CCD5] bg-[#FDECEF] px-3 py-2 text-[12.5px] text-[#9F1239]">
+        <div role="alert" className="mb-4 flex items-center gap-2 rounded-lg border border-[color:var(--adm-bad-line)] bg-[color:var(--adm-bad-bg)] px-3 py-2 text-[12.5px] adm-fg-bad">
           <AlertTriangle className="h-3.5 w-3.5" aria-hidden /> {error}
           <button type="button" onClick={() => setError(null)} aria-label="Dismiss error" className="ml-auto rounded p-0.5 hover:bg-white/60">
             <X className="h-3.5 w-3.5" />
@@ -256,7 +257,7 @@ export default function AdminPricingPage() {
                 onDragEnd={() => { setDragId(null); setOverId(null); }}
                 className={[
                   "relative flex flex-col overflow-hidden rounded-xl border bg-card p-4 transition-[border-color,box-shadow,opacity] duration-150",
-                  isOver ? "border-primary/50 shadow-[0_4px_16px_rgba(26,10,20,0.10)]" : "border-border/70 shadow-[0_1px_2px_rgba(26,10,20,0.04)]",
+                  isOver ? "border-primary/50 shadow-[0_4px_16px_rgba(26,10,20,0.10)]" : "border-border/70 shadow-[var(--adm-shadow-card)]",
                   isDragging ? "opacity-50" : p.is_active ? "" : "opacity-75",
                 ].join(" ")}
               >
@@ -361,9 +362,7 @@ export default function AdminPricingPage() {
 
 // ─── Editor dialog ───────────────────────────────────────────────────────────
 
-const inputCls =
-  "h-9 w-full rounded-lg border border-border bg-card px-3 text-[13.5px] text-foreground outline-none " +
-  "focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-60";
+const inputCls = `h-9 ${FIELD}`;
 
 function PlanEditor({
   plan, onClose, onSaved,
@@ -460,7 +459,7 @@ function PlanEditor({
             <p className="mb-5 text-[12.5px] text-muted2-foreground">Plans control what shows on your public pricing page.</p>
 
             {err && (
-              <div role="alert" className="mb-4 rounded-lg border border-[#F7CCD5] bg-[#FDECEF] px-3 py-2 text-[12.5px] text-[#9F1239]">{err}</div>
+              <div role="alert" className="mb-4 rounded-lg border border-[color:var(--adm-bad-line)] bg-[color:var(--adm-bad-bg)] px-3 py-2 text-[12.5px] adm-fg-bad">{err}</div>
             )}
 
             <div className="grid gap-4">
@@ -561,7 +560,7 @@ function PlanEditor({
                         type="button"
                         onClick={() => setDraft({ ...draft, features: draft.features.filter((_, j) => j !== i) })}
                         aria-label={`Remove feature ${i + 1}`}
-                        className="grid w-9 shrink-0 place-items-center rounded-lg border border-border text-muted2-foreground hover:bg-[#FDECEF] hover:text-[#9F1239] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                        className="grid w-9 shrink-0 place-items-center rounded-lg border border-border text-muted2-foreground hover:bg-[color:var(--adm-bad-bg)] hover:text-[color:var(--adm-bad)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
@@ -577,12 +576,12 @@ function PlanEditor({
                 </div>
               </Field>
 
-              <label className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 text-[13px] ${draft.is_active ? "border-[#CFE0D3] bg-[#EAF2EB]/60" : "border-border bg-secondary/40"}`}>
+              <label className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 text-[13px] ${draft.is_active ? "border-[color:var(--adm-good-line)] bg-[color:var(--adm-good-bg)]" : "border-border bg-secondary/40"}`}>
                 <input
                   type="checkbox"
                   checked={draft.is_active}
                   onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })}
-                  className="h-4 w-4 accent-[#DC1E3C]"
+                  className="h-4 w-4 accent-[hsl(var(--primary))]"
                 />
                 <span className="font-medium text-foreground">
                   {draft.is_active ? "Live, visible on the public pricing page" : "Hidden, not shown to members"}

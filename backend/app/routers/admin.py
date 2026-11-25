@@ -195,6 +195,12 @@ async def list_users(
     # to keep an unbounded export from OOMing the worker.
     if (format or "").lower() == "csv":
         rows = (await db.execute(base.order_by(User.created_at.desc()).limit(50_000))).all()
+        # A bulk export of contact details is always worth an audit row.
+        await record_admin_action(
+            db, current_user, "access.export_members", tenant_id=tenant_uuid,
+            target_type="export", target_label="users.csv",
+            details={"rows": len(rows), "q": q, "status_filter": status_filter, "tag": tag, "plan": plan},
+        )
         return _stream_csv(
             filename="users.csv",
             cols=USER_CSV_COLS,
@@ -363,6 +369,14 @@ async def get_user_detail(
         raise HTTPException(status_code=404, detail="User not found")
     u, p = row
 
+    # Audit of views: this response carries the member's contact details.
+    # Throttled (one row per admin/member per 15 min) and never raises.
+    from app.services.view_audit import record_member_view
+    await record_member_view(
+        db, current_user, "contact", tenant_id=tenant_uuid, user_id=u.id,
+        label=u.email or u.membership_number, surface="member_page",
+    )
+
     base = _serialize_user(u, p)
     profile = ProfileRead.model_validate(p, from_attributes=True).model_dump(mode="json") if p else None
 
@@ -517,6 +531,18 @@ async def restore_user(
     )).scalar_one_or_none()
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
+    # An account the MEMBER deleted (POST /auth/delete-account) has had its
+    # Firebase sign-in removed and its email/phone moved into the
+    # account_settings.deletion tombstone. Flipping deleted_at back would leave
+    # a contactless record nobody can sign in to — and overrides an erasure
+    # request. Only staff soft-deletes are restorable here.
+    from app.routers.auth import _read_account_settings
+    _deletion = (await _read_account_settings(db, u.id)).get("deletion")
+    if u.deleted_at is not None and isinstance(_deletion, dict) and (_deletion.get("by") or "self") == "self":
+        raise HTTPException(
+            status_code=409,
+            detail="This member deleted their own account, so it can't be restored — their sign-in and contact details were removed. They would need to register again.",
+        )
     u.deleted_at = None
     u.is_active = True
     prof = (await db.execute(

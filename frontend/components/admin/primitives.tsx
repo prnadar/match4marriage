@@ -9,7 +9,7 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { ArrowDownRight, ArrowUpRight, Search, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Search, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Formatting helpers ──────────────────────────────────────────────────────
@@ -30,6 +30,14 @@ export function relTime(iso?: string | null): string {
   const days = Math.floor(hrs / 24);
   if (days < 30) return wrap(`${days}d`);
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: days > 300 ? "numeric" : undefined });
+}
+
+/** UK short date: "4 Mar 2026". */
+export function formatDate(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export function formatDateTime(iso?: string | null): string {
@@ -112,14 +120,24 @@ export function Panel({
 
 export type Tone = "neutral" | "good" | "warn" | "bad" | "info" | "brand";
 
-const PILL_TONE: Record<Tone, string> = {
-  neutral: "bg-muted2 text-muted2-foreground border-border/60",
-  good:    "bg-[#EAF2EB] text-[#2F5A3A] border-[#CFE0D3]",
-  warn:    "bg-[#FBF0DA] text-[#7A5200] border-[#EEDBB0]",
-  bad:     "bg-[#FDECEF] text-[#9F1239] border-[#F7CCD5]",
-  info:    "bg-[#EBF0FB] text-[#26437F] border-[#D0DBF3]",
-  brand:   "bg-primary/10 text-primary border-primary/20",
+/** One tone vocabulary for the whole console (values live in globals.css). */
+export const TONE_SOFT: Record<Tone, string> = {
+  neutral: "bg-muted2 text-muted2-foreground border-border/70",
+  good:    "adm-soft-good",
+  warn:    "adm-soft-warn",
+  bad:     "adm-soft-bad",
+  info:    "adm-soft-info",
+  brand:   "adm-soft-brand",
 };
+export const TONE_TEXT: Record<Tone, string> = {
+  neutral: "text-muted2-foreground",
+  good:    "adm-fg-good",
+  warn:    "adm-fg-warn",
+  bad:     "adm-fg-bad",
+  info:    "adm-fg-info",
+  brand:   "adm-fg-brand",
+};
+const PILL_TONE = TONE_SOFT;
 
 export function Pill({ tone = "neutral", children, className, dot }: {
   tone?: Tone; children: React.ReactNode; className?: string; dot?: boolean;
@@ -205,8 +223,8 @@ export const SearchField = React.forwardRef<HTMLInputElement, {
 }>(function SearchField({ value, onChange, placeholder = "Search…", className, autoFocus, ariaLabel }, ref) {
   return (
     <label className={cn(
-      "flex h-9 items-center gap-2 rounded-lg border border-border/80 bg-card px-3",
-      "focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15 transition-shadow",
+      "flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3",
+      "transition-shadow focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-ring/20",
       className,
     )}>
       <Search className="h-3.5 w-3.5 shrink-0 text-muted2-foreground" aria-hidden />
@@ -218,7 +236,7 @@ export const SearchField = React.forwardRef<HTMLInputElement, {
         aria-label={ariaLabel || placeholder}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted2-foreground/80 outline-none [&::-webkit-search-cancel-button]:hidden"
+        className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted2-foreground outline-none [&::-webkit-search-cancel-button]:hidden"
       />
       {value && (
         <button type="button" onClick={() => onChange("")} aria-label="Clear search"
@@ -274,7 +292,7 @@ export function Kbd({ children, className }: { children: React.ReactNode; classN
   return (
     <kbd className={cn(
       "inline-flex h-5 min-w-[20px] items-center justify-center rounded border border-border bg-card px-1",
-      "font-sans text-[10.5px] font-medium text-muted2-foreground shadow-[0_1px_0_rgba(26,10,20,0.06)]",
+      "font-body text-[10.5px] font-medium text-muted2-foreground shadow-[0_1px_0_rgba(26,10,20,0.06)]",
       className,
     )}>
       {children}
@@ -300,7 +318,7 @@ export function Delta({ value, goodWhen = "up", suffix, className }: {
     <span className={cn("inline-flex items-center gap-1 text-[11.5px] text-muted2-foreground", className)}>
       <span className={cn(
         "inline-flex items-center gap-0.5 font-semibold tabular-nums",
-        good === null ? "text-muted2-foreground" : good ? "text-[#2F6B3F]" : "text-[#B42343]",
+        good === null ? "text-muted2-foreground" : good ? "adm-fg-good" : "adm-fg-bad",
       )}>
         {!flat && (up ? <ArrowUpRight className="h-3 w-3" aria-hidden /> : <ArrowDownRight className="h-3 w-3" aria-hidden />)}
         <span className="sr-only">{flat ? "No change" : up ? "Up" : "Down"}</span>
@@ -332,4 +350,140 @@ export function Avatar({ name, url, size = 32, className }: { name: string; url?
 
 export function Toolbar({ children, className }: { children: React.ReactNode; className?: string }) {
   return <div className={cn("mb-4 flex flex-wrap items-center gap-2", className)}>{children}</div>;
+}
+
+// ─── Shared class recipes (so hand-built tables match DataTable) ────────────
+
+/** The card that wraps a table or list. */
+export const TABLE_CARD = "overflow-hidden rounded-xl border border-border/70 bg-card shadow-[var(--adm-shadow-card)]";
+/** Header row of a table / grid list. */
+export const TABLE_HEAD = "border-b border-border/70 bg-secondary/50 text-left text-[11.5px] font-medium text-muted2-foreground";
+/** Body row. */
+export const TABLE_ROW = "border-b border-border/50 last:border-0 transition-colors hover:bg-secondary/40";
+/** Text input / textarea / select surface. */
+export const FIELD = [
+  "w-full rounded-lg border border-border bg-card px-3 text-[13px] text-foreground",
+  "placeholder:text-muted2-foreground transition-shadow",
+  "focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-ring/20",
+  "disabled:cursor-not-allowed disabled:opacity-60",
+].join(" ");
+
+// ─── Select (native, styled to match SearchField / Segmented) ───────────────
+
+export function Select({
+  value, onChange, children, ariaLabel, id, size = "md", className, disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  children: React.ReactNode;
+  ariaLabel?: string;
+  id?: string;
+  size?: "sm" | "md";
+  className?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <span className={cn("relative inline-flex", className)}>
+      <select
+        id={id}
+        value={value}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(
+          "w-full appearance-none rounded-lg border border-border bg-card pl-2.5 pr-8 text-[12.5px] text-foreground",
+          "transition-shadow focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-ring/20",
+          "disabled:cursor-not-allowed disabled:opacity-60",
+          size === "sm" ? "h-8" : "h-9",
+        )}
+      >
+        {children}
+      </select>
+      <ChevronDown aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted2-foreground" />
+    </span>
+  );
+}
+
+// ─── Error state (one shape for "couldn't load", inline or in a card) ───────
+
+export function ErrorState({ title = "Couldn't load this", message, onRetry, compact, className }: {
+  title?: React.ReactNode;
+  message?: React.ReactNode;
+  onRetry?: () => void;
+  /** One-line banner (inside forms / above content) instead of a centred block. */
+  compact?: boolean;
+  className?: string;
+}) {
+  if (compact) {
+    return (
+      <div role="alert" className={cn("adm-soft-bad flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-[12.5px]", className)}>
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span className="min-w-0 flex-1">{message || title}</span>
+        {onRetry && (
+          <button type="button" onClick={onRetry} className="rounded font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+            Try again
+          </button>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div role="alert" className={cn("flex flex-col items-center px-4 py-10 text-center", className)}>
+      <div className="adm-soft-bad mb-3 grid h-10 w-10 place-items-center rounded-full border">
+        <AlertTriangle className="h-4 w-4" aria-hidden />
+      </div>
+      <p className="text-[13px] font-medium text-foreground">{title}</p>
+      {message && <p className="mt-1 max-w-sm text-[12.5px] text-muted2-foreground">{message}</p>}
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-4 inline-flex h-8 items-center rounded-lg border border-border bg-card px-3 text-[12.5px] font-medium text-foreground transition-colors hover:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Pagination (table footer: "1–50 of 312" + previous / next) ─────────────
+
+export function Pagination({ page, pageCount, onPage, total, pageSize, className, bare }: {
+  /** 1-based current page. */
+  page: number;
+  pageCount: number;
+  onPage: (page: number) => void;
+  /** With pageSize, shows the "x–y of total" range. */
+  total?: number;
+  pageSize?: number;
+  className?: string;
+  /** Drop the top border + padding (when not used as a card footer). */
+  bare?: boolean;
+}) {
+  const btn = "inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-35";
+  const range = typeof total === "number" && pageSize
+    ? `${total === 0 ? 0 : ((page - 1) * pageSize + 1).toLocaleString("en-GB")}–${Math.min(total, page * pageSize).toLocaleString("en-GB")} of ${total.toLocaleString("en-GB")}`
+    : null;
+  return (
+    <nav
+      aria-label="Pagination"
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-3 text-[12px] text-muted2-foreground",
+        !bare && "border-t border-border/70 px-3 py-2",
+        className,
+      )}
+    >
+      <span className="tabular-nums">{range || `Page ${page} of ${pageCount}`}</span>
+      <div className="flex items-center gap-1">
+        {range && <span className="mr-1 hidden tabular-nums sm:inline">Page {page} of {pageCount}</span>}
+        <button type="button" className={btn} disabled={page <= 1} onClick={() => onPage(Math.max(1, page - 1))}>
+          <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Previous
+        </button>
+        <button type="button" className={btn} disabled={page >= pageCount} onClick={() => onPage(Math.min(pageCount, page + 1))}>
+          Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
+    </nav>
+  );
 }

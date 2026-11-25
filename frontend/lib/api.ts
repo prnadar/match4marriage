@@ -655,3 +655,102 @@ export const adminCrmApi = {
   // Mail templates (managed in Settings → admin_cms.py) for "start from template".
   listTemplates: () => api.get(`/api/v1/admin/mail-templates`),
 };
+
+/* ── Admin member tools + compliance console ──────────────────────────────
+ * Backend: app/routers/admin_members.py (Member 360, membership management,
+ * edit-on-behalf) and app/routers/admin_compliance.py (consent register, data
+ * requests, integrations health). */
+
+export type MembershipAction = "grant" | "extend" | "change" | "end";
+export type PaidPlan = "silver" | "gold" | "platinum";
+export type PaymentMethod = "cash" | "bank_transfer" | "card_terminal" | "cheque" | "complimentary" | "other";
+
+export interface MembershipChangeBody {
+  action: MembershipAction;
+  plan?: PaidPlan;
+  days?: number;
+  /** YYYY-MM-DD — the last day of the paid period (instead of `days`). */
+  period_end?: string;
+  amount_pence?: number;
+  payment_method?: PaymentMethod;
+  payment_reference?: string;
+  refunded?: boolean;
+  reason: string;
+  notify_member?: boolean;
+  /** Required by the server for anything that removes access (end, downgrade). */
+  confirm?: boolean;
+}
+
+export type ConsentType = "terms_privacy" | "sensitive_data" | "marketing_email";
+export type ConsentMemberStatus = "confirmed" | "not_confirmed" | "outdated" | "incomplete" | "never";
+
+export interface ConsentEventParams {
+  consent_type?: ConsentType | "";
+  granted?: boolean;
+  /** "current", "older" or an exact policy version. */
+  version?: string;
+  source?: string;
+  user_id?: string;
+  q?: string;
+  days?: number;
+  page?: number;
+  limit?: number;
+}
+
+export interface ConsentMemberParams {
+  status?: ConsentMemberStatus | "";
+  marketing?: "in" | "out" | "none" | "";
+  q?: string;
+  page?: number;
+  limit?: number;
+}
+
+export type DataRequestKind = "deleted_by_member" | "deleted_by_admin" | "deactivated_by_member";
+
+export const adminMembersApi = {
+  // Member 360 (read-only)
+  overview: (userId: string) => api.get(`/api/v1/admin/members/${userId}/overview`),
+
+  // Membership management (offline payments)
+  getMembership: (userId: string) => api.get(`/api/v1/admin/members/${userId}/membership`),
+  changeMembership: (userId: string, body: MembershipChangeBody) =>
+    api.post(`/api/v1/admin/members/${userId}/membership`, body),
+
+  // Edit a safe subset of the profile on the member's behalf
+  getEditableProfile: (userId: string) => api.get(`/api/v1/admin/members/${userId}/profile`),
+  editProfile: (userId: string, body: { changes: Record<string, string | number | null>; reason: string; notify_member?: boolean }) =>
+    api.patch(`/api/v1/admin/members/${userId}/profile`, body),
+
+  // Consent register
+  consentSummary: () => api.get("/api/v1/admin/consents/summary"),
+  consentEvents: (params: ConsentEventParams = {}) => api.get(`/api/v1/admin/consents${qs({ ...params })}`),
+  consentMembers: (params: ConsentMemberParams = {}) => api.get(`/api/v1/admin/consents/members${qs({ ...params })}`),
+  memberConsents: (userId: string) => api.get(`/api/v1/admin/consents/member/${userId}`),
+  exportConsentEventsCsvUrl: (params: ConsentEventParams = {}) =>
+    `/api/v1/admin/consents${qs({ ...params, page: undefined, limit: undefined, format: "csv" })}`,
+  exportConsentMembersCsvUrl: (params: ConsentMemberParams = {}) =>
+    `/api/v1/admin/consents/members${qs({ ...params, page: undefined, limit: undefined, format: "csv" })}`,
+
+  // Data requests (deactivated / deleted accounts)
+  dataRequests: (params: { kind?: DataRequestKind | ""; q?: string } = {}) =>
+    api.get(`/api/v1/admin/data-requests${qs({ ...params })}`),
+  exportMemberData: (userId: string) => api.get(`/api/v1/admin/data-requests/${userId}/export`),
+  restoreAccount: (userId: string, reason: string) =>
+    api.post(`/api/v1/admin/data-requests/${userId}/restore`, { reason }),
+
+  // Integrations health
+  integrations: (live = false) => api.get(`/api/v1/admin/integrations${qs({ live: live ? "true" : undefined })}`),
+};
+
+/** Save a JSON object as a file (used for the member data export). */
+export function downloadJson(data: unknown, filename: string): void {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

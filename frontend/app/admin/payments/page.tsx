@@ -4,11 +4,14 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  ChevronLeft, ChevronRight, AlertTriangle, Wallet,
+  Wallet,
   ArrowDownRight, ArrowUpRight, Download, CalendarDays, Landmark,
 } from "lucide-react";
 import { PageShell, StatCard, Button, fadeUp } from "@/components/admin/PageShell";
-import { Segmented, SearchField, EmptyState, SkeletonRows, Pill, relTime, formatDateTime } from "@/components/admin/primitives";
+import {
+  Segmented, SearchField, EmptyState, SkeletonRows, Pill, Select, Pagination, ErrorState, TABLE_CARD, TABLE_HEAD, TABLE_ROW,
+  relTime, formatDateTime,
+} from "@/components/admin/primitives";
 import { useToast } from "@/components/admin/Toast";
 import { adminApi, ApiError, downloadCsv } from "@/lib/api";
 import { formatGBP } from "@/lib/plans";
@@ -156,25 +159,19 @@ export default function AdminPaymentsPage() {
           value={qLive}
           onChange={setQLive}
           placeholder="Search by member name or email…"
-          className="w-full max-w-xs"
+          className="w-full sm:max-w-xs"
         />
         <Segmented<DirFilter> ariaLabel="Direction" layoutId="payments-dir-pill" size="sm" options={DIR_FILTERS} value={dir} onChange={setDir} />
         <Segmented<RangeFilter> ariaLabel="Date range" layoutId="payments-range-pill" size="sm" options={RANGE_FILTERS} value={range} onChange={setRange} />
-        <label className="sr-only" htmlFor="payments-gateway">Gateway</label>
-        <select
-          id="payments-gateway"
-          value={gw}
-          onChange={(e) => setGw(e.target.value as GwFilter)}
-          className="h-8 rounded-lg border border-border/80 bg-card px-2.5 text-[12.5px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-        >
+        <Select id="payments-gateway" ariaLabel="Gateway" size="sm" value={gw} onChange={(v) => setGw(v as GwFilter)}>
           {GW_FILTERS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
-        </select>
+        </Select>
       </motion.div>
 
-      <motion.div variants={fadeUp} className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]">
+      <motion.div variants={fadeUp} className={TABLE_CARD}>
         <div className="overflow-x-auto" data-admin-scroll>
           <div className="min-w-[760px]">
-            <div className={`${GRID} border-b border-border/60 bg-secondary/40 px-4 py-2.5 text-[11.5px] font-medium text-muted2-foreground`}>
+            <div className={`${GRID} ${TABLE_HEAD} px-4 py-2.5`}>
               <div>Member</div>
               <div>Description</div>
               <div>Gateway</div>
@@ -186,10 +183,7 @@ export default function AdminPaymentsPage() {
             {loading ? (
               <div className="p-3"><SkeletonRows rows={6} /></div>
             ) : error ? (
-              <div role="alert" className="flex items-center gap-2 px-4 py-5 text-[13px] text-[#9F1239]">
-                <AlertTriangle className="h-4 w-4" aria-hidden /> {error}
-                <Button size="sm" variant="ghost" onClick={load}>Retry</Button>
-              </div>
+              <ErrorState title="Couldn't load payments" message={error} onRetry={load} />
             ) : items.length === 0 ? (
               <EmptyState
                 icon={Wallet}
@@ -203,21 +197,9 @@ export default function AdminPaymentsPage() {
             )}
           </div>
         </div>
+        {pageCount > 1 && <Pagination page={page} pageCount={pageCount} onPage={setPage} total={total} pageSize={limit} />}
       </motion.div>
 
-      {pageCount > 1 && (
-        <motion.nav variants={fadeUp} aria-label="Pagination" className="mt-4 flex items-center justify-center gap-3">
-          <Button size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
-            <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
-          </Button>
-          <span className="text-[12.5px] text-muted2-foreground tabular-nums">
-            Page <strong className="text-foreground">{page}</strong> of {pageCount}
-          </span>
-          <Button size="sm" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount}>
-            Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-          </Button>
-        </motion.nav>
-      )}
     </PageShell>
   );
 }
@@ -226,9 +208,9 @@ function TxRow({ tx }: { tx: PaymentRow }) {
   const isCredit = tx.amount >= 0;
   const amountStr = `${isCredit ? "+" : "−"}${formatGBP(Math.abs(tx.amount))}`;
   return (
-    <div className={`${GRID} border-b border-border/40 px-4 py-3 last:border-0 hover:bg-secondary/30`}>
+    <div className={`${GRID} ${TABLE_ROW} px-4 py-3`}>
       <div className="flex min-w-0 items-center gap-2.5">
-        <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${isCredit ? "border-[#CFE0D3] bg-[#EAF2EB] text-[#2F5A3A]" : "border-[#F7CCD5] bg-[#FDECEF] text-[#9F1239]"}`}>
+        <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${isCredit ? "adm-soft-good" : "adm-soft-bad"}`}>
           {isCredit ? <ArrowDownRight className="h-3.5 w-3.5" aria-hidden /> : <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />}
           <span className="sr-only">{isCredit ? "Credit" : "Debit"}</span>
         </span>
@@ -252,7 +234,7 @@ function TxRow({ tx }: { tx: PaymentRow }) {
         {tx.gateway ? <Pill tone="neutral">{tx.gateway.toUpperCase()}</Pill> : <span className="text-[11px] text-muted2-foreground">—</span>}
       </div>
 
-      <div className={`text-right text-[13px] font-semibold tabular-nums ${isCredit ? "text-[#2F5A3A]" : "text-[#9F1239]"}`}>
+      <div className={`text-right text-[13px] font-semibold tabular-nums ${isCredit ? "adm-fg-good" : "adm-fg-bad"}`}>
         {amountStr}
       </div>
 

@@ -1,7 +1,38 @@
 import type { Metadata, Viewport } from "next";
 import dynamic from "next/dynamic";
+import { Source_Serif_4, Inter } from "next/font/google";
 import QueryProvider from "@/lib/providers/query-provider";
 import "./globals.css";
+
+// ── Brand typography (see frontend/DESIGN.md → Typography) ──────────────
+// Two families, self-hosted by next/font: the files are downloaded at build
+// time and served from our own origin, so no visitor request (or IP address)
+// goes to Google Fonts. Both are variable fonts, so one file per style covers
+// every weight in use. Only the Latin subset is preloaded; Latin Extended
+// (ā ī ū ṭ ḍ ṇ ś ṣ … for transliterated Indian names) is fetched on demand.
+//
+//   Source Serif 4 — the display serif (headings, names, the italic accent).
+//                    The optical-size axis keeps 17px card titles sturdy and
+//                    42–58px headlines fine.
+//   Inter          — everything else: body, navigation, buttons, tables.
+//
+// They are exposed as --m4m-face-serif / --m4m-face-sans on <html>; the
+// tokens in globals.css (--font-display, --font-nav, --font-body and the
+// legacy aliases) and tailwind's fontFamily keys resolve to them.
+const faceSerif = Source_Serif_4({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  axes: ["opsz"],
+  display: "swap",
+  variable: "--m4m-face-serif",
+  fallback: ["Georgia", "Times New Roman", "serif"],
+});
+const faceSans = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--m4m-face-sans",
+  fallback: ["system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
+});
 
 const Preloader = dynamic(() => import("@/components/Preloader"), { ssr: false });
 const AnimatedHeartCursor = dynamic(
@@ -84,24 +115,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${faceSerif.variable} ${faceSans.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/*
-          Brand typography stack (Match4Marriage):
-            Cinzel      — primary heading serif (logo wordmark + major sections)
-            Montserrat  — secondary headings, navigation, CTAs
-            Open Sans   — body text — highly legible sans-serif
-            Inter       — UI utility (forms, dashboards) — close cousin to Open Sans
-            Great Vibes — script accent retained for hero "Become One" motif
-            Fraunces / Cormorant / Playfair / Poppins / Lato — kept as fallbacks
-            for legacy editorial pages still referencing them.
-        */}
-        <link
-          href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800&family=Montserrat:wght@300;400;500;600;700&family=Open+Sans:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Great+Vibes&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700;9..144,800&family=Cormorant:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Poppins:wght@300;400;500;600;700&family=Lato:wght@300;400;700&display=swap"
-          rel="stylesheet"
-        />
         {/*
           Fluid app scaling. Every desktop lays the authenticated app out at a
           fixed 1680px "design width" and scales it to fit the actual viewport,

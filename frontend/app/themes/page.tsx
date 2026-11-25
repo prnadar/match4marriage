@@ -180,13 +180,13 @@ export default function ThemesPage() {
   const active = themes.find((t) => t.id === selected)!;
 
   return (
-    <div style={{ background: "#080808", minHeight: "100vh", fontFamily: "'Montserrat', sans-serif" }}>
+    <div style={{ background: "#080808", minHeight: "100vh", fontFamily: "var(--font-nav)" }}>
       {/* Header */}
       <div style={{ padding: "40px 32px 24px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <p style={{ color: "rgba(255,255,255,0.3)", fontSize: "11px", letterSpacing: "3px", textTransform: "uppercase", marginBottom: "10px" }}>
           UI Pro Max · Design System
         </p>
-        <h1 style={{ fontFamily: "'Cormorant', Georgia, serif", color: "#fff", fontSize: "clamp(1.8rem,4vw,2.8rem)", fontWeight: 300, margin: 0 }}>
+        <h1 style={{ fontFamily: "var(--font-display)", color: "#fff", fontSize: "clamp(1.8rem,4vw,2.8rem)", fontWeight: 300, margin: 0 }}>
           Choose Your Colour Scheme
         </h1>
         <p style={{ color: "rgba(255,255,255,0.35)", fontSize: "14px", marginTop: "8px" }}>
@@ -263,7 +263,7 @@ function ThemePreview({ theme: t }: { theme: (typeof themes)[0] }) {
       <div style={{ background: t.navBg, backdropFilter: "blur(24px)", padding: "0 28px", height: "56px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${t.glassBorder}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <Heart size={16} color={t.accent} fill={t.accent} />
-          <span style={{ fontFamily: "'Cormorant', serif", color: t.text, fontSize: "18px", fontWeight: 600 }}>Match4Marriage</span>
+          <span style={{ fontFamily: "var(--font-display)", color: t.text, fontSize: "18px", fontWeight: 600 }}>Match4Marriage</span>
         </div>
         <div style={{ display: "flex", gap: "10px" }}>
           <div style={{ padding: "6px 18px", borderRadius: "99px", border: `1px solid ${ghostBorder}`, color: ghostColor, fontSize: "12px", cursor: "pointer" }}>
@@ -296,7 +296,7 @@ function ThemePreview({ theme: t }: { theme: (typeof themes)[0] }) {
         </p>
 
         {/* Headline */}
-        <h2 style={{ fontFamily: "'Cormorant', Georgia, serif", fontWeight: 300, lineHeight: 1.1, marginBottom: "16px", fontSize: "clamp(2rem, 5vw, 3.6rem)", color: t.text }}>
+        <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 300, lineHeight: 1.1, marginBottom: "16px", fontSize: "clamp(2rem, 5vw, 3.6rem)", color: t.text }}>
           Find Your{" "}
           <span style={{ background: t.headingGrad, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", fontStyle: "italic", fontWeight: 600 }}>
             Life Partner
@@ -323,7 +323,7 @@ function ThemePreview({ theme: t }: { theme: (typeof themes)[0] }) {
         <div style={{ display: "inline-flex", gap: "32px", padding: "20px 32px", borderRadius: "16px", background: t.glass, border: `1px solid ${t.glassBorder}`, backdropFilter: "blur(20px)", flexWrap: "wrap", justifyContent: "center" }}>
           {[["2M+","Verified Profiles"],["50K+","Engagements"],["28","States"],["99.9%","Uptime"]].map(([val, lbl], i) => (
             <div key={lbl} style={{ textAlign: "center" }}>
-              <p style={{ fontFamily: "'Cormorant', serif", fontSize: "26px", fontWeight: 700, background: t.headingGrad, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", margin: 0 }}>{val}</p>
+              <p style={{ fontFamily: "var(--font-display)", fontSize: "26px", fontWeight: 700, background: t.headingGrad, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", margin: 0 }}>{val}</p>
               <p style={{ color: t.textMuted, fontSize: "10px", marginTop: "2px", letterSpacing: "0.5px" }}>{lbl}</p>
             </div>
           ))}
@@ -341,7 +341,7 @@ function ThemePreview({ theme: t }: { theme: (typeof themes)[0] }) {
             <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: `${t.primary}55`, border: `1px solid ${t.glassBorder}`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "12px" }}>
               <Icon size={16} color={t.accent} />
             </div>
-            <p style={{ fontFamily: "'Cormorant', serif", color: t.text, fontSize: "15px", fontWeight: 600, marginBottom: "6px" }}>{title}</p>
+            <p style={{ fontFamily: "var(--font-display)", color: t.text, fontSize: "15px", fontWeight: 600, marginBottom: "6px" }}>{title}</p>
             <p style={{ color: t.textMuted, fontSize: "11px", lineHeight: 1.6 }}>{desc}</p>
           </div>
         ))}
@@ -351,7 +351,7 @@ function ThemePreview({ theme: t }: { theme: (typeof themes)[0] }) {
       <div style={{ background: t.bg, padding: "0 28px 40px" }}>
         <div style={{ borderRadius: "16px", padding: "36px", textAlign: "center", background: `linear-gradient(135deg, ${t.primary}40, ${t.accent}18)`, border: `1px solid ${t.glassBorder}` }}>
           <Heart size={28} color={t.accent} fill={`${t.accent}44`} style={{ margin: "0 auto 16px" }} />
-          <h3 style={{ fontFamily: "'Cormorant', serif", color: t.text, fontSize: "clamp(1.4rem, 3vw, 2rem)", fontWeight: 300, marginBottom: "8px" }}>
+          <h3 style={{ fontFamily: "var(--font-display)", color: t.text, fontSize: "clamp(1.4rem, 3vw, 2rem)", fontWeight: 300, marginBottom: "8px" }}>
             Your story begins <span style={{ background: t.headingGrad, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", fontStyle: "italic", fontWeight: 600 }}>today</span>
           </h3>
           <p style={{ color: t.textMuted, fontSize: "13px", marginBottom: "24px" }}>Join 2 million verified profiles. Free forever.</p>

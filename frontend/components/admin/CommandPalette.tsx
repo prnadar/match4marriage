@@ -180,7 +180,7 @@ export default function CommandPalette({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.99 }}
             transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-            className="relative mx-auto mt-[10vh] w-[calc(100%-32px)] max-w-[640px] overflow-hidden rounded-2xl border border-border bg-card shadow-[0_24px_60px_-12px_rgba(26,10,20,0.35)]"
+            className="relative mx-auto mt-[10vh] w-[calc(100%-32px)] max-w-[640px] overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--adm-shadow-modal)]"
           >
             <div className="flex items-center gap-3 border-b border-border/70 px-4">
               {loading ? <Loader2 className="h-4 w-4 animate-spin text-muted2-foreground" aria-hidden /> : <Search className="h-4 w-4 text-muted2-foreground" aria-hidden />}
@@ -192,13 +192,13 @@ export default function CommandPalette({
                 aria-label="Search"
                 aria-controls="palette-list"
                 aria-activedescendant={flat[active] ? `pal-${flat[active].id}` : undefined}
-                className="h-14 min-w-0 flex-1 bg-transparent text-[15px] text-foreground outline-none placeholder:text-muted2-foreground/80"
+                className="h-14 min-w-0 flex-1 bg-transparent text-[15px] text-foreground outline-none placeholder:text-muted2-foreground"
               />
               <Kbd>Esc</Kbd>
             </div>
 
             <div ref={listRef} id="palette-list" role="listbox" data-admin-scroll className="max-h-[min(60vh,460px)] overflow-y-auto p-2">
-              {error && <p className="px-3 py-2 text-[12.5px] text-[#B42343]">{error}</p>}
+              {error && <p className="px-3 py-2 text-[12.5px] adm-fg-bad">{error}</p>}
               {groups.length === 0 && !loading && (
                 <div className="px-3 py-10 text-center">
                   <p className="text-[13px] font-medium text-foreground">No results for “{term}”</p>

@@ -135,7 +135,7 @@ export default function DataTable<T extends Record<string, any>>({
   const showToolbar = searchable || filters || onExport || (bulkActions && selected.size > 0);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]">
+    <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-[var(--adm-shadow-card)]">
       {showToolbar && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2.5">
           {searchable && (
@@ -158,7 +158,7 @@ export default function DataTable<T extends Record<string, any>>({
                     onClick={() => action.onClick(Array.from(selected))}
                     className={`h-7 rounded-md px-2.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
                       action.variant === "danger"
-                        ? "bg-card text-[#B42343] hover:bg-[#FDECEF]"
+                        ? "bg-card adm-fg-bad hover:bg-[color:var(--adm-bad-bg)]"
                         : "bg-card text-foreground hover:bg-border/50"
                     }`}
                   >
@@ -189,7 +189,7 @@ export default function DataTable<T extends Record<string, any>>({
         <div className="overflow-x-auto" data-admin-scroll>
           <table className="w-full min-w-[720px] border-collapse">
             <thead>
-              <tr className="border-b border-border/60 bg-secondary/40">
+              <tr className="border-b border-border/70 bg-secondary/50">
                 {bulkActions && (
                   <th className={`${cellPad} w-10`}>
                     <input
@@ -197,7 +197,7 @@ export default function DataTable<T extends Record<string, any>>({
                       aria-label="Select all on this page"
                       checked={allOnPage}
                       onChange={toggleAll}
-                      className="h-3.5 w-3.5 rounded border-border accent-[#DC1E3C]"
+                      className="h-3.5 w-3.5 rounded border-border accent-[hsl(var(--primary))]"
                     />
                   </th>
                 )}
@@ -253,9 +253,9 @@ export default function DataTable<T extends Record<string, any>>({
                       tabIndex={onRowClick ? 0 : undefined}
                       aria-selected={bulkActions ? isSel : undefined}
                       className={[
-                        "border-b border-border/40 last:border-0 transition-colors",
+                        "border-b border-border/50 last:border-0 transition-colors",
                         isActive ? "bg-primary/[0.05]" : isSel ? "bg-secondary/60" : "hover:bg-secondary/40",
-                        onRowClick ? "cursor-pointer focus-visible:outline-none focus-visible:bg-secondary/60" : "",
+                        onRowClick ? "cursor-pointer focus-visible:outline-none focus-visible:bg-secondary/60 focus-visible:shadow-[inset_2px_0_0_hsl(var(--primary))]" : "",
                       ].join(" ")}
                     >
                       {bulkActions && (
@@ -265,7 +265,7 @@ export default function DataTable<T extends Record<string, any>>({
                             aria-label="Select row"
                             checked={isSel}
                             onChange={() => toggleRow(id)}
-                            className="h-3.5 w-3.5 rounded border-border accent-[#DC1E3C]"
+                            className="h-3.5 w-3.5 rounded border-border accent-[hsl(var(--primary))]"
                           />
                         </td>
                       )}
@@ -284,14 +284,14 @@ export default function DataTable<T extends Record<string, any>>({
       )}
 
       {!loading && sorted.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-3 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 px-3 py-2">
           <div className="flex items-center gap-2 text-[12px] text-muted2-foreground">
             <label className="flex items-center gap-2">
               <span>Rows</span>
               <select
                 value={pageSize}
                 onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
-                className="h-7 rounded-md border border-border bg-card px-1.5 text-[12px] text-foreground"
+                className="h-7 rounded-md border border-border bg-card px-1.5 text-[12px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
               >
                 {pageSizes.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -306,7 +306,7 @@ export default function DataTable<T extends Record<string, any>>({
               aria-label="Previous page"
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={safePage === 0}
-              className="grid h-7 w-7 place-items-center rounded-md text-foreground hover:bg-secondary disabled:opacity-30"
+              className="grid h-7 w-7 place-items-center rounded-md text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-35"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -322,7 +322,7 @@ export default function DataTable<T extends Record<string, any>>({
                   type="button"
                   aria-current={safePage === n ? "page" : undefined}
                   onClick={() => setPage(n)}
-                  className={`h-7 min-w-[28px] rounded-md px-1.5 text-[12px] font-medium tabular-nums transition-colors ${
+                  className={`h-7 min-w-[28px] rounded-md px-1.5 text-[12px] font-medium tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
                     safePage === n ? "bg-foreground text-background" : "text-muted2-foreground hover:bg-secondary hover:text-foreground"
                   }`}
                 >
@@ -335,7 +335,7 @@ export default function DataTable<T extends Record<string, any>>({
               aria-label="Next page"
               onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
               disabled={safePage >= totalPages - 1}
-              className="grid h-7 w-7 place-items-center rounded-md text-foreground hover:bg-secondary disabled:opacity-30"
+              className="grid h-7 w-7 place-items-center rounded-md text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-35"
             >
               <ChevronRight className="h-4 w-4" />
             </button>

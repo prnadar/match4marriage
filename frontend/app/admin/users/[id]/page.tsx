@@ -16,6 +16,7 @@ import {
   useMemberCrm, ContactCard, TagsFollowUp, NotesCard, Timeline, type MemberContact,
 } from "@/components/admin/crm/MemberCrm";
 import { C, CrmStyles, TagChip, Kbd, followUpState } from "@/components/admin/crm/shared";
+import MemberAdminPanels from "@/components/admin/member";
 
 interface UserDetail extends MemberContact {
   membership_number: string | null;
@@ -185,11 +186,11 @@ export default function AdminUserDetailPage() {
       <motion.div variants={fadeUp}>
         <GlassCard padding={20} style={{ marginBottom: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-            <div style={{ width: 68, height: 68, padding: 3, borderRadius: "50%", background: "linear-gradient(135deg, #dc1e3c, #a0153c)", flexShrink: 0 }}>
+            <div style={{ width: 68, height: 68, padding: 2, borderRadius: "50%", background: "rgba(201,149,74,0.55)", flexShrink: 0 }}>
               <div style={{
-                width: "100%", height: "100%", borderRadius: "50%",
-                background: user.primary_photo_url ? `center / cover no-repeat url(${user.primary_photo_url})` : "linear-gradient(135deg,#dc1e3c,#a0153c)",
-                color: "#fff", fontSize: 24, fontWeight: 700, display: "grid", placeItems: "center", border: "3px solid #fff",
+                width: "100%", height: "100%", borderRadius: "50%", boxSizing: "border-box",
+                background: user.primary_photo_url ? `center / cover no-repeat url(${user.primary_photo_url})` : "hsl(var(--secondary))",
+                color: C.ink2, fontSize: 22, fontWeight: 600, display: "grid", placeItems: "center", border: "2px solid #fff",
               }}>
                 {!user.primary_photo_url && (name[0]?.toUpperCase() || "?")}
               </div>
@@ -204,9 +205,9 @@ export default function AdminUserDetailPage() {
                 {tags.map((t) => <TagChip key={t} tag={t} size="sm" />)}
                 {followUp && (
                   <span style={{
-                    display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 650, padding: "3px 9px", borderRadius: 999,
-                    color: followUp.tone === "bad" ? C.wineDeep : followUp.tone === "warn" ? C.warn : C.ink2,
-                    background: followUp.tone === "bad" ? C.wineTint : followUp.tone === "warn" ? C.warnTint : "rgba(0,0,0,0.04)",
+                    display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 999,
+                    color: followUp.tone === "bad" ? "var(--adm-bad)" : followUp.tone === "warn" ? C.warn : C.ink2,
+                    background: followUp.tone === "bad" ? "var(--adm-bad-bg)" : followUp.tone === "warn" ? C.warnTint : C.sunken,
                   }}><CalendarClock style={{ width: 12, height: 12 }} /> Follow-up {followUp.label.toLowerCase()}</span>
                 )}
               </div>
@@ -249,9 +250,9 @@ export default function AdminUserDetailPage() {
             )}
             {user.verification_status !== "approved" && user.profile && (
               <Link href="/admin/verifications" style={{
-                display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 10,
-                background: "rgba(255,255,255,0.8)", border: "1px solid rgba(220,30,60,0.12)",
-                color: "#1a0a14", fontSize: 13, fontWeight: 600, textDecoration: "none",
+                display: "inline-flex", alignItems: "center", gap: 6, height: 36, padding: "0 14px", borderRadius: 10, boxSizing: "border-box",
+                background: C.surface, border: `1px solid ${C.line}`,
+                color: C.ink, fontSize: 13, fontWeight: 500, textDecoration: "none",
               }}>
                 <Shield style={{ width: 13, height: 13 }} /> Review verification
               </Link>
@@ -280,6 +281,8 @@ export default function AdminUserDetailPage() {
               {crm.error}
             </div>
           )}
+          {/* Membership, Member 360, consent records, edit-on-behalf (components/admin/member) */}
+          <MemberAdminPanels userId={user.id} memberName={name} isDeleted={!!user.deleted_at} hasProfile={!!user.profile} onChanged={load} />
           {user.profile ? <ProfileSections profile={user.profile} /> : (
             <GlassCard><p style={{ margin: 0, color: C.muted, fontSize: 13 }}>This member hasn’t started their profile yet.</p></GlassCard>
           )}
@@ -347,10 +350,10 @@ function BackLink() {
       href="/admin/users"
       style={{
         display: "inline-flex", alignItems: "center", gap: 6,
-        padding: "9px 14px", borderRadius: 10,
-        background: "rgba(255,255,255,0.85)",
-        border: "1px solid rgba(220,30,60,0.15)",
-        color: "#1a0a14", fontSize: 13, fontWeight: 600,
+        height: 32, padding: "0 12px", borderRadius: 10, boxSizing: "border-box",
+        background: C.surface,
+        border: `1px solid ${C.line}`,
+        color: C.ink, fontSize: 12.5, fontWeight: 500,
         textDecoration: "none",
       }}
     >
@@ -361,7 +364,7 @@ function BackLink() {
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
-    <span style={{ fontSize: 11, color: C.ink2, background: "rgba(0,0,0,0.045)", padding: "3px 9px", borderRadius: 999, textTransform: "capitalize", fontWeight: 600 }}>
+    <span style={{ fontSize: 11, lineHeight: "16px", color: C.muted, background: "hsl(var(--muted))", border: `1px solid ${C.line}`, padding: "1px 8px", borderRadius: 999, textTransform: "capitalize", fontWeight: 500 }}>
       {children}
     </span>
   );
@@ -377,13 +380,14 @@ function Meta({ icon: Icon, children }: { icon: any; children: React.ReactNode }
 }
 
 function StatusChip({ user }: { user: UserDetail }) {
-  let label = "Active", color = "#3F5937", bg = "rgba(92,122,82,0.14)";
-  if (user.deleted_at) { label = "Deleted"; color = "#555"; bg = "rgba(0,0,0,0.06)"; }
-  else if (!user.is_active) { label = "Suspended"; color = "#a0153c"; bg = "rgba(220,30,60,0.08)"; }
+  // Same status roles as the console Pill (tokens in globals.css, admin block).
+  let label = "Active", color = "var(--adm-good)", bg = "var(--adm-good-bg)", line = "var(--adm-good-line)";
+  if (user.deleted_at) { label = "Deleted"; color = C.muted; bg = "hsl(var(--muted))"; line = C.line; }
+  else if (!user.is_active) { label = "Suspended"; color = "var(--adm-bad)"; bg = "var(--adm-bad-bg)"; line = "var(--adm-bad-line)"; }
   return (
     <span style={{
-      fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
-      padding: "3px 10px", borderRadius: 999, background: bg, color,
+      fontSize: 11, fontWeight: 500, lineHeight: "16px",
+      padding: "1px 8px", borderRadius: 999, background: bg, color, border: `1px solid ${line}`,
     }}>{label}</span>
   );
 }
@@ -391,8 +395,8 @@ function StatusChip({ user }: { user: UserDetail }) {
 function KPI({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "bad" | "neutral" }) {
   return (
     <div style={{ textAlign: "right" }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: C.muted }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: tone === "bad" ? "#a0153c" : C.ink, fontVariantNumeric: "tabular-nums", marginTop: 2 }}>
+      <div style={{ fontSize: 12, fontWeight: 500, color: C.muted }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.1, letterSpacing: "-0.02em", color: tone === "bad" ? "var(--adm-bad)" : C.ink, fontVariantNumeric: "tabular-nums", marginTop: 4 }}>
         {value}
       </div>
     </div>
@@ -420,8 +424,8 @@ function ProfileSections({ profile }: { profile: Record<string, any> }) {
                 {ph.is_primary && (
                   <span style={{
                     position: "absolute", top: 6, left: 6,
-                    background: "#dc1e3c", color: "#fff", fontSize: 9, fontWeight: 700,
-                    padding: "3px 7px", borderRadius: 999, textTransform: "uppercase", letterSpacing: "0.06em",
+                    background: "rgba(26,10,20,0.82)", color: "#fff", fontSize: 10.5, fontWeight: 500,
+                    padding: "2px 8px", borderRadius: 999,
                   }}>Primary</span>
                 )}
               </div>
@@ -462,7 +466,7 @@ function ProfileSections({ profile }: { profile: Record<string, any> }) {
           <Field label="College">{profile.college}</Field>
           <Field label="Occupation">{profile.occupation}</Field>
           <Field label="Employer">{profile.employer}</Field>
-          <Field label="Income">{profile.annual_income_inr ? `£${Number(profile.annual_income_inr).toLocaleString()}` : null}</Field>
+          <Field label="Income">{profile.annual_income_inr ? `£${Number(profile.annual_income_inr).toLocaleString("en-GB")}` : null}</Field>
         </Grid>
       </GlassCard>
 
@@ -484,7 +488,7 @@ function ProfileSections({ profile }: { profile: Record<string, any> }) {
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h3 style={{ fontSize: 13.5, fontWeight: 650, color: C.ink, margin: "0 0 14px" }}>{children}</h3>;
+  return <h3 style={{ fontSize: 14, fontWeight: 600, color: C.ink, margin: "0 0 14px" }}>{children}</h3>;
 }
 
 function Grid({ children }: { children: React.ReactNode }) {
@@ -495,7 +499,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   const empty = children === null || children === undefined || children === "" || children === 0;
   return (
     <div>
-      <div style={{ fontSize: 11, fontWeight: 600, color: C.muted }}>{label}</div>
+      <div style={{ fontSize: 12, fontWeight: 500, color: C.muted }}>{label}</div>
       <div style={{ fontSize: 13, color: empty ? C.faint : C.ink, marginTop: 3, textTransform: typeof children === "string" && /^[a-z_]+$/.test(children) ? "capitalize" : undefined }}>
         {empty ? "—" : String(children).replace(/_/g, " ")}
       </div>

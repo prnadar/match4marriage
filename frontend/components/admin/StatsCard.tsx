@@ -23,10 +23,10 @@ interface StatsCardProps {
 }
 
 const colorMap = {
-  rose: { chip: "bg-primary/10 text-primary border-primary/15", spark: "#DC1E3C" },
-  gold: { chip: "bg-[#FBF0DA] text-[#7A5200] border-[#EEDBB0]", spark: "#B07D35" },
-  sage: { chip: "bg-[#EAF2EB] text-[#2F5A3A] border-[#CFE0D3]", spark: "#5C7A52" },
-  blue: { chip: "bg-[#EBF0FB] text-[#26437F] border-[#D0DBF3]", spark: "#2A78D6" },
+  rose: { chip: "adm-soft-brand", spark: "#DC1E3C" },
+  gold: { chip: "adm-soft-warn",  spark: "#B07D35" },
+  sage: { chip: "adm-soft-good",  spark: "#3F6B4A" },
+  blue: { chip: "adm-soft-info",  spark: "#3B5BA9" },
 };
 
 export default function StatsCard({
@@ -47,7 +47,7 @@ export default function StatsCard({
       .join(" ");
     spark = (
       <svg width={w} height={h} aria-hidden className="overflow-visible">
-        <polyline fill="none" stroke={c.spark} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
+        <polyline fill="none" stroke={c.spark} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={points} />
       </svg>
     );
   }
@@ -56,7 +56,7 @@ export default function StatsCard({
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
         <p className="text-[12px] font-medium text-muted2-foreground">{title}</p>
-        <p className="mt-1.5 text-[26px] font-semibold leading-none tracking-[-0.02em] text-foreground">
+        <p className="mt-1.5 text-[26px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-foreground">
           {typeof value === "number" ? value.toLocaleString("en-GB") : value}
         </p>
         {(trend !== undefined || hint) && (
@@ -75,7 +75,7 @@ export default function StatsCard({
     </div>
   );
 
-  const cls = "block rounded-xl border border-border/70 bg-card p-4 shadow-[0_1px_2px_rgba(26,10,20,0.04)] transition-shadow duration-150";
+  const cls = "block rounded-xl border border-border/70 bg-card p-4 shadow-[var(--adm-shadow-card)] transition-shadow duration-150";
   return href
     ? <Link href={href} className={`${cls} hover:shadow-[0_2px_10px_rgba(26,10,20,0.07)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40`}>{body}</Link>
     : <div className={cls}>{body}</div>;

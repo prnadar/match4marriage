@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Shared CRM primitives for the admin console: colour tokens (matching the
- * console's wine / ink / sage palette), contact-link builders, and the small
+ * Shared CRM primitives for the admin console: colour tokens (mapped onto
+ * the console's shared tokens), contact-link builders, and the small
  * components every CRM surface uses — contact actions, channel + status
  * badges, tag chips, avatars, segmented controls, skeletons, empty states.
  */
@@ -15,31 +15,34 @@ import {
 
 // ─── Tokens ──────────────────────────────────────────────────────────────────
 
+// CRM surfaces are written with inline styles; `C` maps every one of them
+// onto the console's tokens (shadcn semantic vars + the `--adm-*` status
+// roles in globals.css) so CRM pages and Tailwind pages share one palette.
 export const C = {
-  ink: "#1a0a14",
-  ink2: "#43333b",
-  muted: "#6f6067",     // ≥4.5:1 on white
-  faint: "#9a8c92",     // decorative / large text only
-  line: "rgba(26,10,20,0.08)",
-  lineStrong: "rgba(26,10,20,0.14)",
-  wine: "#dc1e3c",
-  wineDeep: "#a0153c",
-  wineTint: "rgba(220,30,60,0.07)",
-  wineLine: "rgba(220,30,60,0.18)",
-  surface: "rgba(255,255,255,0.9)",
-  panel: "#fdfbf9",
-  sunken: "rgba(26,10,20,0.035)",
-  good: "#3F5937",
-  goodTint: "rgba(92,122,82,0.13)",
-  warn: "#7a5400",
-  warnTint: "rgba(200,144,32,0.16)",
-  info: "#2544a8",
-  infoTint: "rgba(90,120,230,0.10)",
+  ink: "hsl(var(--foreground))",
+  ink2: "hsl(var(--secondary-foreground))",
+  muted: "hsl(var(--muted-foreground))",   // ≥4.5:1 on white
+  faint: "#766a70",                         // decorative / large text only
+  line: "hsl(var(--border))",
+  lineStrong: "hsl(346 22% 86%)",
+  wine: "hsl(var(--primary))",
+  wineDeep: "var(--adm-brand)",
+  wineTint: "var(--adm-brand-bg)",
+  wineLine: "var(--adm-brand-line)",
+  surface: "hsl(var(--card))",
+  panel: "hsl(var(--background))",
+  sunken: "hsl(var(--secondary) / 0.7)",
+  good: "var(--adm-good)",
+  goodTint: "var(--adm-good-bg)",
+  warn: "var(--adm-warn)",
+  warnTint: "var(--adm-warn-bg)",
+  info: "var(--adm-info)",
+  infoTint: "var(--adm-info-bg)",
   wa: "#16794a",
   waTint: "rgba(22,121,74,0.10)",
 } as const;
 
-export const FOCUS_RING = "0 0 0 3px rgba(220,30,60,0.22)";
+export const FOCUS_RING = "0 0 0 2px hsl(var(--ring) / 0.28)";
 
 // ─── Contact links ───────────────────────────────────────────────────────────
 
@@ -162,10 +165,10 @@ export function ChannelBadge({ channel }: { channel: string }) {
 }
 
 const STATUS_META: Record<string, { label: string; fg: string; dot: string }> = {
-  sent:    { label: "Sent",    fg: C.good, dot: "#6E9460" },
-  logged:  { label: "Logged",  fg: C.ink2, dot: "#9a8c92" },
-  failed:  { label: "Failed",  fg: C.wineDeep, dot: C.wine },
-  skipped: { label: "Skipped", fg: C.warn, dot: "#C89020" },
+  sent:    { label: "Sent",    fg: C.good, dot: "var(--adm-good)" },
+  logged:  { label: "Logged",  fg: C.ink2, dot: "#766a70" },
+  failed:  { label: "Failed",  fg: "var(--adm-bad)", dot: "var(--adm-bad)" },
+  skipped: { label: "Skipped", fg: C.warn, dot: "var(--adm-warn)" },
 };
 
 export function StatusPill({ status, title }: { status: string; title?: string }) {
@@ -173,7 +176,7 @@ export function StatusPill({ status, title }: { status: string; title?: string }
   return (
     <span title={title} style={{
       display: "inline-flex", alignItems: "center", gap: 6,
-      fontSize: 12, fontWeight: 600, color: m.fg, whiteSpace: "nowrap",
+      fontSize: 12, fontWeight: 500, color: m.fg, whiteSpace: "nowrap",
     }}>
       <span aria-hidden style={{ width: 7, height: 7, borderRadius: 99, background: m.dot }} />
       {m.label}
@@ -235,10 +238,11 @@ export function Avatar({ name, url, size = 32 }: { name: string; url?: string | 
   return (
     <span aria-hidden style={{
       width: size, height: size, borderRadius: "50%", flexShrink: 0,
-      background: url ? `center / cover no-repeat url(${url})` : "linear-gradient(135deg,#dc1e3c,#a0153c)",
-      color: "#fff", fontSize: size * 0.38, fontWeight: 700,
+      // Initials sit on the quiet neutral chip (rose is reserved for actions).
+      background: url ? `center / cover no-repeat url(${url})` : "hsl(var(--secondary))",
+      color: C.ink2, fontSize: Math.max(10, size * 0.36), fontWeight: 600,
       display: "grid", placeItems: "center",
-      boxShadow: "0 0 0 2px #fff",
+      boxShadow: `0 0 0 1px ${C.line}`,
     }}>
       {!url && (name?.trim()?.[0]?.toUpperCase() || "?")}
     </span>
@@ -264,7 +268,7 @@ export function IconAction({
   const style: CSSProperties = {
     width: size, height: size, borderRadius: 8, flexShrink: 0,
     display: "inline-grid", placeItems: "center",
-    border: `1px solid ${C.line}`, background: "#fff", color: fg,
+    border: `1px solid ${C.line}`, background: C.surface, color: fg,
     cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.4 : 1,
     textDecoration: "none", transition: "background .15s, border-color .15s, transform .1s",
     outline: "none",
@@ -357,7 +361,7 @@ export function Segmented<T extends string>({
 }) {
   return (
     <div role="tablist" aria-label={ariaLabel} style={{
-      display: "inline-flex", gap: 2, padding: 3, borderRadius: 10,
+      display: "inline-flex", gap: 2, padding: 2, borderRadius: 10,
       background: C.sunken, border: `1px solid ${C.line}`, flexWrap: "wrap",
     }}>
       {options.map((o) => {
@@ -371,11 +375,11 @@ export function Segmented<T extends string>({
             onClick={() => onChange(o.value)}
             className="crm-seg"
             style={{
-              padding: size === "sm" ? "5px 10px" : "6px 12px",
-              borderRadius: 7, border: "none", cursor: "pointer",
-              fontSize: size === "sm" ? 12 : 12.5, fontWeight: active ? 650 : 550, fontFamily: "inherit",
+              height: size === "sm" ? 28 : 32, padding: size === "sm" ? "0 10px" : "0 12px",
+              borderRadius: 8, border: "none", cursor: "pointer",
+              fontSize: size === "sm" ? 12 : 12.5, fontWeight: 500, fontFamily: "inherit",
               color: active ? C.ink : C.muted,
-              background: active ? "#fff" : "transparent",
+              background: active ? C.surface : "transparent",
               boxShadow: active ? "0 1px 2px rgba(26,10,20,0.08), 0 0 0 1px rgba(26,10,20,0.04)" : "none",
               display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
               transition: "background .15s, color .15s",
@@ -384,8 +388,10 @@ export function Segmented<T extends string>({
             {o.label}
             {typeof o.count === "number" && (
               <span style={{
-                fontSize: 11, fontWeight: 650, fontVariantNumeric: "tabular-nums",
-                color: active ? C.wineDeep : C.faint,
+                fontSize: 10.5, fontWeight: 600, fontVariantNumeric: "tabular-nums",
+                minWidth: 18, textAlign: "center", padding: "0 6px", borderRadius: 999, lineHeight: "16px",
+                color: active ? C.wineDeep : C.muted,
+                background: active ? C.wineTint : "hsl(var(--border) / 0.6)",
               }}>{o.count}</span>
             )}
           </button>
@@ -399,22 +405,24 @@ export function Segmented<T extends string>({
 
 export const inputStyle: CSSProperties = {
   width: "100%", boxSizing: "border-box",
-  padding: "9px 11px", borderRadius: 9,
-  border: `1px solid ${C.lineStrong}`, background: "#fff",
-  fontSize: 13.5, color: C.ink, fontFamily: "inherit", outline: "none",
+  padding: "8px 12px", borderRadius: 10,
+  border: `1px solid ${C.line}`, background: C.surface,
+  fontSize: 13, color: C.ink, fontFamily: "inherit", outline: "none",
   transition: "border-color .15s, box-shadow .15s",
 };
 
 export const labelStyle: CSSProperties = {
-  display: "block", fontSize: 12, fontWeight: 600, color: C.ink2, marginBottom: 6,
+  display: "block", fontSize: 12, fontWeight: 500, color: C.ink2, marginBottom: 6,
 };
 
 export function Kbd({ children }: { children: ReactNode }) {
   return (
     <kbd style={{
-      fontFamily: "inherit", fontSize: 10.5, fontWeight: 600, color: C.muted,
-      padding: "1px 5px", borderRadius: 4, border: `1px solid ${C.lineStrong}`,
-      background: "#fff", boxShadow: "0 1px 0 rgba(26,10,20,0.08)",
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      height: 20, minWidth: 20, boxSizing: "border-box",
+      fontFamily: "inherit", fontSize: 10.5, fontWeight: 500, color: C.muted,
+      padding: "0 4px", borderRadius: 4, border: `1px solid ${C.line}`,
+      background: C.surface, boxShadow: "0 1px 0 rgba(26,10,20,0.06)",
     }}>{children}</kbd>
   );
 }
@@ -432,16 +440,18 @@ export function SkeletonRows({ rows = 6, height = 52 }: { rows?: number; height?
 export function EmptyState({ icon: Icon, title, body, action }: {
   icon: LucideIcon; title: string; body?: ReactNode; action?: ReactNode;
 }) {
+  // Same shape as primitives.EmptyState (quiet round chip, 13px title).
   return (
-    <div style={{ padding: "44px 24px", textAlign: "center" }}>
+    <div style={{ padding: "48px 24px", textAlign: "center" }}>
       <span aria-hidden style={{
-        width: 44, height: 44, borderRadius: 14, margin: "0 auto 14px",
-        display: "grid", placeItems: "center", background: C.wineTint, color: C.wineDeep,
+        width: 40, height: 40, borderRadius: "50%", margin: "0 auto 12px",
+        display: "grid", placeItems: "center",
+        background: C.sunken, border: `1px solid ${C.line}`, color: C.muted,
       }}>
-        <Icon style={{ width: 20, height: 20 }} />
+        <Icon style={{ width: 16, height: 16 }} />
       </span>
-      <p style={{ margin: 0, fontSize: 14, fontWeight: 650, color: C.ink }}>{title}</p>
-      {body && <p style={{ margin: "6px auto 0", fontSize: 13, color: C.muted, maxWidth: 380, lineHeight: 1.55 }}>{body}</p>}
+      <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: C.ink }}>{title}</p>
+      {body && <p style={{ margin: "4px auto 0", fontSize: 12.5, color: C.muted, maxWidth: 380, lineHeight: 1.55 }}>{body}</p>}
       {action && <div style={{ marginTop: 16 }}>{action}</div>}
     </div>
   );
@@ -451,13 +461,13 @@ export function EmptyState({ icon: Icon, title, body, action }: {
 export function CrmStyles() {
   return (
     <style>{`
-      .crm-iconaction:hover { background: #faf6f4 !important; border-color: rgba(26,10,20,0.18) !important; }
+      .crm-iconaction:hover { background: hsl(var(--secondary)) !important; border-color: hsl(346 22% 86%) !important; }
       .crm-iconaction:active { transform: translateY(1px); }
       .crm-iconaction:focus-visible, .crm-seg:focus-visible, .crm-focus:focus-visible { box-shadow: ${FOCUS_RING}; outline: none; }
-      .crm-input:focus { border-color: rgba(220,30,60,0.45) !important; box-shadow: ${FOCUS_RING}; }
+      .crm-input:focus { border-color: hsl(var(--primary) / 0.5) !important; box-shadow: ${FOCUS_RING}; }
       .crm-row { transition: background .12s; }
-      .crm-row:hover { background: rgba(220,30,60,0.025); }
-      .crm-row:focus-within { background: rgba(220,30,60,0.03); }
+      .crm-row:hover { background: hsl(var(--secondary) / 0.4); }
+      .crm-row:focus-within { background: hsl(var(--secondary) / 0.5); }
       .crm-row .crm-reveal { opacity: .55; transition: opacity .15s; }
       .crm-row:hover .crm-reveal, .crm-row:focus-within .crm-reveal { opacity: 1; }
       @media (hover: none) { .crm-row .crm-reveal { opacity: 1; } }

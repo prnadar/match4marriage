@@ -12,10 +12,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  Megaphone, Search, X, AlertTriangle, Inbox, ChevronLeft, ChevronRight, ChevronDown,
+  Megaphone, Search, X, AlertTriangle, Inbox, ChevronDown,
   CalendarClock, Check, Send, Radio, Info,
 } from "lucide-react";
 import { PageShell, GlassCard, Button, fadeUp } from "@/components/admin/PageShell";
+import { ErrorState, Pagination } from "@/components/admin/primitives";
 import { useToast } from "@/components/admin/Toast";
 import { adminCrmApi } from "@/lib/api";
 import ComposeDrawer, { type ComposeTarget } from "@/components/admin/crm/ComposeDrawer";
@@ -176,8 +177,8 @@ export default function CommunicationsPage() {
       title="Communications"
       subtitle="Every email, in-app message and logged call between your team and members"
       actions={
-        <Button variant="primary" onClick={() => setCompose({ target: { kind: "audience" } })} title="New broadcast (B)">
-          <Megaphone style={{ width: 13, height: 13 }} /> New broadcast
+        <Button size="sm" variant="primary" onClick={() => setCompose({ target: { kind: "audience" } })} title="New broadcast (B)">
+          <Megaphone style={{ width: 14, height: 14 }} aria-hidden /> New broadcast
         </Button>
       }
     >
@@ -202,7 +203,7 @@ export default function CommunicationsPage() {
 
       {stats && !stats.email_configured && (
         <motion.div variants={fadeUp} role="status" style={{
-          marginBottom: 14, padding: "12px 16px", borderRadius: 14, background: C.warnTint, color: C.warn,
+          marginBottom: 14, padding: "10px 14px", borderRadius: 10, background: C.warnTint, color: C.warn, border: "1px solid var(--adm-warn-line)",
           display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, lineHeight: 1.55,
         }}>
           <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, marginTop: 2 }} />
@@ -217,7 +218,7 @@ export default function CommunicationsPage() {
       <motion.div variants={fadeUp} style={{ marginBottom: 14 }}>
         <GlassCard padding={0}>
           <div className="crm-stats">
-            <Stat label="Sent · last 7 days" value={stats?.sent_7d} hint={stats ? `${stats.sent_30d.toLocaleString()} in 30 days` : undefined} />
+            <Stat label="Sent · last 7 days" value={stats?.sent_7d} hint={stats ? `${stats.sent_30d.toLocaleString("en-GB")} in 30 days` : undefined} />
             <Stat label="Members contacted · 30 days" value={stats?.members_contacted_30d}
               hint={stats ? `${channelCounts.email} email · ${channelCounts.in_app} in-app · ${channelCounts.call + channelCounts.whatsapp} calls/WA` : undefined} />
             <Stat label="Failed · 30 days" value={stats?.failed_30d} tone={stats?.failed_30d ? "bad" : undefined}
@@ -277,10 +278,7 @@ export default function CommunicationsPage() {
               {loading ? (
                 <div style={{ padding: "6px 14px" }}>{Array.from({ length: 7 }).map((_, i) => <div key={i} className="m4m-shimmer" style={{ height: 54, borderRadius: 10, margin: "6px 0", opacity: 1 - i * 0.1 }} />)}</div>
               ) : error ? (
-                <div role="alert" style={{ padding: 18, color: C.wineDeep, fontSize: 13, display: "flex", gap: 8, alignItems: "center" }}>
-                  <AlertTriangle style={{ width: 15, height: 15 }} /> {error}
-                  <button onClick={loadLog} className="crm-focus" style={{ marginLeft: 6, border: `1px solid ${C.wineLine}`, background: "#fff", color: C.wineDeep, borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>Retry</button>
-                </div>
+                <ErrorState title="Couldn't load the message log" message={error} onRetry={loadLog} />
               ) : rows.length === 0 ? (
                 <EmptyState
                   icon={Inbox}
@@ -288,7 +286,7 @@ export default function CommunicationsPage() {
                   body={filtersActive
                     ? "Widen the date range or clear a filter."
                     : <>Message a member from their profile, or send a broadcast to a segment. Calls and WhatsApp chats you log on a member’s page show up here too.</>}
-                  action={!filtersActive && <Button variant="primary" onClick={() => setCompose({ target: { kind: "audience" } })}><Megaphone style={{ width: 13, height: 13 }} /> New broadcast</Button>}
+                  action={!filtersActive && <Button variant="primary" onClick={() => setCompose({ target: { kind: "audience" } })}><Megaphone style={{ width: 14, height: 14 }} aria-hidden /> New broadcast</Button>}
                 />
               ) : (
                 <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
@@ -301,7 +299,7 @@ export default function CommunicationsPage() {
                           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                             <Avatar name={c.user?.name || "?"} url={c.user?.photo_url} size={26} />
                             <div style={{ minWidth: 0 }}>
-                              <Link href={`/admin/users/${c.user_id}`} className="crm-focus" style={{ display: "block", fontSize: 13, fontWeight: 650, color: C.ink, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <Link href={`/admin/users/${c.user_id}`} className="crm-focus" style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.ink, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {c.user?.name || "Member"}
                               </Link>
                               <div style={{ fontSize: 11.5, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.to_address || c.user?.membership_number || ""}</div>
@@ -314,7 +312,7 @@ export default function CommunicationsPage() {
                               <span style={{ fontSize: 13, fontWeight: 600, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {c.subject || (c.status === "logged" ? `${c.channel === "call" ? "Phone call" : c.channel === "whatsapp" ? "WhatsApp" : "Contact"} logged${c.meta?.outcome ? ` · ${String(c.meta.outcome).replace(/_/g, " ")}` : ""}` : "(no subject)")}
                               </span>
-                              {c.broadcast_id && <span style={{ fontSize: 10, fontWeight: 700, color: C.info, background: C.infoTint, padding: "1px 5px", borderRadius: 4, flexShrink: 0 }}>Broadcast</span>}
+                              {c.broadcast_id && <span style={{ fontSize: 10, fontWeight: 600, color: C.info, background: C.infoTint, padding: "1px 5px", borderRadius: 4, flexShrink: 0 }}>Broadcast</span>}
                               <ChevronDown aria-hidden style={{ width: 13, height: 13, color: C.muted, flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
                             </div>
                             <div style={{ fontSize: 12, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
@@ -346,13 +344,7 @@ export default function CommunicationsPage() {
               )}
 
               {pageCount > 1 && (
-                <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12.5, color: C.muted }}>
-                  <span>{((page - 1) * LIMIT + 1).toLocaleString()}–{Math.min(page * LIMIT, total).toLocaleString()} of {total.toLocaleString()}</span>
-                  <span style={{ display: "inline-flex", gap: 6 }}>
-                    <PagerBtn disabled={page <= 1} onClick={() => setPage((p) => p - 1)} label="Previous page"><ChevronLeft style={{ width: 14, height: 14 }} /></PagerBtn>
-                    <PagerBtn disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)} label="Next page"><ChevronRight style={{ width: 14, height: 14 }} /></PagerBtn>
-                  </span>
-                </div>
+                <Pagination page={page} pageCount={pageCount} onPage={setPage} total={total} pageSize={LIMIT} />
               )}
             </>
           ) : (
@@ -370,7 +362,7 @@ export default function CommunicationsPage() {
           <GlassCard padding={0} style={{ overflow: "hidden" }}>
             <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.line}`, display: "flex", alignItems: "center", gap: 8 }}>
               <CalendarClock aria-hidden style={{ width: 15, height: 15, color: C.wineDeep }} />
-              <h2 style={{ margin: 0, fontSize: 13.5, fontWeight: 650, color: C.ink, flex: 1 }}>Follow-ups</h2>
+              <h2 style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: C.ink, flex: 1 }}>Follow-ups</h2>
               <Segmented size="sm" ariaLabel="Follow-up scope" value={fuScope} onChange={setFuScope} options={[
                 { value: "due", label: "Due", count: stats?.follow_ups_due },
                 { value: "upcoming", label: "Upcoming" },
@@ -394,10 +386,10 @@ export default function CommunicationsPage() {
                         <Avatar name={f.name} url={f.photo_url} size={32} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <Link href={`/admin/users/${f.user_id}`} className="crm-focus" style={{ fontSize: 13, fontWeight: 650, color: C.ink, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>{f.name}</Link>
+                            <Link href={`/admin/users/${f.user_id}`} className="crm-focus" style={{ fontSize: 13, fontWeight: 600, color: C.ink, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>{f.name}</Link>
                             {st && (
                               <span style={{
-                                fontSize: 11, fontWeight: 650, padding: "1px 7px", borderRadius: 99, flexShrink: 0,
+                                fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 99, flexShrink: 0,
                                 color: st.tone === "bad" ? C.wineDeep : st.tone === "warn" ? C.warn : C.ink2,
                                 background: st.tone === "bad" ? C.wineTint : st.tone === "warn" ? C.warnTint : C.sunken,
                               }}>{st.label}</span>
@@ -458,14 +450,14 @@ export default function CommunicationsPage() {
 function Stat({ label, value, hint, tone, onClick }: {
   label: string; value?: number; hint?: string; tone?: "bad" | "warn"; onClick?: () => void;
 }) {
-  const color = tone === "bad" ? C.wineDeep : tone === "warn" ? C.warn : C.ink;
+  const color = tone === "bad" ? "var(--adm-bad)" : tone === "warn" ? C.warn : C.ink;
   const inner = (
     <>
-      <div style={{ fontSize: 12, fontWeight: 600, color: C.muted }}>{label}</div>
+      <div style={{ fontSize: 12, fontWeight: 500, color: C.muted }}>{label}</div>
       {value === undefined ? (
         <div className="m4m-shimmer" style={{ height: 26, width: 60, borderRadius: 6, marginTop: 6 }} />
       ) : (
-        <div style={{ fontSize: 24, fontWeight: 700, color, marginTop: 4, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>{value.toLocaleString()}</div>
+        <div style={{ fontSize: 24, fontWeight: 600, lineHeight: 1, color, marginTop: 6, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em" }}>{value.toLocaleString("en-GB")}</div>
       )}
       {hint && <div style={{ fontSize: 11.5, color: onClick ? C.wineDeep : C.muted, marginTop: 2, fontWeight: onClick ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hint}</div>}
     </>
@@ -473,15 +465,6 @@ function Stat({ label, value, hint, tone, onClick }: {
   return onClick ? (
     <button type="button" onClick={onClick} className="crm-stat crm-focus crm-row" style={{ textAlign: "left", border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}>{inner}</button>
   ) : <div className="crm-stat">{inner}</div>;
-}
-
-function PagerBtn({ children, onClick, disabled, label }: { children: React.ReactNode; onClick: () => void; disabled: boolean; label: string }) {
-  return (
-    <button type="button" aria-label={label} onClick={onClick} disabled={disabled} className="crm-iconaction" style={{
-      width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.lineStrong}`, background: "#fff",
-      color: disabled ? C.faint : C.ink, display: "grid", placeItems: "center", cursor: disabled ? "not-allowed" : "pointer",
-    }}>{children}</button>
-  );
 }
 
 function BroadcastList({ loading, items, onNew, onView }: {
@@ -509,7 +492,7 @@ function BroadcastList({ loading, items, onNew, onView }: {
           <li key={b.id} className="crm-row" style={{ padding: "14px 16px", borderBottom: `1px solid ${C.line}` }}>
             <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
               <div style={{ flex: "1 1 280px", minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 650, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.subject || "(no subject)"}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.subject || "(no subject)"}</div>
                 <div style={{ fontSize: 12, color: C.muted, marginTop: 3, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                   {b.channels.map((ch) => <ChannelBadge key={ch} channel={ch} />)}
                   <span>{b.audience_label || "Audience"}</span>
@@ -519,8 +502,8 @@ function BroadcastList({ loading, items, onNew, onView }: {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 13, fontWeight: 650, color: C.ink, fontVariantNumeric: "tabular-nums" }}>
-                    {b.recipient_count.toLocaleString()} <span style={{ fontWeight: 500, color: C.muted }}>recipients</span>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, fontVariantNumeric: "tabular-nums" }}>
+                    {b.recipient_count.toLocaleString("en-GB")} <span style={{ fontWeight: 500, color: C.muted }}>recipients</span>
                   </div>
                   <div style={{ fontSize: 11.5, color: tone, fontWeight: 600 }}>
                     {b.sent_count} sent{b.failed_count ? ` · ${b.failed_count} failed` : ""}{b.skipped_count ? ` · ${b.skipped_count} skipped` : ""}

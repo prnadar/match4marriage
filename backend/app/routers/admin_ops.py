@@ -315,6 +315,7 @@ def _mask(num: str | None) -> str | None:
 async def verification_review(
     user_id: uuid.UUID,
     db: DbDep,
+    current_user: UserDep,
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
     """Everything a reviewer needs beside the profile: contact + ID docs + history."""
@@ -365,6 +366,16 @@ async def verification_review(
             Report.deleted_at.is_(None), Report.status == ReportStatus.OPEN,
         )
     )).scalar_one()
+
+    # Audit of views (after `history` is read, so this view isn't in its own
+    # response). Identity documents when there are any, contact details otherwise.
+    # Throttled per admin/member and never raises.
+    from app.services.view_audit import record_member_view
+    await record_member_view(
+        db, current_user, "documents" if documents else "contact",
+        tenant_id=tenant_uuid, user_id=u.id, label=u.email or u.membership_number,
+        surface="verification_review", details={"documents": len(documents)} if documents else None,
+    )
 
     return APIResponse(success=True, data={
         "user": {

@@ -26,6 +26,10 @@ class PaymentGateway(str, enum.Enum):
     STRIPE = "stripe"
     UPI = "upi"
     PAYPAL = "paypal"
+    # Offline payment recorded by staff in the admin console (cash, bank
+    # transfer, card terminal, complimentary). DB label 'MANUAL' is added by the
+    # boot-time enum guard in main.py.
+    MANUAL = "manual"
 
 
 class Subscription(TenantModel):

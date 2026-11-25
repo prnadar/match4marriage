@@ -152,6 +152,8 @@ async def _ensure_verification_columns() -> None:
             "ALTER TYPE paymentgateway ADD VALUE IF NOT EXISTS 'PAYPAL'",
             # Half-yearly (6-month) pricing period — Premium/Elite bill per 6 months.
             "ALTER TYPE pricingperiod ADD VALUE IF NOT EXISTS 'HALF_YEARLY'",
+            # Offline payments recorded by staff (admin membership management).
+            "ALTER TYPE paymentgateway ADD VALUE IF NOT EXISTS 'MANUAL'",
         ]
         for s in enum_adds:
             try:
@@ -454,6 +456,10 @@ from app.routers import admin_crm  # noqa: E402 — client CRM: contact log, mes
 app.include_router(admin_crm.router, prefix=PREFIX)
 from app.routers import consents  # noqa: E402 — member consent records (UK GDPR)
 app.include_router(consents.router, prefix=PREFIX)
+from app.routers import admin_members  # noqa: E402 — member 360, membership mgmt, profile edits
+app.include_router(admin_members.router, prefix=PREFIX)
+from app.routers import admin_compliance  # noqa: E402 — consent register, data requests, integrations
+app.include_router(admin_compliance.router, prefix=PREFIX)
 
 
 # ── Health + meta ─────────────────────────────────────────────────────────────

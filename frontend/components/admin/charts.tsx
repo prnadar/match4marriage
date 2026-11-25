@@ -9,7 +9,8 @@
  * and a visually-hidden table for screen readers.
  *
  * Palette (validated: CVD + normal-vision separation pass on light surface):
- *   categorical  slate-blue #3B5BA9 · ruby #DC1E3C · gold #C9954A (gold < 3:1 → always direct-labelled)
+ *   categorical  slate-blue #3B5BA9 · ruby #DC1E3C · gold #C9954A (gold is 2.6:1 on the surface → always
+ *                paired with a legend row carrying its label + value; re-run dataviz validate_palette.js if changed)
  *   sequential   ruby ramp  #F08DA0 → #DC1E3C → #8A0820 (ordered tiers)
  */
 
@@ -35,13 +36,21 @@ function useWidth<T extends HTMLElement>() {
   return [ref, w] as const;
 }
 
-function niceMax(v: number): number {
+/**
+ * Axis ceiling. With `integer` (counts of people, not money) the ceiling and
+ * its midpoint are both whole numbers, so the axis never shows "2.5 sign-ups".
+ */
+function niceMax(v: number, integer = false): number {
   if (v <= 0) return 4;
   const exp = Math.pow(10, Math.floor(Math.log10(v)));
   const f = v / exp;
+  if (integer) {
+    if (exp === 1) return Math.max(4, 2 * Math.ceil(v / 2));
+    const steps = exp === 10 ? [1, 2, 4, 5, 6, 8, 10] : [1, 2, 2.5, 4, 5, 6, 8, 10];
+    return (steps.find((s) => f <= s) || 10) * exp;
+  }
   const nf = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10;
-  const out = nf * exp;
-  return out < 4 && Number.isInteger(v) ? Math.max(4, Math.ceil(v)) : out;
+  return nf * exp;
 }
 
 function compactTick(n: number): string {
@@ -73,17 +82,20 @@ export function ColumnChart({
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
 
-  const padL = 40, padR = 8, padT = 10, padB = 22;
+  const max = niceMax(Math.max(0, ...data.map((d) => d.value)), data.every((d) => Number.isInteger(d.value)) && !formatTick);
+  const ticks = [0, max / 2, max];
+  // Gutter fits the widest tick label ("£10,000" must not clip).
+  const tickFmt = formatTick || compactTick;
+  const padL = Math.max(40, Math.max(...ticks.map((t) => tickFmt(t).length)) * 6.6 + 14);
+  const padR = 8, padT = 10, padB = 22;
   const innerW = Math.max(0, width - padL - padR);
   const innerH = height - padT - padB;
-  const max = niceMax(Math.max(0, ...data.map((d) => d.value)));
-  const ticks = [0, max / 2, max];
   const band = data.length ? innerW / data.length : 0;
   const gap = Math.max(2, Math.min(8, band * 0.28));
   const barW = Math.max(1, Math.min(24, band - gap));
   const every = tickEvery || Math.max(1, Math.ceil((data.length * 44) / Math.max(1, innerW)));
   const y = (v: number) => padT + innerH - (v / max) * innerH;
-  const fmtTick = formatTick || compactTick;
+  const fmtTick = tickFmt;
 
   const hovered = hover !== null ? data[hover] : null;
   const tipX = hover !== null ? padL + band * hover + band / 2 : 0;
@@ -122,6 +134,7 @@ export function ColumnChart({
                   x={padL + band * i} y={padT} width={band} height={innerH}
                   fill="transparent"
                   onMouseEnter={() => setHover(i)}
+                  onTouchStart={() => setHover(i)}
                 />
                 {i % every === 0 && (
                   <text x={padL + band * i + band / 2} y={height - 6} textAnchor="middle" className="fill-muted2-foreground" style={{ fontSize: 11 }}>
@@ -135,7 +148,7 @@ export function ColumnChart({
       )}
       {hovered && (
         <div
-          className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-card px-2.5 py-1.5 text-[12px] shadow-[0_4px_14px_rgba(26,10,20,0.12)]"
+          className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-card px-2.5 py-1.5 text-[12px] shadow-[var(--adm-shadow-pop)]"
           style={{ left: Math.min(Math.max(tipX, 60), Math.max(60, width - 60)) }}
         >
           <div className="text-muted2-foreground">{hovered.tooltip || hovered.label}</div>

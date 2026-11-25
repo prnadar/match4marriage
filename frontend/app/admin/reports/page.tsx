@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Flag, AlertTriangle, CheckCircle2, XCircle, X, ArrowRight, Download, ShieldAlert } from "lucide-react";
+import { Flag, CheckCircle2, XCircle, X, ArrowRight, Download, ShieldAlert } from "lucide-react";
 import { PageShell, Button, fadeUp } from "@/components/admin/PageShell";
+import { ErrorState, Select, TABLE_CARD } from "@/components/admin/primitives";
 import {
   Segmented, SearchField, EmptyState, SkeletonRows, Pill, Panel, relTime, formatDateTime, type Tone,
 } from "@/components/admin/primitives";
@@ -201,30 +202,21 @@ export default function AdminReportsPage() {
               onChange={(v) => { setFilter(v); setSelected(null); }}
             />
           </div>
-          <SearchField value={search} onChange={setSearch} placeholder="Search names or description…" className="w-full max-w-xs" />
-          <label className="sr-only" htmlFor="report-category">Category</label>
-          <select
-            id="report-category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="h-9 rounded-lg border border-border/80 bg-card px-2.5 text-[12.5px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-          >
+          <SearchField value={search} onChange={setSearch} placeholder="Search names or description…" className="w-full sm:max-w-xs" />
+          <Select id="report-category" ariaLabel="Category" value={category} onChange={setCategory}>
             <option value="all">All categories</option>
             {categories.map((c) => <option key={c} value={c}>{capitalize(humanize(c))}</option>)}
-          </select>
+          </Select>
         </div>
       }
     >
       <motion.div variants={fadeUp} className={`grid items-start gap-4 ${selected ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-1"}`}>
         {/* List */}
-        <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]">
+        <div className={TABLE_CARD}>
           {loading ? (
             <div className="p-3"><SkeletonRows rows={5} /></div>
           ) : error ? (
-            <div role="alert" className="flex items-center gap-2 px-4 py-5 text-[13px] text-[#9F1239]">
-              <AlertTriangle className="h-4 w-4" aria-hidden /> {error}
-              <Button size="sm" variant="ghost" onClick={load}>Retry</Button>
-            </div>
+            <ErrorState title="Couldn't load reports" message={error} onRetry={load} />
           ) : items.length === 0 ? (
             <EmptyState
               icon={filter === "open" ? CheckCircle2 : Flag}
@@ -315,7 +307,7 @@ export default function AdminReportsPage() {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="What you found, decisions taken…"
-                  className="mt-1 w-full resize-y rounded-lg border border-border bg-card p-2.5 text-[13px] text-foreground outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+                  className="mt-1 w-full resize-y rounded-lg border border-border bg-card p-2.5 text-[13px] text-foreground outline-none focus:border-primary/50 focus:ring-2 focus:ring-ring/20"
                 />
 
                 <label htmlFor="report-action" className="mt-3 block text-[11.5px] font-medium text-muted2-foreground">Action taken</label>
@@ -393,7 +385,7 @@ function ReportField({ label, children }: { label: string; children: React.React
   return (
     <div className="min-w-0">
       <dt className="text-[11.5px] font-medium text-muted2-foreground">{label}</dt>
-      <dd className={`mt-0.5 truncate text-[13px] ${empty ? "text-muted2-foreground/60" : "text-foreground"}`}>{empty ? "—" : children}</dd>
+      <dd className={`mt-0.5 truncate text-[13px] ${empty ? "text-muted2-foreground" : "text-foreground"}`}>{empty ? "—" : children}</dd>
     </div>
   );
 }

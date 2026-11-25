@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { fadeUp, popIn, stagger, SPRING_SNAP } from "./motion-presets";
 import { Delta } from "./primitives";
+import { PageHeader } from "./PageHeader";
 
 /**
  * Page chrome for admin console pages.
@@ -32,28 +33,7 @@ export function PageShell({
 }) {
   return (
     <div className="mx-auto w-full" style={{ maxWidth }}>
-      <motion.header
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-        className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
-      >
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="font-display text-[24px] font-semibold leading-tight tracking-[-0.01em] text-foreground sm:text-[28px]">
-              {title}
-            </h1>
-            {meta}
-          </div>
-          {subtitle && (
-            <p className="mt-1 max-w-2xl text-[13px] text-muted2-foreground">{subtitle}</p>
-          )}
-        </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-      </motion.header>
-
-      {toolbar && <div className="mb-4">{toolbar}</div>}
-
+      <PageHeader title={title} description={subtitle} actions={actions} meta={meta} toolbar={toolbar} />
       <motion.div variants={stagger(0, 0.03)} initial="hidden" animate="show">
         {children}
       </motion.div>
@@ -92,11 +72,11 @@ function useCountUp(target: number, enabled = true): number {
 // ─── Stat card ────────────────────────────────────────────────────────────────
 
 const TONE: Record<string, { fg: string; chip: string }> = {
-  neutral: { fg: "text-foreground",  chip: "bg-secondary text-muted2-foreground border-border/70" },
-  good:    { fg: "text-[#2F5A3A]",   chip: "bg-[#EAF2EB] text-[#2F5A3A] border-[#CFE0D3]" },
-  warn:    { fg: "text-[#7A5200]",   chip: "bg-[#FBF0DA] text-[#7A5200] border-[#EEDBB0]" },
-  bad:     { fg: "text-[#9F1239]",   chip: "bg-[#FDECEF] text-[#9F1239] border-[#F7CCD5]" },
-  info:    { fg: "text-[#26437F]",   chip: "bg-[#EBF0FB] text-[#26437F] border-[#D0DBF3]" },
+  neutral: { fg: "text-foreground", chip: "bg-secondary text-muted2-foreground border-border/70" },
+  good:    { fg: "adm-fg-good",     chip: "adm-soft-good" },
+  warn:    { fg: "adm-fg-warn",     chip: "adm-soft-warn" },
+  bad:     { fg: "adm-fg-bad",      chip: "adm-soft-bad" },
+  info:    { fg: "adm-fg-info",     chip: "adm-soft-info" },
 };
 
 export function StatCard({
@@ -133,7 +113,7 @@ export function StatCard({
           </span>
         )}
       </div>
-      <div className={`mt-1.5 text-[26px] font-semibold leading-none tracking-[-0.02em] ${tone === "neutral" ? "text-foreground" : c.fg}`}>
+      <div className={`mt-1.5 text-[26px] font-semibold leading-none tracking-[-0.02em] tabular-nums ${tone === "neutral" ? "text-foreground" : c.fg}`}>
         {display}
       </div>
       {(delta !== undefined || hint) && (
@@ -147,7 +127,7 @@ export function StatCard({
 
   const cls = [
     "block rounded-xl border border-border/70 bg-card p-4 text-left",
-    "shadow-[0_1px_2px_rgba(26,10,20,0.04)] transition-[box-shadow,border-color] duration-150",
+    "shadow-[var(--adm-shadow-card)] transition-[box-shadow,border-color] duration-150",
     interactive ? "hover:border-border hover:shadow-[0_2px_10px_rgba(26,10,20,0.07)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 cursor-pointer" : "",
   ].join(" ");
 
@@ -168,12 +148,14 @@ export function StatCard({
 
 type ButtonVariant = "primary" | "secondary" | "danger" | "warn" | "ghost" | "success";
 
+// Rose is the ONE primary action in a view. Everything else is a quiet
+// outline; danger / warn / success tint only their text until hovered.
 const BTN_CLASS: Record<ButtonVariant, string> = {
-  primary:   "bg-primary text-primary-foreground border-primary hover:bg-[#C21933] shadow-[0_1px_2px_rgba(160,21,60,0.25)]",
-  success:   "bg-[#3F6B4A] text-white border-[#3F6B4A] hover:bg-[#355C3F] shadow-[0_1px_2px_rgba(47,90,58,0.25)]",
+  primary:   "bg-primary text-primary-foreground border-primary hover:bg-[#C21933] hover:border-[#C21933] shadow-[0_1px_2px_rgba(160,21,60,0.25)]",
+  success:   "bg-[#2F5A3A] text-white border-[#2F5A3A] hover:bg-[#264B30] shadow-[0_1px_2px_rgba(47,90,58,0.25)]",
   secondary: "bg-card text-foreground border-border hover:bg-secondary/70",
-  danger:    "bg-card text-[#B42343] border-[#F2C4CF] hover:bg-[#FDECEF]",
-  warn:      "bg-card text-[#7A5200] border-[#EEDBB0] hover:bg-[#FBF0DA]",
+  danger:    "bg-card adm-fg-bad border-[color:var(--adm-bad-line)] hover:bg-[color:var(--adm-bad-bg)]",
+  warn:      "bg-card adm-fg-warn border-[color:var(--adm-warn-line)] hover:bg-[color:var(--adm-warn-bg)]",
   ghost:     "bg-transparent text-muted2-foreground border-transparent hover:bg-secondary hover:text-foreground",
 };
 
@@ -236,7 +218,7 @@ export function GlassCard({ children, style, hoverable = false, padding = 18, cl
   return (
     <div
       className={[
-        "rounded-xl border border-border/70 bg-card text-card-foreground shadow-[0_1px_2px_rgba(26,10,20,0.04)]",
+        "rounded-xl border border-border/70 bg-card text-card-foreground shadow-[var(--adm-shadow-card)]",
         hoverable ? "transition-shadow duration-150 hover:shadow-[0_4px_16px_rgba(26,10,20,0.07)]" : "",
         className || "",
       ].join(" ")}

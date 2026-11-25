@@ -100,15 +100,15 @@ export function Panel({ title, icon: Icon, actions, children, pad = 16 }: {
 }) {
   return (
     <section style={{
-      background: "rgba(255,255,255,0.88)", border: `1px solid rgba(220,30,60,0.08)`, borderRadius: 16,
-      boxShadow: "0 4px 24px rgba(26,10,20,0.04)", overflow: "hidden",
+      background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12,
+      boxShadow: "var(--adm-shadow-card)", overflow: "hidden",
     }}>
       <header style={{
         display: "flex", alignItems: "center", gap: 8, padding: "12px 16px",
         borderBottom: `1px solid ${C.line}`,
       }}>
-        {Icon && <Icon aria-hidden style={{ width: 15, height: 15, color: C.wineDeep }} />}
-        <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 650, color: C.ink, flex: 1 }}>{title}</h3>
+        {Icon && <Icon aria-hidden style={{ width: 15, height: 15, color: C.muted }} />}
+        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: C.ink, flex: 1, fontFamily: "inherit" }}>{title}</h3>
         {actions}
       </header>
       <div style={{ padding: pad }}>{children}</div>
@@ -120,12 +120,12 @@ function SmallButton({ children, onClick, tone = "neutral", disabled, type = "bu
   children: ReactNode; onClick?: () => void; tone?: "neutral" | "primary" | "danger"; disabled?: boolean; type?: "button" | "submit"; title?: string;
 }) {
   const s = tone === "primary"
-    ? { bg: C.ink, fg: "#fff", line: C.ink }
-    : tone === "danger" ? { bg: "#fff", fg: C.wineDeep, line: C.wineLine } : { bg: "#fff", fg: C.ink2, line: C.lineStrong };
+    ? { bg: C.wine, fg: "#fff", line: C.wine }
+    : tone === "danger" ? { bg: C.surface, fg: "var(--adm-bad)", line: "var(--adm-bad-line)" } : { bg: C.surface, fg: C.ink, line: C.line };
   return (
     <button type={type} onClick={onClick} disabled={disabled} title={title} className="crm-focus" style={{
-      display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: 8,
-      background: s.bg, color: s.fg, border: `1px solid ${s.line}`, fontSize: 12.5, fontWeight: 600,
+      display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 12px", borderRadius: 10,
+      background: s.bg, color: s.fg, border: `1px solid ${s.line}`, fontSize: 12.5, fontWeight: 500,
       cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, fontFamily: "inherit", whiteSpace: "nowrap",
     }}>{children}</button>
   );
@@ -166,7 +166,7 @@ export function ContactCard({ user, onEmail, onInApp, onExternal, lastContactedA
           empty={!user.whatsapp_number && "Needs a phone number with country code"}
           value={user.whatsapp_number && <a href={waHref(user.whatsapp_number)} target="_blank" rel="noopener noreferrer" onClick={() => onExternal("whatsapp")} style={{ color: C.wa, textDecoration: "none", fontWeight: 600 }}>Open chat</a>}
           meta={user.whatsapp_preferred
-            ? <span style={{ fontSize: 11, fontWeight: 650, color: C.wa, background: C.waTint, padding: "1px 7px", borderRadius: 99 }}>Preferred</span>
+            ? <span style={{ fontSize: 11, fontWeight: 600, color: C.wa, background: C.waTint, padding: "1px 7px", borderRadius: 99 }}>Preferred</span>
             : user.whatsapp_number ? <span style={{ fontSize: 11, color: C.muted }}>If they use WhatsApp</span> : null}
         />
         {user.alt_phone && (
@@ -310,7 +310,7 @@ export function TagsFollowUp({ userId, data, onChange, suggestions }: {
         <span style={{ ...labelStyle, marginBottom: 0 }}>Follow up on</span>
         {fu && (
           <span style={{
-            fontSize: 11.5, fontWeight: 650, padding: "2px 8px", borderRadius: 99,
+            fontSize: 11.5, fontWeight: 600, padding: "2px 8px", borderRadius: 99,
             color: fu.tone === "bad" ? C.wineDeep : fu.tone === "warn" ? C.warn : C.ink2,
             background: fu.tone === "bad" ? C.wineTint : fu.tone === "warn" ? C.warnTint : C.sunken,
           }}>{fu.label}</span>
@@ -631,10 +631,10 @@ export function Timeline({ userId, items, loading, onLogged, logPrompt, onDismis
                 </div>
                 <div style={{ padding: "12px 0 14px", borderBottom: i < shown.length - 1 ? `1px solid ${C.line}` : "none", minWidth: 0 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 650, color: C.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
                       {c.subject || (c.status === "logged" ? `${(c.channel === "call" ? "Phone call" : c.channel === "whatsapp" ? "WhatsApp" : c.channel.charAt(0).toUpperCase() + c.channel.slice(1))}${c.meta?.outcome ? ` · ${OUTCOME_LABEL[c.meta.outcome] || c.meta.outcome}` : ""}` : "(no subject)")}
                     </span>
-                    {c.broadcast_id && <span style={{ fontSize: 10.5, fontWeight: 700, color: C.info, background: C.infoTint, padding: "1px 6px", borderRadius: 5 }}>Broadcast</span>}
+                    {c.broadcast_id && <span style={{ fontSize: 10.5, fontWeight: 600, color: C.info, background: C.infoTint, padding: "1px 6px", borderRadius: 5 }}>Broadcast</span>}
                     <span style={{ marginLeft: "auto", fontSize: 11.5, color: C.muted, whiteSpace: "nowrap" }} title={fullTime(c.created_at)}>{relTime(c.created_at)}</span>
                   </div>
                   <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>

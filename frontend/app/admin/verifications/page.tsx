@@ -406,14 +406,14 @@ export default function AdminVerificationsPage() {
         {/* ── Queue ─────────────────────────────────────────────────────── */}
         <section
           aria-label="Verification queue"
-          className={cn("overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]", selected && "hidden lg:block")}
+          className={cn("overflow-hidden rounded-xl border border-border/70 bg-card shadow-[var(--adm-shadow-card)]", selected && "hidden lg:block")}
         >
           {filter === "submitted" && pendingVisible.length > 1 && (
             <label className="flex items-center gap-2 border-b border-border/60 px-4 py-2 text-[12px] text-muted2-foreground">
               <input
                 type="checkbox" checked={allChecked}
                 onChange={() => setChecked(allChecked ? new Set() : new Set(pendingVisible.map((p) => p.user_id)))}
-                className="h-3.5 w-3.5 accent-[#DC1E3C]"
+                className="h-3.5 w-3.5 accent-[hsl(var(--primary))]"
               />
               Select all {pendingVisible.length} · oldest first
             </label>
@@ -456,7 +456,7 @@ export default function AdminVerificationsPage() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 8 }}
               transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-              className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]"
+              className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-card shadow-[var(--adm-shadow-card)]"
             >
               <ReviewPanel
                 profile={selected}
@@ -559,7 +559,7 @@ function QueueRow({ profile, active, checked, onToggle, onOpen }: {
           <input
             type="checkbox" checked={checked} onChange={onToggle}
             aria-label={`Select ${name} for bulk approval`}
-            className="mt-3 h-3.5 w-3.5 shrink-0 accent-[#DC1E3C]"
+            className="mt-3 h-3.5 w-3.5 shrink-0 accent-[hsl(var(--primary))]"
           />
         ) : <span className="w-3.5 shrink-0" />}
         <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
@@ -730,7 +730,7 @@ function ReviewPanel({
               {review === undefined ? (
                 <div className="grid grid-cols-2 gap-2"><Skeleton className="aspect-[3/2]" /><Skeleton className="aspect-[3/2]" /></div>
               ) : review === "error" ? (
-                <p className="text-[12.5px] text-[#B42343]">Couldn&apos;t load documents. Close and reopen to retry.</p>
+                <p className="text-[12.5px] adm-fg-bad">Couldn&apos;t load documents. Close and reopen to retry.</p>
               ) : review.documents.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border bg-card px-3 py-4 text-[12.5px] text-muted2-foreground">
                   No ID submitted. Approving verifies the profile only — consider requesting an ID (<Kbd>I</Kbd>).
@@ -790,7 +790,7 @@ function ReviewPanel({
                   <Check ok={r.user.is_phone_verified} icon={Phone} label={r.user.phone || "No phone"} note={r.user.is_phone_verified ? "verified" : "unverified"} />
                   <li className="pt-1 text-[12px] text-muted2-foreground">
                     Joined {relTime(r.user.created_at)} · last active {relTime(r.user.last_active_at)}
-                    {!r.user.is_active && <> · <span className="font-medium text-[#B42343]">suspended</span></>}
+                    {!r.user.is_active && <> · <span className="font-medium adm-fg-bad">suspended</span></>}
                   </li>
                 </ul>
               ) : review === undefined ? <SkeletonRows rows={2} /> : <p className="text-[12.5px] text-muted2-foreground">—</p>}
@@ -848,7 +848,7 @@ function ReviewPanel({
                     onChange={(e) => setNote(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onSubmitNote(); } }}
                     placeholder={mode === "reject" ? "Reason the member will see… (⌘↵ to send)" : "What should the member add or fix? (⌘↵ to send)"}
-                    className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-[13px] text-foreground outline-none placeholder:text-muted2-foreground/80 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+                    className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-[13px] text-foreground outline-none placeholder:text-muted2-foreground focus:border-primary/50 focus:ring-2 focus:ring-ring/20"
                   />
                 </div>
               </motion.div>
@@ -915,7 +915,7 @@ function Facts({ rows }: { rows: Array<[string, unknown]> }) {
         return (
           <div key={label} className="min-w-0">
             <dt className="text-[11.5px] text-muted2-foreground">{label}</dt>
-            <dd className={cn("truncate text-[13px] capitalize", empty ? "text-muted2-foreground/60" : "text-foreground")} title={empty ? undefined : String(v)}>
+            <dd className={cn("truncate text-[13px] capitalize", empty ? "text-muted2-foreground" : "text-foreground")} title={empty ? undefined : String(v)}>
               {empty ? "—" : String(v)}
             </dd>
           </div>
@@ -938,8 +938,8 @@ function KeyValues({ data }: { data: Record<string, unknown> }) {
 
 function Callout({ tone, title, children }: { tone: "bad" | "neutral"; title: string; children: React.ReactNode }) {
   return (
-    <div className={cn("flex gap-2 rounded-lg border px-3 py-2 text-[12.5px]", tone === "bad" ? "border-[#F7CCD5] bg-[#FDECEF]/60" : "border-border bg-secondary/50")}>
-      <AlertTriangle className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", tone === "bad" ? "text-[#B42343]" : "text-muted2-foreground")} aria-hidden />
+    <div className={cn("flex gap-2 rounded-lg border px-3 py-2 text-[12.5px]", tone === "bad" ? "border-[color:var(--adm-bad-line)] bg-[color:var(--adm-bad-bg)]" : "border-border bg-secondary/50")}>
+      <AlertTriangle className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", tone === "bad" ? "adm-fg-bad" : "text-muted2-foreground")} aria-hidden />
       <div><span className="font-medium text-foreground">{title}: </span><span className="text-foreground/80">{children}</span></div>
     </div>
   );

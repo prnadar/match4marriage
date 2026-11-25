@@ -181,7 +181,7 @@ export default function MatchmakingPage() {
             description={a ? `Ranked from ${poolSize.toLocaleString("en-GB")} approved, active members` : "Pick a member to see ranked suggestions"}
             actions={a ? (
               <label className="flex items-center gap-1.5 text-[12px] text-muted2-foreground">
-                <input type="checkbox" checked={includeIntroduced} onChange={(e) => setIncludeIntroduced(e.target.checked)} className="h-3.5 w-3.5 accent-[#DC1E3C]" />
+                <input type="checkbox" checked={includeIntroduced} onChange={(e) => setIncludeIntroduced(e.target.checked)} className="h-3.5 w-3.5 accent-[hsl(var(--primary))]" />
                 Show introduced
               </label>
             ) : undefined}
@@ -280,8 +280,8 @@ export default function MatchmakingPage() {
                 </p>
               )}
               {blockers.length > 0 && (
-                <ul className="mb-3 space-y-1 rounded-lg border border-[#F7CCD5] bg-[#FDECEF]/60 px-3 py-2 text-[12.5px] text-foreground">
-                  {blockers.map((x) => <li key={x} className="flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5 text-[#B42343]" aria-hidden />{x}</li>)}
+                <ul className="mb-3 space-y-1 rounded-lg border border-[color:var(--adm-bad-line)] bg-[color:var(--adm-bad-bg)] px-3 py-2 text-[12.5px] text-foreground">
+                  {blockers.map((x) => <li key={x} className="flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5 adm-fg-bad" aria-hidden />{x}</li>)}
                 </ul>
               )}
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -294,7 +294,7 @@ export default function MatchmakingPage() {
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     placeholder="e.g. You both value family and live in London — we think you'd get on wonderfully."
-                    className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-[13px] text-foreground outline-none placeholder:text-muted2-foreground/80 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+                    className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-[13px] text-foreground outline-none placeholder:text-muted2-foreground focus:border-primary/50 focus:ring-2 focus:ring-ring/20"
                   />
                   <div className="mt-1 text-right text-[11.5px] tabular-nums text-muted2-foreground">{note.length}/500</div>
                 </div>
@@ -425,7 +425,7 @@ function MemberPicker({ placeholder, onPick, autoFocus }: { placeholder: string;
           aria-controls={listId}
           aria-expanded={open && results.length > 0}
           aria-autocomplete="list"
-          className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted2-foreground/80"
+          className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted2-foreground"
         />
       </label>
       <AnimatePresence>
@@ -492,7 +492,7 @@ function ScoreChip({ score }: { score: number }) {
   const t = scoreTone(score);
   return (
     <div className="flex w-12 shrink-0 flex-col items-end">
-      <span className={cn("text-[15px] font-semibold tabular-nums", t === "good" ? "text-[#2F5A3A]" : t === "warn" ? "text-[#7A5200]" : "text-muted2-foreground")}>{score}%</span>
+      <span className={cn("text-[15px] font-semibold tabular-nums", t === "good" ? "adm-fg-good" : t === "warn" ? "adm-fg-warn" : "text-muted2-foreground")}>{score}%</span>
       <span className="mt-1 h-1 w-full rounded-full bg-secondary">
         <span className="block h-full rounded-full bg-primary" style={{ width: `${score}%` }} />
       </span>

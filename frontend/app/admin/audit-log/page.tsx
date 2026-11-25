@@ -2,12 +2,11 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Download, ScrollText,
-} from "lucide-react";
+import { ChevronDown, Download, ScrollText } from "lucide-react";
 import { PageShell, Button } from "@/components/admin/PageShell";
 import {
-  EmptyState, Pill, SearchField, Segmented, SkeletonRows, formatDateTime, relTime, type Tone,
+  EmptyState, ErrorState, Pagination, Pill, SearchField, Segmented, Select, SkeletonRows, TABLE_CARD, TABLE_HEAD,
+  formatDateTime, relTime, type Tone,
 } from "@/components/admin/primitives";
 import { ACTION_GROUPS, describeAction } from "@/components/admin/audit-labels";
 import { adminOpsApi, ApiError, downloadCsv, type AuditLogParams } from "@/lib/api";
@@ -117,22 +116,14 @@ export default function AuditLogPage() {
             value={range} onChange={setRange}
             options={[{ value: "1", label: "24h" }, { value: "7", label: "7d" }, { value: "30", label: "30d" }, { value: "all", label: "All time" }]}
           />
-          <label className="sr-only" htmlFor="audit-group">Category</label>
-          <select
-            id="audit-group" value={group} onChange={(e) => setGroup(e.target.value)}
-            className="h-8 rounded-lg border border-border bg-card px-2.5 text-[12.5px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
-          >
+          <Select id="audit-group" ariaLabel="Category" size="sm" value={group} onChange={setGroup}>
             <option value="">All categories</option>
             {ACTION_GROUPS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
-          </select>
-          <label className="sr-only" htmlFor="audit-actor">Admin</label>
-          <select
-            id="audit-actor" value={actor} onChange={(e) => setActor(e.target.value)}
-            className="h-8 max-w-[220px] rounded-lg border border-border bg-card px-2.5 text-[12.5px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
-          >
+          </Select>
+          <Select id="audit-actor" ariaLabel="Admin" size="sm" value={actor} onChange={setActor} className="max-w-[220px]">
             <option value="">All admins</option>
             {actors.map((a) => <option key={a.email} value={a.email}>{a.email} ({a.count})</option>)}
-          </select>
+          </Select>
           <SearchField value={qLive} onChange={setQLive} placeholder="Search member, plan or note…" className="w-full sm:w-64" />
           {filtersActive && (
             <Button size="sm" variant="ghost" onClick={() => { setGroup(""); setActor(""); setQLive(""); setRange("30"); }}>Reset</Button>
@@ -140,11 +131,11 @@ export default function AuditLogPage() {
         </div>
       }
     >
-      <section className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]">
+      <section className={TABLE_CARD}>
         {loading && rows.length === 0 ? (
           <div className="p-3"><SkeletonRows rows={8} /></div>
         ) : error ? (
-          <EmptyState icon={AlertTriangle} title="Couldn't load the audit log" description={error} action={<Button size="sm" onClick={load}>Try again</Button>} />
+          <ErrorState title="Couldn't load the audit log" message={error} onRetry={load} />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={ScrollText}
@@ -155,7 +146,7 @@ export default function AuditLogPage() {
           <div className="overflow-x-auto" data-admin-scroll>
             <table className={cn("w-full min-w-[760px] border-collapse", loading && "opacity-60")}>
               <thead>
-                <tr className="border-b border-border/60 bg-secondary/40 text-left text-[11.5px] font-medium text-muted2-foreground">
+                <tr className={TABLE_HEAD}>
                   <th scope="col" className="px-4 py-2.5 w-[150px]">When</th>
                   <th scope="col" className="px-4 py-2.5 w-[200px]">Admin</th>
                   <th scope="col" className="px-4 py-2.5">Action</th>
@@ -169,7 +160,7 @@ export default function AuditLogPage() {
                   const hasDetails = Object.keys(r.details || {}).length > 0 || !!r.summary;
                   return (
                     <Fragment key={r.id}>
-                      <tr className={cn("border-b border-border/40 align-top transition-colors", open ? "bg-secondary/40" : "hover:bg-secondary/30")}>
+                      <tr className={cn("border-b border-border/50 align-top transition-colors", open ? "bg-secondary/40" : "hover:bg-secondary/30")}>
                         <td className="px-4 py-3 text-[12.5px]">
                           <span className="text-foreground" title={formatDateTime(r.created_at)}>{relTime(r.created_at)}</span>
                           <div className="text-[11.5px] tabular-nums text-muted2-foreground">{formatDateTime(r.created_at)}</div>
@@ -182,7 +173,7 @@ export default function AuditLogPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap items-center gap-2 text-[13px]">
-                            <Pill tone={toneFor(r.action)}>{r.action}</Pill>
+                            <Pill tone={toneFor(r.action)} className="font-mono text-[10.5px]">{r.action}</Pill>
                             <span className="text-muted2-foreground">{describeAction(r.action)}</span>
                             {r.target_label && (href
                               ? <Link href={href} className="font-medium text-foreground hover:underline">{r.target_label}</Link>
@@ -205,7 +196,7 @@ export default function AuditLogPage() {
                         </td>
                       </tr>
                       {open && (
-                        <tr className="border-b border-border/40 bg-secondary/40">
+                        <tr className="border-b border-border/50 bg-secondary/40">
                           <td colSpan={4} className="px-4 pb-4 pt-1">
                             <DetailGrid row={r} />
                           </td>
@@ -219,16 +210,7 @@ export default function AuditLogPage() {
           </div>
         )}
 
-        {total > LIMIT && (
-          <div className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-2.5 text-[12px] text-muted2-foreground">
-            <span className="tabular-nums">{(page - 1) * LIMIT + 1}–{Math.min(total, page * LIMIT)} of {total.toLocaleString("en-GB")}</span>
-            <div className="flex items-center gap-1">
-              <button type="button" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="grid h-7 w-7 place-items-center rounded-md text-foreground hover:bg-secondary disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
-              <span className="px-2 tabular-nums">Page {page} of {pages}</span>
-              <button type="button" aria-label="Next page" disabled={page >= pages} onClick={() => setPage((p) => p + 1)} className="grid h-7 w-7 place-items-center rounded-md text-foreground hover:bg-secondary disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
-            </div>
-          </div>
-        )}
+        {total > LIMIT && <Pagination page={page} pageCount={pages} onPage={setPage} total={total} pageSize={LIMIT} />}
       </section>
     </PageShell>
   );

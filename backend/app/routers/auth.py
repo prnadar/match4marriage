@@ -1607,28 +1607,27 @@ def _row_dict(obj: Any, exclude: set[str] | None = None) -> dict[str, Any]:
     return out
 
 
-@router.get("/me/export", response_model=APIResponse[dict])
-@limiter.limit("5/hour")
-async def export_my_data(
-    request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[dict, Depends(get_current_user)],
-):
+async def build_personal_data_export(db: AsyncSession, uid: _uuid_mod.UUID) -> dict[str, Any] | None:
     """
-    Download a copy of the member's personal data as JSON: account, profile,
-    interests, matches, chat threads + message METADATA (no message bodies),
-    subscriptions & credits, notifications, verifications and settings.
+    Assemble one member's personal data (Art. 15 / 20) as a JSON-safe dict:
+    account, profile, interests, matches, chat threads + message METADATA (no
+    message bodies), subscriptions & credits, notifications, verifications,
+    consent records and settings. Returns None when the user row doesn't exist.
+
+    Shared by the member's own GET /auth/me/export and the admin data-request
+    export (routers/admin_compliance.py) so both always produce the same file.
+    Works for soft-deleted accounts too (the admin path needs that).
     """
+    from app.models.consent import UserConsent
     from app.models.match import ChatThread, Interest, Match, Message
     from app.models.notification import Notification
     from app.models.subscription import CreditTransaction, Subscription
     from app.models.user import UserProfile
     from app.models.verification import Verification
 
-    uid = _caller_uuid(current_user)
     user = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
     if user is None:
-        raise HTTPException(status_code=404, detail="No account data found.")
+        return None
 
     async def _safe(label: str, coro):
         try:
@@ -1669,6 +1668,9 @@ async def export_my_data(
         select(Notification).where(Notification.user_id == uid).order_by(Notification.created_at.desc())
     ))
     verifs = await _safe("verifications", _all(select(Verification).where(Verification.user_id == uid)))
+    consents = await _safe("consents", _all(
+        select(UserConsent).where(UserConsent.user_id == uid).order_by(UserConsent.created_at.desc())
+    ))
     stored_settings = await _read_account_settings(db, uid)
 
     def _counterparty(a, b):
@@ -1721,7 +1723,27 @@ async def export_my_data(
         "credit_transactions": [_row_dict(c) for c in (credits or [])],
         "notifications": [_row_dict(n) for n in (notifs or [])],
         "verifications": [_row_dict(v) for v in (verifs or [])],
+        "consents": [_row_dict(c) for c in (consents or [])],
     }
+    return export
+
+
+@router.get("/me/export", response_model=APIResponse[dict])
+@limiter.limit("5/hour")
+async def export_my_data(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    """
+    Download a copy of the member's personal data as JSON: account, profile,
+    interests, matches, chat threads + message METADATA (no message bodies),
+    subscriptions & credits, notifications, verifications, consents and settings.
+    """
+    uid = _caller_uuid(current_user)
+    export = await build_personal_data_export(db, uid)
+    if export is None:
+        raise HTTPException(status_code=404, detail="No account data found.")
     logger.info("gdpr_export_generated", user_id=str(uid))
     return APIResponse(success=True, data=export)
 

@@ -15,16 +15,20 @@
     --border-gold: rgba(220, 30, 60, 0.12);
     --shadow-warm: 0 4px 20px rgba(220, 30, 60, 0.06);
 
-    /* ── Type scale — brand stack:
-         Cinzel (display)     — main logo wordmark + section headings
-         Montserrat (nav)     — navigation, buttons, sub-headings
-         Open Sans (body)     — descriptive copy, success-stories, body text
-       The legacy variable aliases stay so existing pages keep working. */
-    --font-display:    'Playfair Display', 'Fraunces', Georgia, serif;
-    --font-display-alt:'Cormorant', 'Playfair Display', Georgia, serif;
-    --font-nav:        'Montserrat', 'Inter', system-ui, -apple-system, sans-serif;
-    --font-body:       'Open Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    --font-script:     'Great Vibes', cursive;
+    /* ── Brand faces (frontend/DESIGN.md → Typography) ──────────────────
+         Source Serif 4 (display) — headings, names, the italic accent
+         Inter (sans)             — body, navigation, buttons, tables
+       Both are self-hosted by next/font in app/layout.tsx, which sets
+       --m4m-face-serif / --m4m-face-sans on <html> (each already carries a
+       metric-matched fallback). Every token and legacy alias below resolves
+       to one of those two, so pages written against any of the old names
+       (Playfair, Cinzel, Cormorant, Montserrat, Poppins, Open Sans, Lato,
+       Great Vibes) pick the new faces up without edits. */
+    --font-display:    var(--m4m-face-serif), 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --font-display-alt: var(--font-display);   /* was Cormorant: the italic accent is now the display serif's own italic */
+    --font-nav:        var(--m4m-face-sans), 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --font-body:       var(--font-nav);
+    --font-script:     var(--font-display);    /* Great Vibes retired (unused); alias kept so nothing falls back */
 
     --font-playfair:   var(--font-display);
     --font-poppins:    var(--font-nav);
@@ -32,8 +36,10 @@
     --font-great-vibes: var(--font-script);
     --font-cinzel:     var(--font-display);
 
-    /* Optical-sized display headings — set by --font-fraunces-opsz */
-    --fraunces-display: "opsz" 144, "SOFT" 30, "WONK" 0;
+    /* Legacy hook from the Fraunces era, still applied by .font-playfair /
+       .font-cinzel. `normal` lets the display serif pick its optical size
+       from the font size (font-optical-sizing: auto). */
+    --fraunces-display: normal;
 
     /* ── shadcn semantic tokens · Modern Luxe palette ─────────────────────
        HSL channels (no `hsl()` wrapper) so Tailwind's `hsl(var(--x) / <a>)`
@@ -92,23 +98,26 @@
     font-weight: 400;
     font-size: 1rem;
     line-height: 1.6;
-    /* Inter activates contextual + tabular numerals + cv ligatures for editorial feel */
-    font-feature-settings: "ss01", "cv11", "cv02", "tnum";
+    /* No global "tnum": Inter's tabular feature also widens hyphens, commas,
+       colons and brackets to figure width, which loosens running text
+       ("advisor - led"). Ask for it where columns must line up, with the
+       `tabular-nums` utility on the numeric cell or value. */
+    font-feature-settings: normal;
   }
 
-  /* Display headings — Cinzel for editorial brand weight. */
+  /* Display headings — the display serif (Source Serif 4). */
   h1, h2, h3, h4 {
     font-family: var(--font-display);
     letter-spacing: 0.005em;
   }
 
-  /* Nav, buttons, sub-headings — Montserrat per brand spec. */
+  /* Nav, buttons, sub-headings — the sans (Inter). */
   nav, button, .m4m-nav, .m4m-nav__link, .m4m-nav__login, .m4m-nav__register,
   .m4m-nav__mobile-link, .m4m-nav__mobile-sublink, .m4m-nav__mobile-section {
     font-family: var(--font-nav);
   }
 
-  /* Great Vibes — for hero taglines, script accents */
+  /* Retired script accent — resolves to the display serif. */
   .font-script {
     font-family: var(--font-great-vibes);
   }
@@ -329,7 +338,7 @@
     animation: m4m-shimmer 1.4s linear infinite;
   }
 
-  /* Legacy aliases — both now resolve to the new Fraunces / Inter system. */
+  /* Legacy aliases — resolve to the display serif / the sans. */
   .font-playfair { font-family: var(--font-display); font-variation-settings: var(--fraunces-display); letter-spacing: -0.012em; }
   .font-cinzel   { font-family: var(--font-display); font-variation-settings: var(--fraunces-display); letter-spacing: -0.01em; }
   .font-poppins  { font-family: var(--font-body); }
@@ -1213,3 +1222,237 @@
     transition: none;
   }
 }
+
+/* ╔══════════════════════════════════════════════════════════════════╗
+   ║  MATCH4MARRIAGE DESIGN SYSTEM · tokens            (frontend/DESIGN.md)
+   ║
+   ║  The single source of truth for the "private members' club"
+   ║  direction set by the member shell, the membership-journey gate
+   ║  and the consent card. Additive only: every value below already
+   ║  existed in the codebase and was picked as the canonical member of
+   ║  its cluster. Nothing above this block reads these variables, so
+   ║  adding them changes no existing page.
+   ║
+   ║  Exposed to Tailwind under the `m4m` namespace (tailwind.config.ts)
+   ║  and consumed by the primitives in components/m4m/.
+   ║
+   ║  Colour ROLES (do not repurpose):
+   ║    rose   the ONE primary action in a view, and the active state
+   ║    gold   hairlines, small-caps labels, status / membership accents
+   ║    green  the verified / complete tick, nothing else
+   ║    ink    the aubergine ground and its raised steps
+   ╚══════════════════════════════════════════════════════════════════╝ */
+:root {
+  /* ── Ink · the aubergine ground ─────────────────────────────────── */
+  --m4m-ink-950: #0b0509;   /* deepest: foot of the ground gradient */
+  --m4m-ink-900: #170811;   /* shell: sidebar, app bar */
+  --m4m-ink-850: #1a0a14;   /* brand "deep": footer, banners, sheets; ink text on light */
+  --m4m-ink-800: #220c1a;   /* lifted: mid-stop of the ground gradient */
+
+  /* ── Surfaces ───────────────────────────────────────────────────── */
+  --m4m-surface-ground: linear-gradient(165deg, #170811 0%, #220c1a 45%, #0b0509 100%); /* every member page */
+  --m4m-surface-rail:   linear-gradient(180deg, #170811 0%, #1a0a14 55%, #0b0509 100%); /* sidebar only */
+  --m4m-surface-bar:    rgba(23,8,17,0.97);        /* sticky app bar */
+  --m4m-surface-card:   rgba(255,255,255,0.04);    /* dark hairline card */
+  --m4m-surface-quiet:  rgba(255,255,255,0.025);   /* card inside the rail / nested module */
+  --m4m-surface-hover:  rgba(255,255,255,0.06);    /* hover wash on rows + icon buttons */
+  --m4m-surface-active: rgba(255,255,255,0.055);   /* selected row (with rose marker) */
+  --m4m-surface-sheet:  #1a0a14;                   /* opaque overlays: sheets, dialogs, pills */
+  --m4m-surface-scrim:  rgba(0,0,0,0.6);           /* behind drawers and dialogs */
+  --m4m-ivory:          #fdf9f4;                   /* light ground: public marketing pages */
+  --m4m-ivory-deep:     #faf3eb;                   /* alternate light band */
+  --m4m-paper:          #ffffff;                   /* light card on ivory; logo plate */
+
+  /* ── Hairlines · structure comes from lines, not glow ───────────── */
+  --m4m-hairline:             rgba(255,255,255,0.08);  /* default divider + card edge on dark */
+  --m4m-hairline-strong:      rgba(255,255,255,0.12);  /* inputs, rails, emphasised edge */
+  --m4m-hairline-control:     rgba(255,255,255,0.2);   /* quiet-button outline */
+  --m4m-hairline-gold:        rgba(201,149,74,0.28);   /* membership / editorial rule */
+  --m4m-hairline-gold-strong: rgba(201,149,74,0.5);    /* avatar ring, hover on quiet button */
+  --m4m-hairline-light:       rgba(26,10,20,0.10);     /* divider on ivory / paper */
+
+  /* ── Text on the aubergine ground (contrast vs #220c1a, worst case) ─ */
+  --m4m-fg:        #ffffff;                  /* headings, emphasis        17.6:1 */
+  --m4m-fg-body:   #e7dde0;                  /* default running text      13.9:1 */
+  --m4m-fg-soft:   rgba(255,255,255,0.78);   /* secondary copy, links     11.4:1 */
+  --m4m-fg-muted:  rgba(255,255,255,0.65);   /* notes, captions            8.1:1 */
+  --m4m-fg-faint:  rgba(255,255,255,0.55);   /* meta, FLOOR for text       6.1:1 */
+  /* Below 0.5 white fails WCAG AA on this ground (0.45 = 4.47:1). Never
+     set text lower than --m4m-fg-faint; 0.3 is for decorative icons only. */
+
+  /* ── Text on ivory / paper (contrast vs #fdfbf9) ────────────────── */
+  --m4m-ink-text:       #1a0a14;   /* 18.5:1 */
+  --m4m-ink-text-soft:  #4a3a40;   /* 10.3:1 */
+  --m4m-ink-text-muted: #6a5560;   /*  6.6:1  FLOOR for text on light */
+
+  /* ── Rose · the single primary action + the active state ────────── */
+  --m4m-rose:       #dc1e3c;   /* primary fill; active marker; focus ring on light (white on it 4.9:1) */
+  --m4m-rose-deep:  #a0153c;   /* gradient foot / pressed (white on it 7.9:1) */
+  --m4m-rose-soft:  #ff8aa3;   /* rose AS TEXT/ICON on dark: active icon, attention, errors (8.3:1) */
+  --m4m-rose-blush: #ffd4dc;   /* inline links + focus ring on dark (13.8:1) */
+  --m4m-rose-fill:  linear-gradient(135deg, #dc1e3c, #a0153c);
+  /* #dc1e3c as text on the dark ground is 3.8:1 and fails AA: use -soft. */
+
+  /* ── Gold · hairlines, small-caps labels, status + membership ───── */
+  --m4m-gold:           #c9954a;                /* rules, ticks, progress */
+  --m4m-gold-label:     rgba(201,149,74,0.95);  /* small-caps kicker on dark (6.4:1) */
+  --m4m-gold-champagne: #f3c9a8;                /* status words, tier names, accent icons (12.1:1) */
+  --m4m-gold-deep:      #8a5e20;                /* gold AS TEXT on ivory (5.5:1); #c9954a there is 2.6:1 */
+
+  /* ── Green · verified / complete only ───────────────────────────── */
+  --m4m-verified:      #86efac;   /* the tick on dark (13.2:1) */
+  --m4m-verified-deep: #3f5937;   /* the tick on ivory / paper (7.5:1) */
+
+  /* ── Type ───────────────────────────────────────────────────────── */
+  --m4m-font-display: var(--font-display);   /* Source Serif 4: headings, names, the italic accent */
+  --m4m-font-label:   var(--font-nav);       /* Inter: kickers, buttons, nav */
+  --m4m-font-body:    var(--font-body);      /* Inter: running text, tables */
+
+  --m4m-type-kicker-sm:  10px;     /* shell eyebrow */
+  --m4m-type-kicker:     11.5px;   /* page kicker */
+  --m4m-type-status:     10.5px;   /* status word */
+  --m4m-type-caption:    12px;
+  --m4m-type-small:      13px;     /* meta, dense UI, small buttons */
+  --m4m-type-ui:         14px;     /* buttons, nav, form controls */
+  --m4m-type-body:       16px;
+  --m4m-type-lead:       18px;     /* one intro paragraph per page */
+  --m4m-type-title:      18px;     /* display: card / dialog title */
+  --m4m-type-section:    20px;     /* display: section heading */
+  --m4m-type-section-lg: 24px;
+  --m4m-type-page:       32px;     /* display: page title */
+  --m4m-type-page-lg:    42px;
+  --m4m-type-hero:       58px;     /* display: one statement per page, desktop only */
+
+  --m4m-weight-regular: 400;
+  --m4m-weight-medium:  500;   /* nav, quiet labels */
+  --m4m-weight-strong:  600;   /* display, buttons, kickers. 700+ is not part of the system */
+
+  --m4m-tracking-display: -0.01em;   /* Source Serif 4 sets slightly open at 32px+ */
+  --m4m-tracking-ui:      0.01em;
+  --m4m-tracking-status:  0.16em;
+  --m4m-tracking-kicker:  0.2em;
+
+  --m4m-leading-display: 1.12;
+  --m4m-leading-title:   1.25;
+  --m4m-leading-body:    1.6;
+  --m4m-leading-relaxed: 1.7;   /* light text on dark needs the extra air */
+
+  /* ── Radius · five steps ────────────────────────────────────────── */
+  --m4m-radius-xs:   4px;      /* focus outline, tiny marks */
+  --m4m-radius-sm:   10px;     /* rows, icon buttons, inputs */
+  --m4m-radius-md:   12px;     /* cards, modules */
+  --m4m-radius-lg:   20px;     /* sheets, dialogs */
+  --m4m-radius-pill: 9999px;   /* buttons, avatars */
+
+  /* ── Elevation · hairline first, shadow only when something floats.
+        Shadows are neutral black: no rose or gold glow. ────────────── */
+  --m4m-elev-none:      none;
+  --m4m-elev-inset:     inset 0 0 0 1px rgba(255,255,255,0.07);                 /* selected row */
+  --m4m-elev-ring-gold: 0 0 0 2px #170811, 0 0 0 3px rgba(201,149,74,0.5);      /* avatar ring */
+  --m4m-elev-raised:    0 6px 16px rgba(0,0,0,0.35);                            /* the primary button */
+  --m4m-elev-float:     0 10px 24px rgba(0,0,0,0.45);                           /* floating pill, popover */
+  --m4m-elev-sheet:     0 -12px 40px rgba(0,0,0,0.5);                           /* bottom sheet / dialog */
+
+  /* ── Motion ─────────────────────────────────────────────────────── */
+  --m4m-ease-out:     cubic-bezier(0.22, 1, 0.36, 1);   /* the one curve; no bounce */
+  --m4m-dur-press:    120ms;   /* tap feedback */
+  --m4m-dur-fast:     180ms;   /* hover colour / background */
+  --m4m-dur-base:     200ms;   /* fades, button states */
+  --m4m-dur-slow:     320ms;   /* drawer, panel, list group */
+  --m4m-dur-entrance: 500ms;   /* page entrance item */
+  --m4m-stagger:      80ms;    /* between entrance items */
+
+  /* ── Focus ──────────────────────────────────────────────────────── */
+  --m4m-focus-width:      2px;
+  --m4m-focus-offset:     3px;
+  --m4m-focus-ring-dark:  #ffd4dc;   /* on the aubergine ground */
+  --m4m-focus-ring-light: #dc1e3c;   /* on ivory / paper */
+
+  /* ── Layout ─────────────────────────────────────────────────────── */
+  --m4m-tap:       44px;     /* minimum hit area; also the nav row height */
+  --m4m-bar-h:     64px;     /* app bar = sidebar top row, so the hairlines meet */
+  --m4m-gutter:    16px;     /* page side padding: phone */
+  --m4m-gutter-md: 24px;     /* tablet */
+  --m4m-gutter-lg: 40px;     /* desktop */
+  --m4m-measure:   60ch;     /* longest line of running text */
+  --m4m-content:   1180px;   /* widest page column */
+}
+/* ══ end Match4Marriage design system tokens ══════════════════════════ */
+
+/* ╔══════════════════════════════════════════════════════════════════╗
+   ║  ADMIN CONSOLE · scoped tokens + helpers   (admin design pass)
+   ║
+   ║  Additive and prefixed `adm-`; nothing outside frontend/app/admin
+   ║  and frontend/components/admin reads these. The console is a LIGHT
+   ║  ivory work surface (long sessions, dense tables) framed by the
+   ║  member app's aubergine rail, so it reads as the same brand.
+   ║
+   ║  Status roles (text on its own tint is ≥ 6:1, on white ≥ 7:1):
+   ║    good  done / approved / paid          warn  waiting / due soon
+   ║    bad   failed / overdue / destructive  info  neutral system fact
+   ║    brand rose: the primary action + current selection only
+   ╚══════════════════════════════════════════════════════════════════╝ */
+:root {
+  --adm-good: #2f5a3a;  --adm-good-bg: #eaf2eb;  --adm-good-line: #cfe0d3;
+  --adm-warn: #7a5200;  --adm-warn-bg: #fbf0da;  --adm-warn-line: #eedbb0;
+  --adm-bad:  #9f1239;  --adm-bad-bg:  #fdecef;  --adm-bad-line:  #f7ccd5;
+  --adm-info: #26437f;  --adm-info-bg: #ebf0fb;  --adm-info-line: #d0dbf3;
+  --adm-brand: #a0153c; --adm-brand-bg: #fdeef1; --adm-brand-line: #f6ccd4;
+  --adm-gold-text: #8a5e20;                       /* gold AS TEXT on light (5.5:1) */
+  --adm-rail: linear-gradient(180deg, #170811 0%, #1a0a14 55%, #0b0509 100%);
+  --adm-rail-line: rgba(255, 255, 255, 0.08);
+  --adm-rail-gold: rgba(201, 149, 74, 0.95);
+  --adm-shadow-card: 0 1px 2px rgba(26, 10, 20, 0.04);
+  --adm-shadow-pop: 0 10px 30px -8px rgba(26, 10, 20, 0.22), 0 2px 6px rgba(26, 10, 20, 0.06);
+  --adm-shadow-modal: 0 24px 60px -12px rgba(26, 10, 20, 0.35);
+}
+
+/* Figures line up in every table, KPI and timestamp. */
+.admin-console { font-variant-numeric: tabular-nums; }
+
+/* Hierarchy: the display serif is for the page title (and dialog titles that
+   opt in with .font-display). Section and panel headings are UI labels. */
+.admin-console :is(h2, h3, h4, h5):not(.font-display) {
+  font-family: var(--font-body);
+  letter-spacing: normal;
+}
+
+/* Status text + soft status surfaces (use with Tailwind `border`). */
+.adm-fg-good  { color: var(--adm-good); }
+.adm-fg-warn  { color: var(--adm-warn); }
+.adm-fg-bad   { color: var(--adm-bad); }
+.adm-fg-info  { color: var(--adm-info); }
+.adm-fg-brand { color: var(--adm-brand); }
+.adm-fg-gold  { color: var(--adm-gold-text); }
+.adm-soft-good  { color: var(--adm-good);  background-color: var(--adm-good-bg);  border-color: var(--adm-good-line); }
+.adm-soft-warn  { color: var(--adm-warn);  background-color: var(--adm-warn-bg);  border-color: var(--adm-warn-line); }
+.adm-soft-bad   { color: var(--adm-bad);   background-color: var(--adm-bad-bg);   border-color: var(--adm-bad-line); }
+.adm-soft-info  { color: var(--adm-info);  background-color: var(--adm-info-bg);  border-color: var(--adm-info-line); }
+.adm-soft-brand { color: var(--adm-brand); background-color: var(--adm-brand-bg); border-color: var(--adm-brand-line); }
+
+/* The aubergine rail (sidebar) and its small-caps group label. */
+.adm-rail { background: var(--adm-rail); }
+.adm-kicker {
+  font-family: var(--font-nav);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--adm-rail-gold);
+}
+
+/* Skeleton shimmer and every console transition stand still on request. */
+@media (prefers-reduced-motion: reduce) {
+  .admin-console .m4m-shimmer::after { animation: none; }
+  .admin-console *, .admin-console *::before, .admin-console *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* ══ end admin console block ══════════════════════════════════════════ */
+/* admin rail: quiet scrollbar on the dark ground */
+[data-admin-rail-scroll] { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.14) transparent; }
+[data-admin-rail-scroll]::-webkit-scrollbar { width: 6px; }
+[data-admin-rail-scroll]::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 3px; }

@@ -3,9 +3,11 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, AlertTriangle, CreditCard, Crown, ArrowRight, Download } from "lucide-react";
+import { CreditCard, Crown, ArrowRight, Download } from "lucide-react";
 import { PageShell, Button, fadeUp } from "@/components/admin/PageShell";
-import { Segmented, SearchField, EmptyState, SkeletonRows, Pill, type Tone } from "@/components/admin/primitives";
+import {
+  Segmented, SearchField, EmptyState, SkeletonRows, Pill, Pagination, ErrorState, TABLE_CARD, TABLE_HEAD, TABLE_ROW, formatDate, type Tone,
+} from "@/components/admin/primitives";
 import { adminApi, ApiError } from "@/lib/api";
 import { planLabel, formatGBP } from "@/lib/plans";
 import { usePersistentState, oneOf, exportRowsToCsv } from "../_lib/view-state";
@@ -53,13 +55,6 @@ const STATUS_PILL: Record<string, { tone: Tone; label: string }> = {
   expired:   { tone: "bad",     label: "Expired" },
   past_due:  { tone: "warn",    label: "Past due" },
 };
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-}
 
 function daysUntil(iso: string | null): { label: string; tone: Tone } {
   if (!iso) return { label: "—", tone: "neutral" };
@@ -178,7 +173,7 @@ export default function AdminSubscriptionsPage() {
             value={qLive}
             onChange={setQLive}
             placeholder="Search by member name or email…"
-            className="w-full max-w-sm"
+            className="w-full sm:max-w-sm"
           />
           <div className="max-w-full overflow-x-auto">
             <Segmented<StatusFilter>
@@ -192,10 +187,10 @@ export default function AdminSubscriptionsPage() {
         </div>
       }
     >
-      <motion.div variants={fadeUp} className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]">
+      <motion.div variants={fadeUp} className={TABLE_CARD}>
         <div className="overflow-x-auto" data-admin-scroll>
           <div className="min-w-[780px]">
-            <div className={`${GRID} border-b border-border/60 bg-secondary/40 px-4 py-2.5 text-[11.5px] font-medium text-muted2-foreground`}>
+            <div className={`${GRID} ${TABLE_HEAD} px-4 py-2.5`}>
               <div>Member</div>
               <div>Plan</div>
               <div>Status</div>
@@ -207,10 +202,7 @@ export default function AdminSubscriptionsPage() {
             {loading ? (
               <div className="p-3"><SkeletonRows rows={6} /></div>
             ) : error ? (
-              <div role="alert" className="flex items-center gap-2 px-4 py-5 text-[13px] text-[#9F1239]">
-                <AlertTriangle className="h-4 w-4" aria-hidden /> {error}
-                <Button size="sm" variant="ghost" onClick={load}>Retry</Button>
-              </div>
+              <ErrorState title="Couldn't load subscriptions" message={error} onRetry={load} />
             ) : items.length === 0 ? (
               <EmptyState
                 icon={CreditCard}
@@ -222,21 +214,9 @@ export default function AdminSubscriptionsPage() {
             )}
           </div>
         </div>
+        {pageCount > 1 && status !== "expiring" && <Pagination page={page} pageCount={pageCount} onPage={setPage} total={total} pageSize={limit} />}
       </motion.div>
 
-      {pageCount > 1 && status !== "expiring" && (
-        <motion.nav variants={fadeUp} aria-label="Pagination" className="mt-4 flex items-center justify-center gap-3">
-          <Button size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
-            <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
-          </Button>
-          <span className="text-[12.5px] text-muted2-foreground tabular-nums">
-            Page <strong className="text-foreground">{page}</strong> of {pageCount}
-          </span>
-          <Button size="sm" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount}>
-            Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-          </Button>
-        </motion.nav>
-      )}
     </PageShell>
   );
 }
@@ -249,7 +229,7 @@ function SubRow({ sub }: { sub: SubscriptionRow }) {
   return (
     <Link
       href={`/admin/users/${sub.user_id}`}
-      className={`${GRID} border-b border-border/40 px-4 py-3 text-foreground no-underline transition-colors last:border-0 hover:bg-secondary/40 focus-visible:bg-secondary/60 focus-visible:outline-none`}
+      className={`${GRID} ${TABLE_ROW} px-4 py-3 text-foreground no-underline focus-visible:bg-secondary/60 focus-visible:shadow-[inset_2px_0_0_hsl(var(--primary))] focus-visible:outline-none`}
     >
       <div className="flex min-w-0 items-center gap-2.5">
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border/70 bg-secondary/60">

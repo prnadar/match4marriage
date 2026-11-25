@@ -11,16 +11,14 @@ import { Segmented, Skeleton, Pill, EmptyState, Panel, formatDateTime, relTime }
 import ConfirmModal from "@/components/admin/ConfirmModal";
 import { adminApi, ApiError } from "@/lib/api";
 import { useToast } from "@/components/admin/Toast";
+import { FIELD } from "@/components/admin/primitives";
 import { usePersistentState, oneOf } from "../_lib/view-state";
 
 // ─── Shared form styling ─────────────────────────────────────────────────────
 
-const inputCls =
-  "h-9 w-full rounded-lg border border-border bg-card px-3 text-[13px] text-foreground outline-none " +
-  "placeholder:text-muted2-foreground/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-60";
-const textareaCls =
-  "w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-[13px] leading-relaxed text-foreground outline-none " +
-  "placeholder:text-muted2-foreground/70 focus:border-primary/40 focus:ring-2 focus:ring-primary/15";
+// One field recipe for the whole console (components/admin/primitives FIELD).
+const inputCls = `h-9 ${FIELD}`;
+const textareaCls = `resize-y py-2 leading-relaxed ${FIELD}`;
 const monoCls = "font-mono text-[12.5px]";
 
 /** Promise-based confirm dialog so destructive actions never use window.confirm. */
@@ -117,7 +115,7 @@ export default function AdminSettingsPage() {
 
 function ErrorBanner({ children }: { children: React.ReactNode }) {
   return (
-    <div role="alert" className="flex items-center gap-2 rounded-lg border border-[#F7CCD5] bg-[#FDECEF] px-3 py-2.5 text-[13px] text-[#9F1239]">
+    <div role="alert" className="flex items-center gap-2 rounded-lg border border-[color:var(--adm-bad-line)] bg-[color:var(--adm-bad-bg)] px-3 py-2.5 text-[13px] adm-fg-bad">
       <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden /> {children}
     </div>
   );
@@ -469,7 +467,7 @@ function AdminsTab() {
                 className={`${inputCls} w-full sm:w-72`}
               />
               <label className="inline-flex items-center gap-2 text-[13px] text-foreground">
-                <input type="checkbox" checked={create} onChange={(e) => setCreate(e.target.checked)} className="h-4 w-4 accent-[#DC1E3C]" />
+                <input type="checkbox" checked={create} onChange={(e) => setCreate(e.target.checked)} className="h-4 w-4 accent-[hsl(var(--primary))]" />
                 Create account if missing
               </label>
               {create && (
@@ -638,7 +636,7 @@ function MailTab() {
                 <div className="font-mono text-[11.5px] text-muted2-foreground">{draft.key}</div>
               </div>
               <label className="inline-flex items-center gap-2 text-[12.5px] text-foreground">
-                <input type="checkbox" checked={draft.is_active} onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })} className="h-4 w-4 accent-[#DC1E3C]" />
+                <input type="checkbox" checked={draft.is_active} onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })} className="h-4 w-4 accent-[hsl(var(--primary))]" />
                 {draft.is_active ? "Active" : "Inactive"}
               </label>
             </div>
@@ -833,11 +831,11 @@ function SeoTab() {
               <p className="text-[12px] text-muted2-foreground">Used in &lt;head&gt; on the public page.</p>
             </div>
 
-            <Field label="Title" htmlFor="seo-title" hint={<span className={titleLen > 60 ? "text-[#9F1239]" : ""}>{titleLen} / 60 characters</span>}>
+            <Field label="Title" htmlFor="seo-title" hint={<span className={titleLen > 60 ? "adm-fg-bad" : ""}>{titleLen} / 60 characters</span>}>
               <input id="seo-title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="e.g. Match4Marriage: Premium Matrimony" className={inputCls} />
             </Field>
 
-            <Field label="Meta description" htmlFor="seo-desc" hint={<span className={descLen > 160 ? "text-[#9F1239]" : ""}>{descLen} / 160 characters</span>}>
+            <Field label="Meta description" htmlFor="seo-desc" hint={<span className={descLen > 160 ? "adm-fg-bad" : ""}>{descLen} / 160 characters</span>}>
               <textarea id="seo-desc" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Up to ~160 characters of descriptive text for search results." rows={3} className={textareaCls} />
             </Field>
 
@@ -983,7 +981,7 @@ function AppearanceTab() {
 
       <Panel title="Brand colours">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Primary" htmlFor="app-primary" hint={primaryInvalid ? <span className="text-[#9F1239]">Use #RRGGBB or #RRGGBBAA</span> : "Buttons, links and highlights."}>
+          <Field label="Primary" htmlFor="app-primary" hint={primaryInvalid ? <span className="adm-fg-bad">Use #RRGGBB or #RRGGBBAA</span> : "Buttons, links and highlights."}>
             <div className="flex gap-2">
               <input
                 type="color"
@@ -995,7 +993,7 @@ function AppearanceTab() {
               <input id="app-primary" value={draft.brand_primary || ""} onChange={(e) => setDraft({ ...draft, brand_primary: e.target.value })} placeholder="#dc1e3c" aria-invalid={primaryInvalid} className={`${inputCls} font-mono`} />
             </div>
           </Field>
-          <Field label="Accent" htmlFor="app-accent" hint={accentInvalid ? <span className="text-[#9F1239]">Use #RRGGBB or #RRGGBBAA</span> : "Secondary highlights and badges."}>
+          <Field label="Accent" htmlFor="app-accent" hint={accentInvalid ? <span className="adm-fg-bad">Use #RRGGBB or #RRGGBBAA</span> : "Secondary highlights and badges."}>
             <div className="flex gap-2">
               <input
                 type="color"
@@ -1211,7 +1209,7 @@ function PaymentGatewayTab() {
               label={labels.secret}
               htmlFor="gw-secret"
               hint={existing?.secret_configured ? (
-                <button type="button" onClick={() => clearSecret("secret_key")} className="rounded font-medium text-[#9F1239] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                <button type="button" onClick={() => clearSecret("secret_key")} className="rounded font-medium adm-fg-bad hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
                   Clear stored secret
                 </button>
               ) : undefined}
@@ -1230,7 +1228,7 @@ function PaymentGatewayTab() {
               label={labels.webhook}
               htmlFor="gw-webhook"
               hint={existing?.webhook_configured ? (
-                <button type="button" onClick={() => clearSecret("webhook_secret")} className="rounded font-medium text-[#9F1239] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                <button type="button" onClick={() => clearSecret("webhook_secret")} className="rounded font-medium adm-fg-bad hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
                   Clear stored webhook value
                 </button>
               ) : undefined}
@@ -1248,12 +1246,12 @@ function PaymentGatewayTab() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-[13px] text-foreground ${draft.is_test_mode ? "border-[#EEDBB0] bg-[#FBF0DA]/70" : "border-border bg-secondary/40"}`}>
-              <input type="checkbox" checked={draft.is_test_mode} onChange={(e) => setDraft({ ...draft, is_test_mode: e.target.checked })} className="h-4 w-4 accent-[#B07D35]" />
+            <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-[13px] text-foreground ${draft.is_test_mode ? "border-[color:var(--adm-warn-line)] bg-[color:var(--adm-warn-bg)]" : "border-border bg-secondary/40"}`}>
+              <input type="checkbox" checked={draft.is_test_mode} onChange={(e) => setDraft({ ...draft, is_test_mode: e.target.checked })} className="h-4 w-4 accent-[hsl(var(--primary))]" />
               <span className="font-medium">Test mode (sandbox)</span>
             </label>
-            <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-[13px] text-foreground ${draft.is_active ? "border-[#CFE0D3] bg-[#EAF2EB]/70" : "border-border bg-secondary/40"}`}>
-              <input type="checkbox" checked={draft.is_active} onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })} className="h-4 w-4 accent-[#3F6B4A]" />
+            <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-[13px] text-foreground ${draft.is_active ? "border-[color:var(--adm-good-line)] bg-[color:var(--adm-good-bg)]" : "border-border bg-secondary/40"}`}>
+              <input type="checkbox" checked={draft.is_active} onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })} className="h-4 w-4 accent-[hsl(var(--primary))]" />
               <span className="font-medium">Active (accept payments)</span>
             </label>
           </div>

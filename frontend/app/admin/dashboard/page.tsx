@@ -4,15 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  AlertTriangle, ArrowRight, CalendarClock, CheckCircle2, Clock, CreditCard, Flag,
+  ArrowRight, CalendarClock, CheckCircle2, Clock, CreditCard, Flag,
   HeartHandshake, Inbox, RefreshCw, ScrollText, ShieldCheck, TrendingUp, UserPlus, Users, Wallet, XCircle,
 } from "lucide-react";
 import { adminApi, ApiError } from "@/lib/api";
 import { formatGBP, planLabel } from "@/lib/plans";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/admin/PageShell";
+import { PageHeader } from "@/components/admin/PageHeader";
 import {
-  Delta, EmptyState, Panel, Pill, Segmented, Skeleton, hoursSince, pctChange, relTime, waitingLabel,
+  Delta, EmptyState, ErrorState, Panel, Pill, Segmented, Skeleton, hoursSince, pctChange, relTime, waitingLabel,
 } from "@/components/admin/primitives";
 import { describeAction } from "@/components/admin/audit-labels";
 import {
@@ -84,22 +85,20 @@ export default function AdminDashboardPage() {
   const today = useMemo(() => new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }), []);
 
   const header = (
-    <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h1 className="font-display text-[24px] font-semibold leading-tight tracking-[-0.01em] text-foreground sm:text-[28px]">{greeting}</h1>
-        <p className="mt-1 text-[13px] text-muted2-foreground">
-          {today}{updatedAt && <> · updated {relTime(updatedAt.toISOString())}</>}
-        </p>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button size="sm" onClick={refresh} disabled={refreshing} ariaLabel="Refresh dashboard">
-          <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} aria-hidden /> Refresh
-        </Button>
-        <Link href="/admin/verifications" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary bg-primary px-3 text-[12.5px] font-medium text-primary-foreground shadow-[0_1px_2px_rgba(160,21,60,0.25)] transition-colors hover:bg-[#C21933] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1">
-          Review queue <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-        </Link>
-      </div>
-    </header>
+    <PageHeader
+      title={greeting}
+      description={<>{today}{updatedAt && <> · updated {relTime(updatedAt.toISOString())}</>}</>}
+      actions={
+        <>
+          <Button size="sm" onClick={refresh} disabled={refreshing} ariaLabel="Refresh dashboard">
+            <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} aria-hidden /> Refresh
+          </Button>
+          <Link href="/admin/verifications" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary bg-primary px-3 text-[12.5px] font-medium text-primary-foreground shadow-[0_1px_2px_rgba(160,21,60,0.25)] transition-colors hover:bg-[#C21933] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1">
+            Review queue <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </Link>
+        </>
+      }
+    />
   );
 
   if (loading) return <div className="mx-auto max-w-[1400px]">{header}<DashboardSkeleton /></div>;
@@ -109,12 +108,7 @@ export default function AdminDashboardPage() {
       <div className="mx-auto max-w-[1400px]">
         {header}
         <Panel>
-          <EmptyState
-            icon={AlertTriangle}
-            title="Couldn't load the dashboard"
-            description={error || "The stats endpoint returned no data."}
-            action={<Button size="sm" onClick={refresh}>Try again</Button>}
-          />
+          <ErrorState title="Couldn't load the dashboard" message={error || "The stats endpoint returned no data."} onRetry={refresh} />
         </Panel>
       </div>
     );
@@ -151,56 +145,11 @@ function DashboardBody({ stats, range, setRange }: { stats: Stats; range: "30" |
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }} className="space-y-4">
-      {/* ── KPI strip ─────────────────────────────────────────────────────── */}
-      <section aria-label="Key metrics" className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border/70 bg-border/60 shadow-[0_1px_2px_rgba(26,10,20,0.04)] md:grid-cols-3 xl:grid-cols-6">
-        <Kpi
-          label="Members" value={stats.users.total.toLocaleString("en-GB")} href="/admin/users"
-          foot={<Delta value={d ? pctChange(stats.users.new_30d, d.new_prev_30d) : undefined} suffix={`${stats.users.new_30d} new in 30d`} />}
-        />
-        <Kpi
-          label="New sign-ups · 7d" value={stats.users.new_7d.toLocaleString("en-GB")}
-          foot={<Delta value={d ? pctChange(stats.users.new_7d, d.new_prev_7d) : undefined} suffix="vs prior 7d" />}
-        />
-        <Kpi
-          label="Approved profiles" value={stats.profiles.approved.toLocaleString("en-GB")} href="/admin/verifications"
-          foot={<span>{stats.users.total ? Math.round((stats.profiles.approved / stats.users.total) * 100) : 0}% of members · {stats.profiles.pending} pending</span>}
-        />
-        <Kpi
-          label="Paid members" value={paidMembers.toLocaleString("en-GB")} href="/admin/subscriptions"
-          foot={<span>{activeByPlan.filter((p) => p.count > 0).map((p) => `${p.count} ${planLabel(p.plan)}`).join(" · ") || "No active plans"}</span>}
-        />
-        <Kpi
-          label="Revenue · this month" value={formatGBP(earnings?.this_month_paise || 0)} href="/admin/payments"
-          foot={<span>Last month {formatGBP(d?.revenue_prev_month_paise || 0)}</span>}
-        />
-        <Kpi
-          label="Mutual matches · 30d" value={(eng?.mutual_matches_30d ?? 0).toLocaleString("en-GB")}
-          foot={<span>{(eng?.mutual_matches_total ?? 0).toLocaleString("en-GB")} all-time</span>}
-        />
-      </section>
-
-      {/* ── Sign-ups + needs attention ───────────────────────────────────── */}
+      {/* ── 1 · Act: what the team must clear today ───────────────────────── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel
-          className="lg:col-span-2"
-          title="New sign-ups"
-          description={`${signupTotal.toLocaleString("en-GB")} in the last ${range} days${range === "90" ? " · weekly" : " · daily"}`}
-          actions={
-            <Segmented<"30" | "90">
-              size="sm" layoutId="dash-range" ariaLabel="Date range"
-              value={range} onChange={setRange}
-              options={[{ value: "30", label: "30d" }, { value: "90", label: "90d" }]}
-            />
-          }
-        >
-          {signupTotal === 0
-            ? <EmptyState compact icon={UserPlus} title="No sign-ups in this window" description="New registrations will chart here day by day." />
-            : <ColumnChart data={signupSeries} ariaLabel={`New sign-ups, last ${range} days`} valueLabel="Sign-ups" formatValue={(v) => `${v} sign-up${v === 1 ? "" : "s"}`} highlightLast={range === "90"} />}
-        </Panel>
-
-        <Panel
           title="Needs attention"
-          description="Work waiting on the team"
+          description="Work waiting on the team today"
           bodyClassName="px-2 pb-2"
         >
           <ul className="divide-y divide-border/50">
@@ -238,22 +187,82 @@ function DashboardBody({ stats, range, setRange }: { stats: Stats; range: "30" |
             </p>
           )}
         </Panel>
+        <Panel
+          className="lg:col-span-2"
+          title="Longest waiting"
+          description={`Oldest profiles in the verification queue · SLA ${SLA_HOURS}h`}
+          actions={<Link href="/admin/verifications" className="text-[12px] font-medium text-primary hover:underline">Open queue</Link>}
+          bodyClassName="px-2 pb-2"
+        >
+          {(sla?.oldest_pending || []).length === 0 ? (
+            <EmptyState compact icon={ShieldCheck} title="Queue is clear" description="Every submitted profile has been reviewed." />
+          ) : (
+            <ul>
+              {(sla?.oldest_pending || []).map((p) => {
+                const h = p.waiting_hours ?? hoursSince(p.submitted_at);
+                const over = (h ?? 0) >= SLA_HOURS;
+                return (
+                  <li key={p.user_id}>
+                    <Link href={`/admin/verifications?open=${p.user_id}`} className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-secondary/60">
+                      <Clock className={cn("h-4 w-4 shrink-0", over ? "adm-fg-bad" : "text-muted2-foreground")} aria-hidden />
+                      <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{p.name}</span>
+                      <span className="text-[12px] tabular-nums text-muted2-foreground">{p.completeness_score}% complete</span>
+                      <Pill tone={over ? "bad" : "warn"}>{waitingLabel(h ?? null)}</Pill>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
+
       </div>
 
-      {/* ── Revenue + plans ─────────────────────────────────────────────── */}
+      {/* ── 2 · Health: where the bureau stands ───────────────────────────── */}
+      <section aria-label="Key metrics" className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border/70 bg-border/70 shadow-[var(--adm-shadow-card)] md:grid-cols-3 xl:grid-cols-6">
+        <Kpi
+          label="Members" value={stats.users.total.toLocaleString("en-GB")} href="/admin/users"
+          foot={<Delta value={d ? pctChange(stats.users.new_30d, d.new_prev_30d) : undefined} suffix={`${stats.users.new_30d} new in 30d`} />}
+        />
+        <Kpi
+          label="New sign-ups · 7d" value={stats.users.new_7d.toLocaleString("en-GB")}
+          foot={<Delta value={d ? pctChange(stats.users.new_7d, d.new_prev_7d) : undefined} suffix="vs prior 7d" />}
+        />
+        <Kpi
+          label="Approved profiles" value={stats.profiles.approved.toLocaleString("en-GB")} href="/admin/verifications"
+          foot={<span>{stats.users.total ? Math.round((stats.profiles.approved / stats.users.total) * 100) : 0}% of members · {stats.profiles.pending} pending</span>}
+        />
+        <Kpi
+          label="Paid members" value={paidMembers.toLocaleString("en-GB")} href="/admin/subscriptions"
+          foot={<span>{activeByPlan.filter((p) => p.count > 0).map((p) => `${p.count} ${planLabel(p.plan)}`).join(" · ") || "No active plans"}</span>}
+        />
+        <Kpi
+          label="Revenue · this month" value={formatGBP(earnings?.this_month_paise || 0)} href="/admin/payments"
+          foot={<span>Last month {formatGBP(d?.revenue_prev_month_paise || 0)}</span>}
+        />
+        <Kpi
+          label="Mutual matches · 30d" value={(eng?.mutual_matches_30d ?? 0).toLocaleString("en-GB")}
+          foot={<span>{(eng?.mutual_matches_total ?? 0).toLocaleString("en-GB")} all-time</span>}
+        />
+      </section>
+
+      {/* ── 3 · Trends ────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel
           className="lg:col-span-2"
-          title="Revenue"
-          description={`${formatGBP(revenue12m)} billed over the last 12 months · ${formatGBP(earnings?.total_paise || 0)} lifetime`}
-          actions={<Link href="/admin/payments" className="text-[12px] font-medium text-primary hover:underline">Payments</Link>}
+          title="New sign-ups"
+          description={`${signupTotal.toLocaleString("en-GB")} in the last ${range} days${range === "90" ? " · weekly" : " · daily"}`}
+          actions={
+            <Segmented<"30" | "90">
+              size="sm" layoutId="dash-range" ariaLabel="Date range"
+              value={range} onChange={setRange}
+              options={[{ value: "30", label: "30d" }, { value: "90", label: "90d" }]}
+            />
+          }
         >
-          {revenue12m === 0
-            ? <EmptyState compact icon={Wallet} title="No paid subscriptions yet" description="Monthly billings will appear here once members upgrade." />
-            : <ColumnChart
-                data={months} color={SERIES.blue} ariaLabel="Revenue by month, last 12 months" valueLabel="Revenue"
-                formatValue={(v) => formatGBP(v)} formatTick={(v) => formatGBP(v)} highlightLast tickEvery={1}
-              />}
+          {signupTotal === 0
+            ? <EmptyState compact icon={UserPlus} title="No sign-ups in this window" description="New registrations will chart here day by day." />
+            : <ColumnChart height={260} data={signupSeries} ariaLabel={`New sign-ups, last ${range} days`} valueLabel="Sign-ups" formatValue={(v) => `${v} sign-up${v === 1 ? "" : "s"}`} highlightLast={range === "90"} />}
         </Panel>
 
         <Panel title="Active subscriptions" description="By plan, currently in period">
@@ -281,18 +290,19 @@ function DashboardBody({ stats, range, setRange }: { stats: Stats; range: "30" |
         </Panel>
       </div>
 
-      {/* ── Funnel + engagement ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Panel className="lg:col-span-2" title="Member journey" description="From sign-up to paying member (all-time)">
-          <Funnel
-            stages={[
-              { key: "reg", label: "Registered", value: stats.users.total },
-              { key: "complete", label: "Completed profile", value: funnel?.profile_complete ?? 0 },
-              { key: "submitted", label: "Submitted for verification", value: funnel?.submitted ?? (stats.profiles.pending + stats.profiles.approved + stats.profiles.rejected) },
-              { key: "approved", label: "Approved", value: stats.profiles.approved },
-              { key: "paid", label: "Paid plan", value: paidMembers },
-            ]}
-          />
+        <Panel
+          className="lg:col-span-2"
+          title="Revenue"
+          description={`${formatGBP(revenue12m)} billed over the last 12 months · ${formatGBP(earnings?.total_paise || 0)} lifetime`}
+          actions={<Link href="/admin/payments" className="text-[12px] font-medium text-primary hover:underline">Payments</Link>}
+        >
+          {revenue12m === 0
+            ? <EmptyState compact icon={Wallet} title="No paid subscriptions yet" description="Monthly billings will appear here once members upgrade." />
+            : <ColumnChart
+                data={months} color={SERIES.blue} ariaLabel="Revenue by month, last 12 months" valueLabel="Revenue"
+                formatValue={(v) => formatGBP(v)} formatTick={(v) => formatGBP(v)} highlightLast tickEvery={1}
+              />}
         </Panel>
 
         <Panel title="Engagement" description="Last 30 days vs the 30 before">
@@ -308,66 +318,17 @@ function DashboardBody({ stats, range, setRange }: { stats: Stats; range: "30" |
         </Panel>
       </div>
 
-      {/* ── Audience ────────────────────────────────────────────────────── */}
-      <Panel title="Audience" description="Who's on the platform (active profiles)">
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          <div>
-            <h3 className="mb-3 text-[12px] font-medium text-muted2-foreground">Gender</h3>
-            {(stats.gender_distribution || []).length === 0
-              ? <p className="text-[12.5px] text-muted2-foreground">No data yet</p>
-              : <SegmentBar
-                  ariaLabel="Profiles by gender"
-                  segments={(stats.gender_distribution || []).map((g) => ({
-                    key: g.gender,
-                    label: g.gender === "male" ? "Men" : g.gender === "female" ? "Women" : g.gender === "other" ? "Other" : "Not set",
-                    value: g.count,
-                    color: g.gender === "male" ? SERIES.blue : g.gender === "female" ? SERIES.ruby : g.gender === "other" ? SERIES.gold : SERIES.neutral,
-                  }))}
-                />}
-          </div>
-          <div>
-            <h3 className="mb-3 text-[12px] font-medium text-muted2-foreground">Top countries</h3>
-            {(stats.country_distribution || []).length === 0
-              ? <p className="text-[12.5px] text-muted2-foreground">No data yet</p>
-              : <BarList ariaLabel="Profiles by country" items={(stats.country_distribution || []).map((c) => ({ key: c.country, label: c.country, value: c.count }))} max={6} />}
-          </div>
-          <div>
-            <h3 className="mb-3 text-[12px] font-medium text-muted2-foreground">Religion</h3>
-            {stats.religion_distribution.length === 0
-              ? <p className="text-[12.5px] text-muted2-foreground">No data yet</p>
-              : <BarList ariaLabel="Profiles by religion" items={stats.religion_distribution.map((r) => ({ key: r.religion, label: r.religion.toLowerCase(), value: r.count }))} max={6} />}
-          </div>
-        </div>
-      </Panel>
-
-      {/* ── Queue + activity ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel
-          title="Longest waiting"
-          description={`Oldest profiles in the verification queue · SLA ${SLA_HOURS}h`}
-          actions={<Link href="/admin/verifications" className="text-[12px] font-medium text-primary hover:underline">Open queue</Link>}
-          bodyClassName="px-2 pb-2"
-        >
-          {(sla?.oldest_pending || []).length === 0 ? (
-            <EmptyState compact icon={ShieldCheck} title="Queue is clear" description="Every submitted profile has been reviewed." />
-          ) : (
-            <ul>
-              {(sla?.oldest_pending || []).map((p) => {
-                const h = p.waiting_hours ?? hoursSince(p.submitted_at);
-                const over = (h ?? 0) >= SLA_HOURS;
-                return (
-                  <li key={p.user_id}>
-                    <Link href={`/admin/verifications?open=${p.user_id}`} className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-secondary/60">
-                      <Clock className={cn("h-4 w-4 shrink-0", over ? "text-[#B42343]" : "text-muted2-foreground")} aria-hidden />
-                      <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{p.name}</span>
-                      <span className="text-[12px] tabular-nums text-muted2-foreground">{p.completeness_score}% complete</span>
-                      <Pill tone={over ? "bad" : "warn"}>{waitingLabel(h ?? null)}</Pill>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Panel className="lg:col-span-2" title="Member journey" description="From sign-up to paying member (all-time)">
+          <Funnel
+            stages={[
+              { key: "reg", label: "Registered", value: stats.users.total },
+              { key: "complete", label: "Completed profile", value: funnel?.profile_complete ?? 0 },
+              { key: "submitted", label: "Submitted for verification", value: funnel?.submitted ?? (stats.profiles.pending + stats.profiles.approved + stats.profiles.rejected) },
+              { key: "approved", label: "Approved", value: stats.profiles.approved },
+              { key: "paid", label: "Paid plan", value: paidMembers },
+            ]}
+          />
         </Panel>
 
         <Panel
@@ -409,6 +370,38 @@ function DashboardBody({ stats, range, setRange }: { stats: Stats; range: "30" |
           )}
         </Panel>
       </div>
+
+      {/* ── Audience ────────────────────────────────────────────────────── */}
+      <Panel title="Audience" description="Who's on the platform (active profiles)">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div>
+            <h3 className="mb-3 text-[12px] font-medium text-muted2-foreground">Gender</h3>
+            {(stats.gender_distribution || []).length === 0
+              ? <p className="text-[12.5px] text-muted2-foreground">No data yet</p>
+              : <SegmentBar
+                  ariaLabel="Profiles by gender"
+                  segments={(stats.gender_distribution || []).map((g) => ({
+                    key: g.gender,
+                    label: g.gender === "male" ? "Men" : g.gender === "female" ? "Women" : g.gender === "other" ? "Other" : "Not set",
+                    value: g.count,
+                    color: g.gender === "male" ? SERIES.blue : g.gender === "female" ? SERIES.ruby : g.gender === "other" ? SERIES.gold : SERIES.neutral,
+                  }))}
+                />}
+          </div>
+          <div>
+            <h3 className="mb-3 text-[12px] font-medium text-muted2-foreground">Top countries</h3>
+            {(stats.country_distribution || []).length === 0
+              ? <p className="text-[12.5px] text-muted2-foreground">No data yet</p>
+              : <BarList ariaLabel="Profiles by country" items={(stats.country_distribution || []).map((c) => ({ key: c.country, label: c.country, value: c.count }))} max={6} />}
+          </div>
+          <div>
+            <h3 className="mb-3 text-[12px] font-medium text-muted2-foreground">Religion</h3>
+            {stats.religion_distribution.length === 0
+              ? <p className="text-[12.5px] text-muted2-foreground">No data yet</p>
+              : <BarList ariaLabel="Profiles by religion" items={stats.religion_distribution.map((r) => ({ key: r.religion, label: r.religion.toLowerCase(), value: r.count }))} max={6} />}
+          </div>
+        </div>
+      </Panel>
     </motion.div>
   );
 }
@@ -419,13 +412,13 @@ function Kpi({ label, value, foot, href }: { label: string; value: string; foot?
   const body = (
     <>
       <div className="text-[12px] font-medium text-muted2-foreground">{label}</div>
-      <div className="mt-1.5 text-[24px] font-semibold leading-none tracking-[-0.02em] text-foreground">{value}</div>
+      <div className="mt-1.5 text-[24px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-foreground">{value}</div>
       {foot && <div className="mt-2 truncate text-[11.5px] text-muted2-foreground">{foot}</div>}
     </>
   );
   const cls = "block min-w-0 bg-card p-4";
   return href
-    ? <Link href={href} className={cn(cls, "transition-colors hover:bg-[#FCF8F6] focus-visible:outline-none focus-visible:bg-[#FCF8F6]")}>{body}</Link>
+    ? <Link href={href} className={cn(cls, "transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:bg-secondary/60 focus-visible:shadow-[inset_0_-2px_0_hsl(var(--primary))]")}>{body}</Link>
     : <div className={cls}>{body}</div>;
 }
 
@@ -462,13 +455,13 @@ function EngRow({ icon: Icon, label, value, delta, goodWhen = "up" }: { icon: an
 
 function ActionIcon({ action }: { action: string }) {
   const map: Array<[string, any, string]> = [
-    ["verification.approve", CheckCircle2, "text-[#2F6B3F] bg-[#EAF2EB]"],
-    ["verification.reject", XCircle, "text-[#B42343] bg-[#FDECEF]"],
-    ["verification.", ShieldCheck, "text-[#7A5200] bg-[#FBF0DA]"],
+    ["verification.approve", CheckCircle2, "adm-soft-good"],
+    ["verification.reject", XCircle, "adm-soft-bad"],
+    ["verification.", ShieldCheck, "adm-soft-warn"],
     ["user.", Users, "text-muted2-foreground bg-secondary"],
-    ["match.", HeartHandshake, "text-primary bg-primary/10"],
-    ["pricing.", Wallet, "text-[#26437F] bg-[#EBF0FB]"],
-    ["report.", Flag, "text-[#B42343] bg-[#FDECEF]"],
+    ["match.", HeartHandshake, "adm-soft-brand"],
+    ["pricing.", Wallet, "adm-soft-info"],
+    ["report.", Flag, "adm-soft-bad"],
   ];
   const hit = map.find(([k]) => action === k || (k.endsWith(".") && action.startsWith(k)));
   const Icon = hit?.[1] || ScrollText;
@@ -482,14 +475,14 @@ function ActionIcon({ action }: { action: string }) {
 function DashboardSkeleton() {
   return (
     <div className="space-y-4" aria-busy="true">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Skeleton className="h-[300px] rounded-xl" />
+        <Skeleton className="h-[300px] rounded-xl lg:col-span-2" />
+      </div>
       <Skeleton className="h-[98px] rounded-xl" />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Skeleton className="h-[290px] rounded-xl lg:col-span-2" />
         <Skeleton className="h-[290px] rounded-xl" />
-      </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Skeleton className="h-[280px] rounded-xl lg:col-span-2" />
-        <Skeleton className="h-[280px] rounded-xl" />
       </div>
     </div>
   );

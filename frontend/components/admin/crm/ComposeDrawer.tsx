@@ -364,7 +364,7 @@ export default function ComposeDrawer({
 
   const sendLabel = isUser
     ? `Send${emailOn && inAppOn ? " email + in-app" : emailOn ? " email" : " in-app message"}`
-    : previewLoading ? "Counting…" : `Send to ${recipientCount.toLocaleString()} member${recipientCount === 1 ? "" : "s"}`;
+    : previewLoading ? "Counting…" : `Send to ${recipientCount.toLocaleString("en-GB")} member${recipientCount === 1 ? "" : "s"}`;
 
   return (
     <>
@@ -391,9 +391,9 @@ export default function ComposeDrawer({
               style={{
                 position: "fixed", top: 0, right: 0, bottom: 0, zIndex: 80,
                 width: "min(620px, 100vw)", background: C.panel,
-                boxShadow: "-18px 0 48px rgba(26,10,20,0.16)",
+                boxShadow: "-18px 0 48px rgba(26,10,20,0.16)", borderLeft: `1px solid ${C.line}`,
                 display: "flex", flexDirection: "column",
-                fontFamily: "var(--font-poppins, var(--font-body, sans-serif))",
+                fontFamily: "var(--font-body)",
               }}
             >
               {/* Header */}
@@ -409,7 +409,7 @@ export default function ComposeDrawer({
                   </span>
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <h2 id="crm-compose-title" style={{ margin: 0, fontSize: 16, fontWeight: 650, color: C.ink }}>
+                  <h2 id="crm-compose-title" style={{ margin: 0, fontSize: 16, fontWeight: 600, color: C.ink }}>
                     {isUser ? `Message ${userName}` : "New broadcast"}
                   </h2>
                   <p style={{ margin: "2px 0 0", fontSize: 12.5, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -484,13 +484,13 @@ export default function ComposeDrawer({
                             ))}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 14, fontWeight: 650, color: C.ink, fontVariantNumeric: "tabular-nums" }}>
-                              {preview.count.toLocaleString()} member{preview.count === 1 ? "" : "s"}
+                            <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, fontVariantNumeric: "tabular-nums" }}>
+                              {preview.count.toLocaleString("en-GB")} member{preview.count === 1 ? "" : "s"}
                               <span style={{ fontWeight: 500, color: C.muted }}> · {preview.label}</span>
                             </div>
                             {emailOn && (
                               <div style={{ fontSize: 12, color: preview.without_email ? C.warn : C.muted, marginTop: 2 }}>
-                                {preview.with_email.toLocaleString()} with email
+                                {preview.with_email.toLocaleString("en-GB")} with email
                                 {preview.without_email > 0 && ` · ${preview.without_email} will be skipped for email${inAppOn ? " (still get in-app)" : ""}`}
                               </div>
                             )}
@@ -601,7 +601,7 @@ export default function ComposeDrawer({
                       <div style={{ background: "#fff", borderRadius: 10, overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
                         <div style={{ background: C.ink, color: "#fff", textAlign: "center", padding: "14px 0", fontSize: 15, letterSpacing: 1, fontWeight: 600 }}>Match4Marriage</div>
                         <div style={{ padding: "18px 22px" }}>
-                          <div style={{ fontSize: 15, fontWeight: 650, color: C.ink, marginBottom: 12 }}>{previewHtml.subject || <span style={{ color: C.faint }}>No subject</span>}</div>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginBottom: 12 }}>{previewHtml.subject || <span style={{ color: C.faint }}>No subject</span>}</div>
                           {bodyFormat === "html" ? (
                             <iframe title="Email preview" sandbox="" srcDoc={`<div style="font-family:Arial,sans-serif;font-size:14px;color:#444;line-height:1.6">${previewHtml.html}</div>`} style={{ width: "100%", height: 260, border: "none" }} />
                           ) : (
@@ -684,11 +684,11 @@ export default function ComposeDrawer({
                   disabled={!canSend}
                   className="crm-focus"
                   style={{
-                    padding: "9px 16px", borderRadius: 10, border: "1px solid rgba(220,30,60,0.2)",
-                    background: canSend ? "linear-gradient(135deg, #dc1e3c 0%, #a0153c 100%)" : "rgba(220,30,60,0.35)",
-                    color: "#fff", fontSize: 13, fontWeight: 650, cursor: canSend ? "pointer" : "not-allowed",
+                    height: 36, padding: "0 14px", borderRadius: 10, border: `1px solid ${C.wine}`,
+                    background: C.wine, opacity: canSend ? 1 : 0.5,
+                    color: "#fff", fontSize: 13, fontWeight: 500, cursor: canSend ? "pointer" : "not-allowed",
                     display: "inline-flex", alignItems: "center", gap: 7, fontFamily: "inherit",
-                    boxShadow: canSend ? "0 6px 16px rgba(220,30,60,0.25)" : "none", whiteSpace: "nowrap",
+                    boxShadow: "0 1px 2px rgba(160,21,60,0.25)", whiteSpace: "nowrap",
                   }}
                 >
                   {sending ? <Loader2 className="animate-spin" style={{ width: 14, height: 14 }} /> : <Send style={{ width: 14, height: 14 }} />}
@@ -703,7 +703,7 @@ export default function ComposeDrawer({
       <ConfirmModal
         open={confirmOpen}
         variant="warning"
-        title={`Send to ${recipientCount.toLocaleString()} member${recipientCount === 1 ? "" : "s"}?`}
+        title={`Send to ${recipientCount.toLocaleString("en-GB")} member${recipientCount === 1 ? "" : "s"}?`}
         message={[
           preview?.label ? `Audience: ${preview.label}.` : "",
           `Channels: ${[emailOn && "email", inAppOn && "in-app notification"].filter(Boolean).join(" + ")}.`,
@@ -735,8 +735,8 @@ function ChannelToggle({
         textAlign: "left", display: "flex", gap: 10, alignItems: "flex-start",
         padding: "11px 12px", borderRadius: 12, cursor: disabled ? "not-allowed" : "pointer",
         background: on ? "#fff" : "transparent",
-        border: on ? `1.5px solid ${C.wine}` : `1px solid ${C.lineStrong}`,
-        boxShadow: on ? "0 2px 10px rgba(220,30,60,0.10)" : "none",
+        border: `1px solid ${on ? C.wine : C.line}`,
+        boxShadow: on ? `inset 0 0 0 1px ${C.wine}` : "none",
         opacity: disabled ? 0.5 : 1, fontFamily: "inherit",
         transition: "border-color .15s, background .15s, box-shadow .15s",
       }}
@@ -748,13 +748,13 @@ function ChannelToggle({
         <Icon style={{ width: 15, height: 15 }} />
       </span>
       <span style={{ minWidth: 0 }}>
-        <span style={{ display: "block", fontSize: 13, fontWeight: 650, color: C.ink }}>{title}</span>
+        <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: C.ink }}>{title}</span>
         <span style={{ display: "block", fontSize: 11.5, color: C.muted, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hint}</span>
       </span>
       <span aria-hidden style={{
         marginLeft: "auto", width: 16, height: 16, borderRadius: 5, flexShrink: 0, marginTop: 2,
         border: on ? "none" : `1.5px solid ${C.lineStrong}`, background: on ? C.wine : "#fff",
-        display: "grid", placeItems: "center", color: "#fff", fontSize: 11, fontWeight: 800,
+        display: "grid", placeItems: "center", color: "#fff", fontSize: 11, fontWeight: 600,
       }}>{on ? "✓" : ""}</span>
     </button>
   );
