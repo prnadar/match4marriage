@@ -150,6 +150,19 @@ function BrowseContent() {
   // Any filter / search change resets to page 1.
   useEffect(() => { fetchPage(1); }, [fetchPage]);
 
+  // Hearts reflect interests already sent, so they survive a refresh.
+  useEffect(() => {
+    let cancelled = false;
+    matchApi.getInterestStatus()
+      .then((res) => {
+        if (cancelled) return;
+        const sent = Object.keys(((res.data as any)?.data?.sent) ?? {});
+        if (sent.length) setLiked((prev) => new Set([...Array.from(prev), ...sent]));
+      })
+      .catch(() => { /* non-critical */ });
+    return () => { cancelled = true; };
+  }, []);
+
   const loadMore = useCallback(() => {
     if (loading || loadingMore || !hasNext || moreError) return;
     fetchPage(page + 1);
@@ -171,37 +184,32 @@ function BrowseContent() {
     "You've reached your Basic plan limit — upgrade to Premium for unlimited expressions of interest.";
 
   const handleLike = async (id: string) => {
-    const wasLiked = liked.has(id);
+    // Interests can't be withdrawn, so the heart is one-way.
+    if (liked.has(id)) return;
     // Proactive gate: a Basic member with 0 remaining (not unlimited) shouldn't
     // even fire the request — show the upgrade prompt up front. -1 = unlimited.
-    if (!wasLiked && entitlements.interestsRemaining === 0) {
+    if (entitlements.interestsRemaining === 0) {
       setInterestError(QUOTA_MESSAGE);
       setInterestIsQuota(true);
       return;
     }
     setInterestError(null);
-    setLiked((prev) => {
-      const s = new Set(prev);
-      if (wasLiked) s.delete(id); else s.add(id);
-      return s;
-    });
-    if (!wasLiked) {
-      try {
-        await matchApi.sendInterest(id);
-      } catch (err) {
-        // 409 means an interest already exists between these users — treat
-        // the heart as already-sent rather than yanking it back.
-        if (err instanceof ApiError && err.status === 409) return;
-        // Revert the optimistic like for any real failure.
-        setLiked((prev) => { const s = new Set(prev); s.delete(id); return s; });
-        if (err instanceof ApiError && err.status === 403) {
-          // Quota exhausted — surface the server's message with an upgrade path.
-          setInterestError(err.message?.replace(/^\d+:\s*/, "") || QUOTA_MESSAGE);
-          setInterestIsQuota(true);
-        } else {
-          setInterestError(err instanceof Error ? err.message : "Could not send interest. Please try again.");
-          setInterestIsQuota(false);
-        }
+    setLiked((prev) => new Set(prev).add(id));
+    try {
+      await matchApi.sendInterest(id);
+    } catch (err) {
+      // 409 means an interest already exists between these users — treat
+      // the heart as already-sent rather than yanking it back.
+      if (err instanceof ApiError && err.status === 409) return;
+      // Revert the optimistic like for any real failure.
+      setLiked((prev) => { const s = new Set(prev); s.delete(id); return s; });
+      if (err instanceof ApiError && err.status === 403) {
+        // Quota exhausted — surface the server's message with an upgrade path.
+        setInterestError(err.message?.replace(/^\d+:\s*/, "") || QUOTA_MESSAGE);
+        setInterestIsQuota(true);
+      } else {
+        setInterestError("We couldn't send your interest just now. Please try again in a moment.");
+        setInterestIsQuota(false);
       }
     }
   };

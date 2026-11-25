@@ -27,6 +27,9 @@ interface Plan {
   // Optional "was" price. When set above price_paise it renders struck through
   // (inaugural / promo offer, e.g. Basic free now, regularly £100).
   original_price_paise: number | null;
+  // When the promo ends (ISO, UTC). After it the regular price applies again,
+  // on the cards and at checkout. null = no end date.
+  offer_ends_at?: string | null;
   currency: string;
   period: Period;
   features: string[];
@@ -64,12 +67,29 @@ const PERIODS: Array<{ key: Period; label: string }> = [
 const VIEW_KEYS = ["all", "live", "hidden"] as const;
 type View = (typeof VIEW_KEYS)[number];
 
+// The editor asks for the offer's LAST day; the API stores the moment it
+// ends (midnight at the start of the following day).
+function lastDayFromEnd(endsIso?: string | null): string {
+  if (!endsIso) return "";
+  const t = new Date(endsIso).getTime();
+  if (isNaN(t)) return "";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date(t - 1));
+}
+function endFromLastDay(day: string): string | null {
+  if (!day) return null;
+  const d = new Date(`${day}T00:00:00Z`);
+  if (isNaN(d.getTime())) return null;
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString();
+}
+
 const EMPTY_PLAN: Omit<Plan, "id" | "sort_order"> = {
   key: "",
   name: "",
   tier: "silver",
   price_paise: 0,
   original_price_paise: null,
+  offer_ends_at: null,
   currency: "GBP",
   period: "monthly",
   features: [""],
@@ -286,6 +306,13 @@ export default function AdminPricingPage() {
                   )}
                   <span className="text-[12px] text-muted2-foreground">/ {PERIOD_LABEL[p.period] ?? p.period}</span>
                 </div>
+                {p.original_price_paise != null && p.original_price_paise > p.price_paise && p.offer_ends_at && (
+                  <div className="-mt-2 mb-3 text-[11.5px] text-muted2-foreground">
+                    {new Date(p.offer_ends_at).getTime() > Date.now()
+                      ? `Offer runs to the end of ${new Date(new Date(p.offer_ends_at).getTime() - 1).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London" })}`
+                      : "Offer ended. Members now see the regular price"}
+                  </div>
+                )}
 
                 <ul className="mb-4 flex flex-col gap-1.5">
                   {p.features.length === 0 ? (
@@ -384,6 +411,7 @@ function PlanEditor({
         tier: plan.tier,
         price_paise: plan.price_paise,
         original_price_paise: plan.original_price_paise ?? null,
+        offer_ends_at: plan.offer_ends_at ?? null,
         currency: plan.currency || "GBP",
         period: plan.period,
         features: plan.features.length > 0 ? plan.features : [""],
@@ -539,6 +567,31 @@ function PlanEditor({
                   }}
                   className={`${inputCls} tabular-nums sm:max-w-[50%]`}
                 />
+              </Field>
+
+              <Field
+                label="Offer's last day, optional"
+                htmlFor="pe-offer-ends"
+                hint="When set, the reduced price runs to the end of this day (UK), then the regular price applies automatically on the site and at checkout."
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    id="pe-offer-ends"
+                    type="date"
+                    value={lastDayFromEnd(draft.offer_ends_at)}
+                    onChange={(e) => setDraft({ ...draft, offer_ends_at: endFromLastDay(e.target.value) })}
+                    className={`${inputCls} sm:max-w-[50%]`}
+                  />
+                  {draft.offer_ends_at && (
+                    <button
+                      type="button"
+                      onClick={() => setDraft({ ...draft, offer_ends_at: null })}
+                      className="text-[12px] font-medium text-muted2-foreground underline-offset-2 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               </Field>
 
               <Field label="Features">

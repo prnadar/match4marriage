@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { pricingApi, api, ApiError } from "@/lib/api";
 import { useEntitlements } from "@/lib/useEntitlements";
+import { offerUntilLabel, percentOff } from "@/lib/pricing-offer";
 
 /**
  * Subscription page.
@@ -33,6 +34,7 @@ interface RemotePlan {
   tier: "silver" | "gold" | "platinum" | string;
   price_paise: number;
   original_price_paise?: number | null;
+  offer_ends_at?: string | null;
   currency: string;
   period: "monthly" | "quarterly" | "yearly" | string;
   features?: string[];
@@ -378,6 +380,13 @@ export default function SubscriptionPage() {
                   </div>
 
                   <h2 className="font-display mt-4 text-[22px] font-semibold text-white">{p.name}</h2>
+
+                  {hasPromo(p) && (
+                    <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#dc1e3c]/15 px-2.5 py-1 text-[11px] font-semibold text-[#ffb3c0] ring-1 ring-[#dc1e3c]/35">
+                      {percentOff(p.price_paise, p.original_price_paise as number)}% off{" "}
+                      {offerUntilLabel(p.offer_ends_at) ?? "for a limited time"}
+                    </span>
+                  )}
 
                   <div className="mt-1.5 flex items-baseline gap-2">
                     {hasPromo(p) && (

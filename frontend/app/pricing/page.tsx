@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Lock, ArrowRight, Check } from "lucide-react";
 import PublicHeader from "@/components/PublicHeader";
 import PublicFooter from "@/components/PublicFooter";
+import { pricingApi } from "@/lib/api";
+import { offerActive, offerUntilLabel, percentOff } from "@/lib/pricing-offer";
 
 /* ────────────────────────────────────────────────────────────────
    Pricing — editorial. Quiet hero, plans presented as four numbered
@@ -13,8 +15,15 @@ import PublicFooter from "@/components/PublicFooter";
 
 interface Plan {
   name: string;
+  /** Backend tier — live prices from /pricing-plans override the static ones. */
+  tier?: "gold" | "platinum";
   tagline: string;
   price: string;
+  /** Regular price, shown struck through while an offer runs. */
+  wasPrice?: string;
+  /** Offer percentage and end (ISO) — the offer hides itself after this. */
+  offerPct?: number;
+  offerEndsAt?: string;
   period: string;
   bestFor: string;
   features: string[];
@@ -24,7 +33,7 @@ interface Plan {
   bespoke?: boolean;
 }
 
-const plans: Plan[] = [
+const staticPlans: Plan[] = [
   {
     name: "Basic",
     tagline: "Begin the conversation.",
@@ -37,8 +46,15 @@ const plans: Plan[] = [
   },
   {
     name: "Premium",
+    tier: "gold",
     tagline: "When you are ready to engage.",
-    price: "£300",
+    // Static fallback matching the live offer (Premium 50% off until New
+    // Year); replaced by the API's values on load, and dropped by
+    // `withOfferState` once the end date passes.
+    price: "£150",
+    wasPrice: "£300",
+    offerPct: 50,
+    offerEndsAt: "2027-01-01T00:00:00Z",
     period: "for 6 months",
     bestFor: "Most members",
     features: ["Unlimited expressions of interest", "Direct messaging", "Photo access", "Advanced search filters", "Compatibility insights", "Priority placement"],
@@ -48,6 +64,7 @@ const plans: Plan[] = [
   },
   {
     name: "Elite",
+    tier: "platinum",
     tagline: "Personally guided throughout.",
     price: "£1,000",
     period: "for 6 months",
@@ -68,6 +85,35 @@ const plans: Plan[] = [
     bespoke: true,
   },
 ];
+
+function gbp(minor: number): string {
+  return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 }).format(minor / 100);
+}
+
+/** Drop an expired offer from a static card (regular price shows again). */
+function withOfferState(plan: Plan): Plan {
+  if (!plan.wasPrice || offerActive(plan.offerEndsAt)) return plan;
+  return { ...plan, price: plan.wasPrice, wasPrice: undefined, offerPct: undefined, offerEndsAt: undefined };
+}
+
+type LivePlan = { tier: string; price_paise: number; original_price_paise?: number | null; offer_ends_at?: string | null; currency?: string };
+
+/** Overlay live prices (same source checkout charges from) onto the cards. */
+function applyLive(base: Plan[], live: LivePlan[]): Plan[] {
+  return base.map((plan) => {
+    const row = plan.tier && live.find((l) => l.tier === plan.tier && (l.currency ?? "GBP").toUpperCase() === "GBP");
+    if (!row || row.price_paise <= 0) return plan;
+    const was = row.original_price_paise ?? 0;
+    const promo = was > row.price_paise;
+    return {
+      ...plan,
+      price: gbp(row.price_paise),
+      wasPrice: promo ? gbp(was) : undefined,
+      offerPct: promo ? percentOff(row.price_paise, was) : undefined,
+      offerEndsAt: promo ? row.offer_ends_at ?? undefined : undefined,
+    };
+  });
+}
 
 // ── Full feature matrix ────────────────────────────────────────────────
 // One row per benefit, mapped across the four tiers in `plans` order
@@ -131,6 +177,21 @@ function CoverCell({ c, col }: { c: Cover; col: number }) {
 }
 
 export default function PricingPage() {
+  const [plans, setPlans] = useState<Plan[]>(staticPlans);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Date check on the client (the static HTML is built ahead of time).
+    setPlans(staticPlans.map(withOfferState));
+    pricingApi.listPlans()
+      .then((res) => {
+        const live = ((res.data as any)?.data ?? []) as LivePlan[];
+        if (!cancelled && Array.isArray(live) && live.length) setPlans(applyLive(staticPlans, live));
+      })
+      .catch(() => { /* keep the static cards */ });
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     const els = document.querySelectorAll<HTMLElement>(".editorial-reveal");
     if (!els.length || typeof IntersectionObserver === "undefined") return;
@@ -240,7 +301,37 @@ export default function PricingPage() {
                   {plan.tagline}
                 </p>
 
-                <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                {plan.wasPrice && plan.offerPct ? (
+                  <span
+                    style={{
+                      alignSelf: "flex-start",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: "rgba(220,30,60,0.08)",
+                      color: "#a0153c",
+                      border: "1px solid rgba(220,30,60,0.22)",
+                      borderRadius: 999,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: "0.04em",
+                      padding: "4px 10px",
+                      marginBottom: 12,
+                    }}
+                  >
+                    {plan.offerPct}% off {offerUntilLabel(plan.offerEndsAt) ?? "for a limited time"}
+                  </span>
+                ) : null}
+                <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 10, marginBottom: 6 }}>
+                  {plan.wasPrice && (
+                    <span
+                      className="font-display"
+                      aria-label={`Was ${plan.wasPrice}`}
+                      style={{ fontSize: 22, fontWeight: 500, color: "#a78a8f", textDecoration: "line-through", textDecorationColor: "rgba(220,30,60,0.6)" }}
+                    >
+                      {plan.wasPrice}
+                    </span>
+                  )}
                   <span className="font-display" style={{ fontSize: plan.bespoke ? 28 : 36, fontWeight: 600, letterSpacing: "-0.02em", color: accent }}>
                     {plan.price}
                   </span>
@@ -346,7 +437,10 @@ export default function PricingPage() {
                       }}
                     >
                       <div className="font-display" style={{ fontSize: 17, fontWeight: 600, color: "#1a0a14" }}>{p.name}</div>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: i === 3 ? "#9a6b00" : "#dc1e3c", marginTop: 4 }}>{p.price}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: i === 3 ? "#9a6b00" : "#dc1e3c", marginTop: 4 }}>
+                        {p.wasPrice && <span style={{ color: "#a78a8f", fontWeight: 500, textDecoration: "line-through", marginRight: 6 }}>{p.wasPrice}</span>}
+                        {p.price}
+                      </div>
                       <div style={{ fontSize: 11, color: "#88787f", marginTop: 2 }}>{p.period}</div>
                       {p.recommended && (
                         <div style={{ display: "inline-block", marginTop: 8, background: "#dc1e3c", color: "#fff", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 999 }}>

@@ -224,7 +224,10 @@ async def _checkout_paypal(
     )).scalars().first()
 
     if plan_row is not None:
-        amount_pence = int(plan_row.price_paise)
+        # Effective price: a promo price until its offer_ends_at, then the
+        # regular price — identical to what /pricing-plans shows.
+        from app.models.pricing_plan import effective_pricing
+        amount_pence = effective_pricing(plan_row)[0]
         currency = (plan_row.currency or "GBP").upper()
     else:
         amount_pence = PLAN_PRICE_GBP_PENCE.get(plan, 0)

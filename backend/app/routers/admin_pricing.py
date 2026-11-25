@@ -19,7 +19,7 @@ from app.core.database import get_db
 from app.core.logging import get_logger
 from app.core.security import get_current_user, has_admin_role
 from app.core.tenancy import get_current_tenant_slug
-from app.models.pricing_plan import PricingPeriod, PricingPlan
+from app.models.pricing_plan import PricingPeriod, PricingPlan, effective_pricing
 from app.schemas.common import APIResponse
 from app.services.audit import record_admin_action
 
@@ -40,14 +40,23 @@ async def _tenant_uuid(db: AsyncSession, tenant_slug: str) -> uuid.UUID:
     return t
 
 
-def _serialize(p: PricingPlan) -> dict[str, Any]:
+def _serialize(p: PricingPlan, *, public: bool = False) -> dict[str, Any]:
+    """Admin view shows the stored values; the public view shows the price a
+    member would actually pay right now (an expired offer is already gone)."""
+    if public:
+        price, was, ends = effective_pricing(p)
+    else:
+        price = int(p.price_paise)
+        was = int(p.original_price_paise) if p.original_price_paise is not None else None
+        ends = p.offer_ends_at
     return {
         "id": str(p.id),
         "key": p.key,
         "name": p.name,
         "tier": p.tier,
-        "price_paise": int(p.price_paise),
-        "original_price_paise": int(p.original_price_paise) if p.original_price_paise is not None else None,
+        "price_paise": price,
+        "original_price_paise": was,
+        "offer_ends_at": (ends.isoformat() + "Z") if ends else None,
         "currency": p.currency,
         "period": p.period.value if p.period else "monthly",
         "features": list(p.features or []),
@@ -108,6 +117,21 @@ def _validate_payload(payload: dict, *, partial: bool = False) -> dict:
             if op < 0:
                 raise HTTPException(status_code=400, detail="original_price_paise must be >= 0")
             out["original_price_paise"] = op
+
+    # Promo end (ISO date or datetime; a bare date means the start of that day,
+    # UK time ≈ UTC in winter). null/"" clears it.
+    if "offer_ends_at" in payload:
+        raw = payload.get("offer_ends_at")
+        if raw is None or raw == "":
+            out["offer_ends_at"] = None
+        else:
+            try:
+                dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="offer_ends_at must be an ISO date")
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+            out["offer_ends_at"] = dt
 
     if "currency" in payload:
         cur = (payload.get("currency") or "GBP").strip().upper()[:3]
@@ -178,6 +202,7 @@ async def admin_create_plan(
         tier=data["tier"],
         price_paise=data["price_paise"],
         original_price_paise=data.get("original_price_paise"),
+        offer_ends_at=data.get("offer_ends_at"),
         currency=data.get("currency", "GBP"),
         period=data["period"],
         features=data.get("features", []),
@@ -331,4 +356,4 @@ async def public_list_plans(
         )
         .order_by(PricingPlan.sort_order.asc(), PricingPlan.created_at.asc())
     )).scalars().all()
-    return APIResponse(success=True, data=[_serialize(p) for p in rows])
+    return APIResponse(success=True, data=[_serialize(p, public=True) for p in rows])

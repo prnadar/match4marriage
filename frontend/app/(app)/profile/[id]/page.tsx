@@ -96,9 +96,12 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
   const [profile, setProfile] = useState<RemoteProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
-  const [interestSent, setInterestSent] = useState(false);
+  // none → nothing yet · sent → we sent, awaiting reply · received → they
+  // sent to us (our button accepts) · mutual → both, chat unlocked.
+  const [interestState, setInterestState] = useState<"none" | "sent" | "received" | "mutual">("none");
   const [interestPending, setInterestPending] = useState(false);
-  const [interestError, setInterestError] = useState<string | null>(null);
+  const [interestError, setInterestError] = useState<{ text: string; quota: boolean } | null>(null);
+  const interestSent = interestState === "sent" || interestState === "mutual";
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -119,27 +122,47 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Read the real interest state from the server so it survives a refresh.
+  useEffect(() => {
+    let cancelled = false;
+    matchApi.getInterestStatus(params.id)
+      .then((res) => {
+        if (cancelled) return;
+        const d = (res.data as any)?.data ?? {};
+        const sent = d.sent?.[params.id];
+        const received = d.received?.[params.id];
+        if (sent === "accepted" || (sent && received === "accepted")) setInterestState("mutual");
+        else if (sent) setInterestState("sent");
+        else if (received === "pending") setInterestState("received");
+      })
+      .catch(() => { /* non-critical: button falls back to "Send interest" */ });
+    return () => { cancelled = true; };
+  }, [params.id]);
+
   const sendInterest = async () => {
     if (!profile || interestPending || interestSent) return;
     setInterestPending(true);
     setInterestError(null);
     try {
-      await matchApi.sendInterest(profile.user_id);
-      setInterestSent(true);
+      const res = await matchApi.sendInterest(profile.user_id);
+      const st = (res.data as any)?.data?.status;
+      setInterestState(st === "accepted" ? "mutual" : "sent");
     } catch (err) {
-      // 409: an interest already exists — treat as sent rather than an error.
       if (err instanceof ApiError && err.status === 409) {
-        setInterestSent(true);
+        // An interest already exists — that is the truthful state.
+        setInterestState("sent");
       } else if (err instanceof ApiError && err.status === 403) {
         // Basic plan quota exhausted — surface the server's message.
-        setInterestError(
-          err.message?.replace(/^\d+:\s*/, "") ||
+        setInterestError({
+          quota: true,
+          text: err.message?.replace(/^\d+:\s*/, "") ||
             "You've reached your Basic plan limit — upgrade to Premium for unlimited expressions of interest.",
-        );
+        });
       } else {
-        setInterestError(
-          err instanceof Error ? err.message : "Could not send interest. Please try again.",
-        );
+        setInterestError({
+          quota: false,
+          text: "We couldn't send your interest just now. Please try again in a moment.",
+        });
       }
     } finally {
       setInterestPending(false);
@@ -311,20 +334,31 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
 
                 {/* CTAs */}
                 <div className="mt-5 space-y-2">
-                  {interestSent ? (
+                  {interestState === "mutual" ? (
+                    <div className="flex w-full items-center justify-center gap-2 rounded-full bg-emerald-50 px-5 py-3 text-[14px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                      <Heart className="fill-emerald-700" /> Mutual interest
+                    </div>
+                  ) : interestState === "sent" ? (
                     <div className="flex w-full items-center justify-center gap-2 rounded-full bg-emerald-50 px-5 py-3 text-[14px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
                       <Heart className="fill-emerald-700" /> Interest sent
                     </div>
                   ) : (
-                    <LuxeButton
-                      onClick={sendInterest}
-                      loading={interestPending}
-                      size="lg"
-                      className="w-full"
-                    >
-                      <Heart className="fill-white" />
-                      Send interest
-                    </LuxeButton>
+                    <>
+                      {interestState === "received" && (
+                        <p className="text-center text-[12px] font-medium text-rose-700">
+                          {profile.first_name || "This member"} has expressed interest in you
+                        </p>
+                      )}
+                      <LuxeButton
+                        onClick={sendInterest}
+                        loading={interestPending}
+                        size="lg"
+                        className="w-full"
+                      >
+                        <Heart className="fill-white" />
+                        {interestState === "received" ? "Accept interest" : "Send interest"}
+                      </LuxeButton>
+                    </>
                   )}
                   <LuxeButton asChild variant="outline" size="lg" className="w-full">
                     <Link href="/messages">
@@ -336,13 +370,15 @@ export default function ProfilePage({ params }: { params: { id: string } }) {
 
                 {interestError && (
                   <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-3.5 py-2.5 text-[12px] leading-relaxed text-rose-800">
-                    {interestError}
-                    <Link
-                      href="/subscription"
-                      className="mt-1 inline-flex items-center gap-1 font-semibold text-rose-700 hover:text-rose-800"
-                    >
-                      View plans <Sparkles className="h-3 w-3" />
-                    </Link>
+                    {interestError.text}
+                    {interestError.quota && (
+                      <Link
+                        href="/subscription"
+                        className="mt-1 flex items-center gap-1 font-semibold text-rose-700 hover:text-rose-800"
+                      >
+                        View plans <Sparkles className="h-3 w-3" />
+                      </Link>
+                    )}
                   </div>
                 )}
 

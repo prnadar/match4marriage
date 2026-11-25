@@ -400,13 +400,13 @@ export const adminApi = {
   listPricingPlans: () => api.get("/api/v1/admin/pricing-plans"),
   createPricingPlan: (body: {
     key: string; name: string; tier: "silver" | "gold" | "platinum";
-    price_paise: number; original_price_paise?: number | null; currency?: string;
+    price_paise: number; original_price_paise?: number | null; offer_ends_at?: string | null; currency?: string;
     period: "monthly" | "quarterly" | "half_yearly" | "yearly";
     features?: string[]; is_active?: boolean; sort_order?: number;
   }) => api.post("/api/v1/admin/pricing-plans", body),
   updatePricingPlan: (planId: string, body: Partial<{
     key: string; name: string; tier: "silver" | "gold" | "platinum";
-    price_paise: number; original_price_paise: number | null; currency: string;
+    price_paise: number; original_price_paise: number | null; offer_ends_at: string | null; currency: string;
     period: "monthly" | "quarterly" | "half_yearly" | "yearly";
     features: string[]; is_active: boolean; sort_order: number;
   }>) => api.put(`/api/v1/admin/pricing-plans/${planId}`, body),
@@ -573,6 +573,9 @@ export const matchApi = {
   getReceivedInterests: () => api.get("/api/v1/interests/received"),
   getSentInterests:     () => api.get("/api/v1/interests/sent"),
   sendInterest: (toUserId: string) => api.post(`/api/v1/interests/${toUserId}`),
+  /** Caller's interest state: { sent: {id: status}, received: {id: status} }. */
+  getInterestStatus: (userId?: string) =>
+    api.get(`/api/v1/interests/status${userId ? `?user_id=${encodeURIComponent(userId)}` : ""}`),
 };
 
 // ─── Admin CRM (client contact, messaging, notes/tags) ───────────────────────

@@ -12,6 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -189,18 +190,45 @@ async def send_interest(
     if not sender_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user session")
 
+    if receiver_id == sender_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You can't send interest to yourself")
+
     tenant_uuid = await _resolve_tenant(db, tenant_slug)
 
+    # Already sent? Checked before the quota so a member at their monthly
+    # limit gets an honest "already sent" rather than an upgrade prompt.
+    existing = await db.execute(
+        select(Interest.id).where(
+            Interest.sender_id == sender_id,
+            Interest.receiver_id == receiver_id,
+            Interest.tenant_id == tenant_uuid,
+        )
+    )
+    if existing.first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Interest already sent",
+        )
+
+    # Is this a reply to an interest they already sent us? (= "Accept")
+    reverse_row = (await db.execute(
+        select(Interest).where(
+            Interest.sender_id == receiver_id,
+            Interest.receiver_id == sender_id,
+            Interest.tenant_id == tenant_uuid,
+            Interest.status == InterestStatus.PENDING,
+            Interest.deleted_at.is_(None),
+        )
+    )).scalar_one_or_none()
+
     # Expressions-of-interest quota — Basic (free) is capped per CALENDAR
-    # MONTH; Premium+ is unlimited. The earlier implementation counted
-    # lifetime interests, which permanently blocked a Basic member after
-    # 10 interests (even after upgrading + downgrading). Server-enforced so
-    # the client can't bypass.
-    from datetime import datetime, timezone
+    # MONTH; Premium+ is unlimited. Server-enforced so the client can't
+    # bypass. Accepting an interest someone else sent is a reply, not a new
+    # expression, so it is never blocked by the quota.
     from app.core.entitlements import get_user_plan, interest_limit
     plan = await get_user_plan(db, sender_id)
     limit = interest_limit(plan)
-    if limit is not None:
+    if limit is not None and reverse_row is None:
         now = datetime.now(timezone.utc)
         period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         sent_count = (await db.execute(
@@ -220,21 +248,6 @@ async def send_interest(
                 ),
             )
 
-    # Check for existing interest
-    existing = await db.execute(
-        select(Interest).where(
-            Interest.sender_id == sender_id,
-            Interest.receiver_id == receiver_id,
-            Interest.tenant_id == tenant_uuid,
-            Interest.deleted_at.is_(None),
-        )
-    )
-    if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Interest already sent",
-        )
-
     interest = Interest(
         tenant_id=tenant_uuid,
         sender_id=sender_id,
@@ -243,23 +256,21 @@ async def send_interest(
         is_super_interest=payload.is_super_interest,
         message=payload.message,
     )
-    db.add(interest)
-    await db.flush()
+    try:
+        # SAVEPOINT so a double-click race (unique uq_interests_pair) becomes a
+        # clean 409 instead of a 500 that poisons the whole transaction.
+        async with db.begin_nested():
+            db.add(interest)
+            await db.flush()
+    except IntegrityError:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Interest already sent")
 
-    # Check for mutual interest → unlock chat
-    reverse = await db.execute(
-        select(Interest).where(
-            Interest.sender_id == receiver_id,
-            Interest.receiver_id == sender_id,
-            Interest.tenant_id == tenant_uuid,
-            Interest.status == InterestStatus.PENDING,
-            Interest.deleted_at.is_(None),
-        )
-    )
-    reverse_row = reverse.scalar_one_or_none()
+    # Mutual interest → accept both sides and unlock chat
     if reverse_row:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         interest.status = InterestStatus.ACCEPTED
         reverse_row.status = InterestStatus.ACCEPTED
+        reverse_row.responded_at = now
         # Create the ChatThread that unlocks messaging for the pair (skip if
         # one already exists — the unique constraint guarantees a single
         # row per (tenant, ordered pair)). Without this, the messaging UI
@@ -284,8 +295,40 @@ async def send_interest(
             await db.flush()
         logger.info("mutual_interest_chat_unlocked", user_a=str(sender_id), user_b=str(receiver_id))
 
-    logger.info("interest_sent", sender=str(sender_id), receiver=str(receiver_id))
+    # Flush + refresh before serialising: the status UPDATE expires the
+    # server-side `updated_at`, and reading an expired attribute outside the
+    # async context raised MissingGreenlet → 500 on every accept.
+    await db.flush()
+    await db.refresh(interest)
+    logger.info("interest_sent", sender=str(sender_id), receiver=str(receiver_id), mutual=bool(reverse_row))
     return APIResponse(success=True, data=InterestRead.model_validate(interest))
+
+
+@router.get("/interests/status")
+async def get_interest_status(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    user_id: uuid.UUID | None = None,
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    """Lightweight interest state for the caller, so pages can show the real
+    button state after a reload: `sent` / `received` map member id → status.
+    Pass `user_id` to scope it to one member (profile page)."""
+    me = _get_user_uuid(current_user)
+    if not me:
+        return APIResponse(success=True, data={"sent": {}, "received": {}})
+    tenant_uuid = await _resolve_tenant(db, tenant_slug)
+    base = (Interest.tenant_id == tenant_uuid, Interest.deleted_at.is_(None))
+
+    sent_q = select(Interest.receiver_id, Interest.status).where(*base, Interest.sender_id == me)
+    recv_q = select(Interest.sender_id, Interest.status).where(*base, Interest.receiver_id == me)
+    if user_id:
+        sent_q = sent_q.where(Interest.receiver_id == user_id)
+        recv_q = recv_q.where(Interest.sender_id == user_id)
+
+    sent = {str(uid): st.value for uid, st in (await db.execute(sent_q)).all()}
+    received = {str(uid): st.value for uid, st in (await db.execute(recv_q)).all()}
+    return APIResponse(success=True, data={"sent": sent, "received": received})
 
 
 async def _hydrate_profile_cards(
