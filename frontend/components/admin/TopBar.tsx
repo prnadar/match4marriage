@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Search, User } from "lucide-react";
+import { Bell, User } from "lucide-react";
 
 interface TopBarProps {
   title: string;

@@ -239,6 +239,57 @@ export const pricingApi = {
   listPlans: () => api.get("/api/v1/pricing-plans"),
 };
 
+/* ── Account self-service (Settings, forgot password) ─────────────────
+ * Backend: routers/auth.py. Sensitive calls (changeEmail, requestPhoneChange,
+ * deactivate, deleteAccount) need a fresh sign-in — call
+ * reauthenticateWithPassword() from lib/firebase first; otherwise the API
+ * answers 403 with detail.code === "reauth_required".
+ */
+export type NotificationPrefs = {
+  email_interests: boolean;
+  email_messages: boolean;
+  email_matches: boolean;
+  email_marketing: boolean;
+};
+
+export const accountApi = {
+  /** Public. Always answers generically (never reveals if the email exists). */
+  forgotPassword: (email: string) => api.post("/api/v1/auth/forgot-password", { email }),
+  me: () => api.get("/api/v1/auth/me"),
+  updateName: (data: { first_name?: string; last_name?: string }) => api.patch("/api/v1/auth/me", data),
+  getSettings: () => api.get("/api/v1/auth/me/settings"),
+  updateNotifications: (notifications: Partial<NotificationPrefs>) =>
+    api.patch("/api/v1/auth/me/settings", { notifications }),
+  changeEmail: (new_email: string) => api.post("/api/v1/auth/change-email", { new_email }),
+  confirmEmailChange: (code: string) => api.post("/api/v1/auth/change-email/confirm", { code }),
+  requestPhoneChange: (phone: string) => api.post("/api/v1/auth/change-phone/request", { phone }),
+  confirmPhoneChange: () => api.post("/api/v1/auth/change-phone/confirm", {}),
+  passwordChanged: () => api.post("/api/v1/auth/password-changed", {}),
+  signOutEverywhere: () => api.post("/api/v1/auth/sign-out-everywhere", {}),
+  exportData: () => api.get("/api/v1/auth/me/export"),
+  deactivate: (reason?: string) => api.post("/api/v1/auth/deactivate", { reason: reason || null }),
+  reactivate: () => api.post("/api/v1/auth/reactivate", {}),
+  deleteAccount: (reason?: string) =>
+    api.post("/api/v1/auth/delete-account", { confirm: "DELETE", reason: reason || null }),
+};
+
+/** Human-readable message from an ApiError (strips the "403: " status prefix). */
+export function apiErrorMessage(e: unknown, fallback = "Something went wrong. Please try again."): string {
+  const err = e as { detail?: unknown; message?: string } | null;
+  const d = err?.detail as any;
+  if (typeof d === "string" && d) return d;
+  if (d && typeof d === "object" && typeof d.message === "string") return d.message;
+  if (Array.isArray(d) && d[0]?.msg) return String(d[0].msg).replace(/^Value error,\s*/i, "");
+  const m = err?.message || "";
+  return m ? m.replace(/^\d{3}:\s*/, "") : fallback;
+}
+
+/** True when the API rejected a sensitive call because the sign-in is stale. */
+export function isReauthRequired(e: unknown): boolean {
+  const err = e as { status?: number; detail?: any } | null;
+  return err?.status === 403 && err?.detail?.code === "reauth_required";
+}
+
 /* ── Success stories (public + admin) ─────────────────────────────── */
 export const successStoriesApi = {
   /** Backend: GET /public/success-stories (no auth). */
@@ -460,6 +511,45 @@ export const adminApi = {
 };
 
 /**
+ * Admin console ops (backend/app/routers/admin_ops.py): global search, sidebar
+ * badge counts, audit log, verification review, matchmaking.
+ */
+function qs(params: Record<string, string | number | boolean | undefined | null>): string {
+  const s = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null || v === "") continue;
+    s.set(k, String(v));
+  }
+  const out = s.toString();
+  return out ? `?${out}` : "";
+}
+
+export type AuditLogParams = {
+  action?: string; actor?: string; target_id?: string; q?: string; days?: number; page?: number; limit?: number;
+};
+
+export const adminOpsApi = {
+  search: (q: string, limit = 8) => api.get(`/api/v1/admin/search${qs({ q, limit })}`),
+  navCounts: () => api.get("/api/v1/admin/nav-counts"),
+
+  auditLog: (params: AuditLogParams = {}) => api.get(`/api/v1/admin/audit-log${qs(params)}`),
+  auditLogFacets: () => api.get("/api/v1/admin/audit-log/facets"),
+  exportAuditLogCsvUrl: (params: AuditLogParams = {}) =>
+    `/api/v1/admin/audit-log${qs({ ...params, page: undefined, limit: undefined, format: "csv" })}`,
+
+  verificationReview: (userId: string) => api.get(`/api/v1/admin/verification-review/${userId}`),
+  bulkApproveVerifications: (user_ids: string[]) =>
+    api.post("/api/v1/admin/verifications/bulk-approve", { user_ids }),
+
+  matchSuggestions: (userId: string, opts: { limit?: number; include_introduced?: boolean } = {}) =>
+    api.get(`/api/v1/admin/matchmaking/suggestions/${userId}${qs(opts)}`),
+  matchCompare: (a: string, b: string) => api.get(`/api/v1/admin/matchmaking/compare${qs({ a, b })}`),
+  introduce: (user_a: string, user_b: string, note?: string) =>
+    api.post("/api/v1/admin/matchmaking/introduce", { user_a, user_b, note: note || undefined }),
+  introductions: (limit = 30) => api.get(`/api/v1/admin/matchmaking/introductions${qs({ limit })}`),
+};
+
+/**
  * Backend route layout — verified against app/routers/matches.py + profile.py:
  *   GET  /api/v1/matches/daily                 (matches router)
  *   GET  /api/v1/profile/browse                (profile router — NOT matches)
@@ -481,4 +571,87 @@ export const matchApi = {
   getReceivedInterests: () => api.get("/api/v1/interests/received"),
   getSentInterests:     () => api.get("/api/v1/interests/sent"),
   sendInterest: (toUserId: string) => api.post(`/api/v1/interests/${toUserId}`),
+};
+
+// ─── Admin CRM (client contact, messaging, notes/tags) ───────────────────────
+// Backend: app/routers/admin_crm.py (+ CRM filters on GET /admin/users).
+
+export type CrmChannel = "email" | "in_app" | "call" | "whatsapp" | "sms" | "meeting" | "other";
+export type CrmStatus = "sent" | "failed" | "skipped" | "logged";
+
+export type CrmAudience =
+  | { type: "users"; user_ids: string[] }
+  | { type: "segment"; segment: string; value?: string };
+
+export interface CrmMessage {
+  channels: Array<"email" | "in_app">;
+  subject: string;
+  body: string;
+  body_format?: "text" | "html";
+  template_key?: string | null;
+  reply_to?: string | null;
+  action_url?: string | null;
+  /** Promotional email — only delivered to members opted in to "News & offers". */
+  is_marketing?: boolean;
+}
+
+export interface CrmUserListParams {
+  q?: string;
+  status_filter?: string;
+  tag?: string;
+  follow_up?: "due" | "upcoming" | "any";
+  plan?: string;
+  page?: number;
+  limit?: number;
+}
+
+function _crmQs(params: Record<string, string | number | undefined | null>): string {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+  });
+  const s = qs.toString();
+  return s ? `?${s}` : "";
+}
+
+export const adminCrmApi = {
+  // Users list with CRM filters (tag / follow-up / plan) + contact columns.
+  listUsers: (params: CrmUserListParams = {}) =>
+    api.get(`/api/v1/admin/users${_crmQs({ ...params })}`),
+  exportUsersCsvUrl: (params: Omit<CrmUserListParams, "page" | "limit"> = {}) =>
+    `/api/v1/admin/users${_crmQs({ format: "csv", ...params })}`,
+
+  // Per member
+  getMember: (userId: string) => api.get(`/api/v1/admin/crm/users/${userId}`),
+  updateMember: (userId: string, body: { tags?: string[]; follow_up_at?: string | null; follow_up_note?: string | null }) =>
+    api.put(`/api/v1/admin/crm/users/${userId}/crm`, body),
+  sendToMember: (userId: string, body: CrmMessage) =>
+    api.post(`/api/v1/admin/crm/users/${userId}/send`, body),
+  logContact: (userId: string, body: { channel: Exclude<CrmChannel, "in_app">; subject?: string; body?: string; outcome?: string }) =>
+    api.post(`/api/v1/admin/crm/users/${userId}/log`, body),
+  addNote: (userId: string, body: { body: string; pinned?: boolean }) =>
+    api.post(`/api/v1/admin/crm/users/${userId}/notes`, body),
+  updateNote: (userId: string, noteId: string, body: { body?: string; pinned?: boolean }) =>
+    api.patch(`/api/v1/admin/crm/users/${userId}/notes/${noteId}`, body),
+  deleteNote: (userId: string, noteId: string) =>
+    api.delete(`/api/v1/admin/crm/users/${userId}/notes/${noteId}`),
+
+  // Bulk / broadcast
+  previewAudience: (audience: CrmAudience) =>
+    api.post(`/api/v1/admin/crm/audience/preview`, { audience }),
+  sendBroadcast: (body: CrmMessage & { audience: CrmAudience; expected_count?: number }) =>
+    api.post(`/api/v1/admin/crm/broadcasts`, body),
+  listBroadcasts: (params: { page?: number; limit?: number } = {}) =>
+    api.get(`/api/v1/admin/crm/broadcasts${_crmQs(params)}`),
+
+  // Console
+  listCommunications: (params: { channel?: string; status?: string; q?: string; user_id?: string; broadcast_id?: string; days?: number; page?: number; limit?: number } = {}) =>
+    api.get(`/api/v1/admin/crm/communications${_crmQs(params)}`),
+  stats: () => api.get(`/api/v1/admin/crm/stats`),
+  followUps: (scope: "due" | "upcoming" | "all" = "all", limit = 50) =>
+    api.get(`/api/v1/admin/crm/follow-ups${_crmQs({ scope, limit })}`),
+  meta: () => api.get(`/api/v1/admin/crm/meta`),
+
+  // Mail templates (managed in Settings → admin_cms.py) for "start from template".
+  listTemplates: () => api.get(`/api/v1/admin/mail-templates`),
 };

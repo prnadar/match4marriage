@@ -28,11 +28,11 @@ const plans: Plan[] = [
   {
     name: "Basic",
     tagline: "Begin the conversation.",
-    price: "£0",
-    period: "for 3 months",
+    price: "Free",
+    period: "to get started",
     bestFor: "Early enquiries",
     features: ["Curated match suggestions", "View profiles", "Compatibility insights", "Standard search filters"],
-    cta: "Get started",
+    cta: "Get started free",
     ctaHref: "/auth/register",
   },
   {

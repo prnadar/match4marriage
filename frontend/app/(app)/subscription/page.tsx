@@ -57,24 +57,25 @@ function formatPrice(p: RemotePlan): string {
   return fmtMoney(p.price_paise, p.currency);
 }
 
-// A promo applies when there's a higher "was" price than the live price.
+// A struck-through "was" price shows only on paid tiers when the admin sets a
+// higher regular price. Basic is simply free — it never gets promo treatment.
 function hasPromo(p: RemotePlan): boolean {
+  if (p.tier === "silver" || p.price_paise <= 0) return false;
   return typeof p.original_price_paise === "number"
     && p.original_price_paise > p.price_paise;
 }
 
 function periodLabel(p: RemotePlan): string {
-  // Human billing cadence by tier: the inaugural Basic is free for the first
-  // 3 months; the paid tiers (Premium / Elite) bill every 6 months. The
-  // PricingPeriod enum only models monthly/quarterly/yearly, so the label is
-  // derived here from the tier.
-  if (p.tier === "silver") return "for 3 months";
+  // A free plan has no billing cadence. Paid tiers (Premium / Elite) bill
+  // every 6 months; otherwise fall back to the plan's own period.
+  if (p.price_paise <= 0) return "";
   if (p.tier === "gold" || p.tier === "platinum") return "/ 6 months";
   switch (p.period) {
-    case "monthly":   return "/ month";
-    case "quarterly": return "/ quarter";
-    case "yearly":    return "/ year";
-    default:          return "";
+    case "monthly":     return "/ month";
+    case "quarterly":   return "/ quarter";
+    case "half_yearly": return "/ 6 months";
+    case "yearly":      return "/ year";
+    default:            return "";
   }
 }
 
@@ -390,11 +391,6 @@ export default function SubscriptionPage() {
                     <span className="text-[12.5px] text-white/50">{periodLabel(p)}</span>
                   </div>
 
-                  {hasPromo(p) && (
-                    <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-white shadow-[0_3px_12px_rgba(220,30,60,0.4)]">
-                      <Sparkles className="h-3 w-3" /> Inaugural offer
-                    </span>
-                  )}
 
                   <ul className="mt-5 space-y-2.5">
                     {(p.features ?? []).map((f, idx) => (
@@ -431,11 +427,24 @@ export default function SubscriptionPage() {
                         );
                       }
                       if (isPaidTier && p.price_paise <= 0) {
+                        // Free Basic: members are already on it (or above it),
+                        // so it's a status, not a call to action.
+                        if (entitlementsLoading) {
+                          return (
+                            <span className={btn.replace("cursor-pointer ", "") + " pointer-events-none opacity-60"} aria-busy="true">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking your plan…
+                            </span>
+                          );
+                        }
+                        const onBasic = entitlements.plan === "free" || entitlements.plan === "silver";
                         return (
-                          <Link href="/auth/register" className={btn}>
-                            {hasPromo(p) ? "Claim inaugural offer" : "Get started free"}
-                            <ArrowRight className="h-3.5 w-3.5" />
-                          </Link>
+                          <span
+                            className={base.replace("cursor-pointer ", "") + "cursor-default border border-white/12 bg-white/[0.04] text-white/70"}
+                            aria-label={onBasic ? `${p.name} is your current plan` : `${p.name} features are included in your plan`}
+                          >
+                            <Check className="h-3.5 w-3.5 text-[#f3c9a8]" />
+                            {onBasic ? "Current plan" : "Included in your plan"}
+                          </span>
                         );
                       }
                       return (

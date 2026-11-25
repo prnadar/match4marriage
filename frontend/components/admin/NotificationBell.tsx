@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Bell, ShieldCheck, Flag, CreditCard, UserPlus, CheckCircle2,
-  Loader2, ArrowRight,
+  Loader2, ArrowRight, Inbox,
 } from "lucide-react";
 import { adminApi } from "@/lib/api";
 
@@ -56,6 +56,19 @@ function deriveNotifs(stats: any): AdminNotif[] {
       body: "Members have flagged content or behaviour for review.",
       href: "/admin/reports",
       cta: "Open reports",
+    });
+  }
+
+  const newEnquiries = stats?.enquiries?.new ?? 0;
+  if (newEnquiries > 0) {
+    items.push({
+      id: "new-enquiries",
+      icon: <Inbox className="w-4 h-4" />,
+      iconBg: "bg-sky-50", iconFg: "text-sky-700",
+      title: `${newEnquiries} new enquir${newEnquiries === 1 ? "y" : "ies"}`,
+      body: "Contact-form messages waiting for a reply.",
+      href: "/admin/enquiries",
+      cta: "Open inbox",
     });
   }
 
@@ -116,7 +129,7 @@ export default function NotificationBell() {
   // but the verification/report/renewal summary rows are what counts as "needs
   // attention" (recent-activity rows are informational, not a backlog).
   const attentionCount = useMemo(
-    () => notifs.filter((n) => n.id === "pending-verifications" || n.id === "open-reports" || n.id === "renewals-due").length,
+    () => notifs.filter((n) => n.id === "pending-verifications" || n.id === "open-reports" || n.id === "renewals-due" || n.id === "new-enquiries").length,
     [notifs],
   );
 
@@ -164,6 +177,7 @@ export default function NotificationBell() {
         onClick={toggle}
         className="w-8 h-8 rounded-md hover:bg-secondary grid place-items-center text-foreground/70 hover:text-foreground transition-colors relative"
         title="Notifications"
+        aria-label={attentionCount > 0 ? `Notifications, ${attentionCount} need attention` : "Notifications"}
         aria-haspopup="true"
         aria-expanded={open}
       >

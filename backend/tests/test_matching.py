@@ -115,3 +115,117 @@ def test_hard_filter_no_prefs_always_passes():
         country="India",
     )
     assert passes_hard_filters(profile, {}) is True
+
+
+# ── Partner-pref normalisation + My Matches ranking ──────────────────────────
+import uuid as _uuid
+
+from app.services.matching import (
+    build_profile_card,
+    hard_filter_failures,
+    match_reasons,
+    normalize_partner_prefs,
+    primary_photo_url,
+    rank_candidates,
+)
+
+
+def _dob(age: int) -> date:
+    # Jan 1 birthday => already had this year's birthday, so exactly `age`.
+    return date(date.today().year - age, 1, 1)
+
+
+def _profile(**kw):
+    base = dict(
+        user_id=_uuid.uuid4(), gender="female", date_of_birth=_dob(28), religion="hindu",
+        city="London", country="United Kingdom", height_cm=165, marital_status="never_married",
+        education_level="Master's", mother_tongue="Tamil", partner_prefs={}, family_details={},
+        kundali_data={"diet": "Vegetarian"}, completeness_score=80,
+    )
+    base.update(kw)
+    return MockProfile(**base)
+
+
+def test_normalize_editor_shape_prefs():
+    """The profile editor saves camelCase strings; matching must understand them."""
+    norm = normalize_partner_prefs({
+        "ageFrom": "25", "ageTo": "32", "heightFrom": "5ft 2in", "heightTo": "6ft 0in",
+        "religionPref": "Hindu, Sikh", "maritalStatus": "Never Married, Divorced",
+        "diet": "Vegetarian, Non-Vegetarian", "country": "UK, India",
+    })
+    assert norm["min_age"] == 25 and norm["max_age"] == 32
+    assert norm["min_height_cm"] == 157 and norm["max_height_cm"] == 183
+    assert norm["religions"] == {"hindu", "sikh"}
+    assert norm["marital"] == {"never_married", "divorced"}
+    assert norm["diets"] == {"vegetarian", "non_vegetarian"}
+    assert norm["countries"] == {"united kingdom", "india"}
+
+
+def test_editor_full_range_defaults_are_no_constraint():
+    norm = normalize_partner_prefs({"ageFrom": "18", "ageTo": "70", "heightFrom": "4ft 6in",
+                                    "heightTo": "7ft 0in", "country": "Other"})
+    assert norm["min_age"] is None and norm["max_age"] is None
+    assert norm["min_height_cm"] is None and norm["max_height_cm"] is None
+    assert norm["countries"] == set()
+
+
+def test_hard_filters_editor_prefs_and_country_alias():
+    cand = _profile(religion="sikh", country="United Kingdom")
+    assert hard_filter_failures(cand, {"religionPref": "Hindu, Sikh", "country": "UK"}) == []
+    assert hard_filter_failures(cand, {"religionPref": "Christian"}) == ["religion"]
+
+
+def test_rank_opposite_gender_only_and_sorted():
+    viewer = _profile(gender="male", partner_prefs={"ageFrom": "24", "ageTo": "32"})
+    good = _profile(gender="female", date_of_birth=_dob(28))
+    ok = _profile(gender="female", date_of_birth=_dob(31), religion="christian", city="Leeds")
+    same_gender = _profile(gender="male")
+    ranked = rank_candidates(viewer, [ok, same_gender, good])
+    ids = [e["profile"].user_id for e in ranked]
+    assert same_gender.user_id not in ids
+    assert ids[0] == good.user_id
+    assert all(e["tier"] == "preferred" for e in ranked)
+    assert ranked[0]["score"] >= ranked[-1]["score"]
+
+
+def test_rank_falls_back_to_broader_matches():
+    """Strict prefs that nobody meets must not produce an empty feed."""
+    viewer = _profile(gender="male", partner_prefs={"religionPref": "Jain", "ageFrom": "22", "ageTo": "24"})
+    cands = [_profile(gender="female", religion="hindu", date_of_birth=_dob(a)) for a in (27, 29, 35)]
+    ranked = rank_candidates(viewer, cands)
+    assert len(ranked) == 3
+    assert all(e["tier"] == "broader" for e in ranked)
+    assert "religion" in ranked[0]["relaxed"]
+
+
+def test_rank_no_broader_when_enough_preferred():
+    viewer = _profile(gender="male", partner_prefs={"religionPref": "Hindu"})
+    cands = [_profile(gender="female") for _ in range(7)] + [_profile(gender="female", religion="muslim")]
+    ranked = rank_candidates(viewer, cands, min_preferred=6)
+    assert len(ranked) == 7 and all(e["tier"] == "preferred" for e in ranked)
+
+
+def test_match_reasons_are_human_readable():
+    viewer = _profile(gender="male", partner_prefs={"ageFrom": "24", "ageTo": "32"})
+    cand = _profile(gender="female", partner_prefs={"religionPref": "Hindu"})
+    reasons = match_reasons(viewer, cand)
+    assert reasons and len(reasons) <= 4
+    assert any("Hindu" in r for r in reasons)
+
+
+def test_primary_photo_never_premium():
+    photos = [
+        {"url": "p.jpg", "is_primary": True, "is_premium": True},
+        {"url": "a.jpg"},
+        {"url": "b.jpg", "is_primary": True},
+    ]
+    assert primary_photo_url(photos) == "b.jpg"
+    assert primary_photo_url([{"url": "x.jpg", "is_premium": True}]) is None
+
+
+def test_build_profile_card():
+    p = _profile(first_name="Asha", state=None, occupation="Doctor", photos=[{"url": "a.jpg"}],
+                 verification_status="approved")
+    card = build_profile_card(p)
+    assert card.first_name == "Asha" and card.age == 28 and card.is_verified is True
+    assert card.primary_photo_url == "a.jpg"

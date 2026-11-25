@@ -126,6 +126,9 @@ async def _ensure_verification_columns() -> None:
         "ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS favicon_url VARCHAR(500)",
         "ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS brand_primary VARCHAR(9)",
         "ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS brand_accent VARCHAR(9)",
+        # Member account settings (notification prefs, self-deactivation/deletion
+        # markers). Deferred on the ORM, so it's only read by routers/auth.py.
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS account_settings JSONB NOT NULL DEFAULT '{}'::jsonb",
     ]
     # Run each statement on an AUTOCOMMIT connection so the AccessExclusiveLock
     # an ALTER takes is released *immediately* after that statement — never held
@@ -200,6 +203,18 @@ async def _ensure_schema() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
 
+async def _ensure_crm_tables() -> None:
+    """Idempotent: create the admin CRM tables (communication log, broadcasts,
+    staff notes, tags/follow-ups) on their own, so a create_all failure on an
+    unrelated table can't leave the CRM without its tables. New tables only —
+    no ALTER on existing hot tables, so no AccessExclusiveLock on `users`."""
+    from app.models.admin_crm import AdminBroadcast, AdminCommunication, AdminUserNote, UserCrmProfile
+    from app.models.base import Base
+    tables = [m.__table__ for m in (AdminCommunication, AdminBroadcast, AdminUserNote, UserCrmProfile)]
+    async with engine.begin() as conn:
+        await conn.run_sync(lambda c: Base.metadata.create_all(c, tables=tables, checkfirst=True))
+
+
 # Module-level guard so we only run the boot DDL phase once per process. On
 # Vercel's serverless runtime each lambda instance gets a fresh module load,
 # so this still runs on every *cold* start — but never twice within the same
@@ -272,6 +287,10 @@ async def _run_boot_ddl_serialized() -> None:
                 await _ensure_schema()
             except Exception as e:
                 logger.warning("create_all_error", error=str(e))
+            try:
+                await _ensure_crm_tables()
+            except Exception as e:
+                logger.warning("crm_tables_error", error=str(e))
             try:
                 await _ensure_verification_columns()
             except Exception as e:
@@ -406,6 +425,8 @@ app.include_router(admin_pricing.router, prefix=PREFIX)
 app.include_router(admin_settings.router, prefix=PREFIX)
 app.include_router(admin_cms.router, prefix=PREFIX)
 app.include_router(admin_payment_gateway.router, prefix=PREFIX)
+from app.routers import admin_ops  # noqa: E402 — console ops (search, audit log, matchmaking)
+app.include_router(admin_ops.router, prefix=PREFIX)
 app.include_router(enquiries.router, prefix=PREFIX)
 app.include_router(matches.router, prefix=PREFIX)
 app.include_router(chat.router, prefix=PREFIX)
@@ -414,6 +435,8 @@ app.include_router(notifications.router, prefix=PREFIX)
 app.include_router(success_stories.router, prefix=PREFIX)
 app.include_router(subscriptions.router, prefix=PREFIX)
 app.include_router(health.router, prefix=PREFIX)
+from app.routers import admin_crm  # noqa: E402 — client CRM: contact log, messaging, notes/tags
+app.include_router(admin_crm.router, prefix=PREFIX)
 
 
 # ── Health + meta ─────────────────────────────────────────────────────────────

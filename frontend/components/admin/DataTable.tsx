@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight,
-  Search, Download, Loader2,
+  Download, Inbox,
 } from "lucide-react";
+import { EmptyState, SearchField, SkeletonRows } from "./primitives";
 
 interface Column<T> {
   key: string;
@@ -12,6 +13,10 @@ interface Column<T> {
   sortable?: boolean;
   render?: (row: T) => React.ReactNode;
   className?: string;
+  /** Optional: right-align numeric columns. */
+  align?: "left" | "right" | "center";
+  /** Optional: value used for sorting when it differs from row[key]. */
+  sortValue?: (row: T) => string | number | null | undefined;
 }
 
 interface DataTableProps<T> {
@@ -27,6 +32,19 @@ interface DataTableProps<T> {
   onExport?: () => void;
   filters?: React.ReactNode;
   emptyMessage?: string;
+  // ── Optional additions (backwards compatible) ──
+  /** Click a row to open it (adds hover + keyboard Enter). */
+  onRowClick?: (row: T) => void;
+  /** Rich empty state; overrides emptyMessage. */
+  emptyState?: React.ReactNode;
+  /** Compact row height for dense lists. */
+  dense?: boolean;
+  /** Initial sort. */
+  initialSort?: { key: string; dir: "asc" | "desc" };
+  /** Highlight a row (e.g. the one open in a side panel). */
+  activeRowKey?: string | null;
+  /** Called whenever the selection changes. */
+  onSelectionChange?: (ids: string[]) => void;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,7 +53,7 @@ export default function DataTable<T extends Record<string, any>>({
   data,
   loading = false,
   searchable = true,
-  searchPlaceholder = "Search...",
+  searchPlaceholder = "Search…",
   searchKeys = [],
   pageSizes = [25, 50, 100],
   bulkActions,
@@ -43,15 +61,22 @@ export default function DataTable<T extends Record<string, any>>({
   onExport,
   filters,
   emptyMessage = "No data found",
+  onRowClick,
+  emptyState,
+  dense = false,
+  initialSort,
+  activeRowKey,
+  onSelectionChange,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState("");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState(initialSort?.key || "");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(initialSort?.dir || "asc");
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(pageSizes[0]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // Filter
+  useEffect(() => { onSelectionChange?.(Array.from(selected)); }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const filtered = useMemo(() => {
     if (!search.trim()) return data;
     const q = search.toLowerCase();
@@ -64,257 +89,259 @@ export default function DataTable<T extends Record<string, any>>({
     });
   }, [data, search, searchKeys]);
 
-  // Sort
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
+    const col = columns.find((c) => c.key === sortKey);
+    const get = (r: T) => (col?.sortValue ? col.sortValue(r) : r[sortKey]);
     return [...filtered].sort((a, b) => {
-      const av = a[sortKey];
-      const bv = b[sortKey];
-      if (av == null || bv == null) return 0;
-      const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
+      const av = get(a);
+      const bv = get(b);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      const cmp = typeof av === "number" && typeof bv === "number"
+        ? av - bv
+        : String(av).localeCompare(String(bv), undefined, { numeric: true });
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [filtered, sortKey, sortDir]);
+  }, [filtered, sortKey, sortDir, columns]);
 
-  // Paginate
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const pageData = sorted.slice(page * pageSize, (page + 1) * pageSize);
+  const safePage = Math.min(page, totalPages - 1);
+  const pageData = sorted.slice(safePage * pageSize, (safePage + 1) * pageSize);
 
   const handleSort = (key: string) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
   };
 
+  const allOnPage = pageData.length > 0 && pageData.every((r) => selected.has(rowKey(r)));
   const toggleAll = () => {
-    if (selected.size === pageData.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(pageData.map(rowKey)));
-    }
+    const next = new Set(selected);
+    if (allOnPage) pageData.forEach((r) => next.delete(rowKey(r)));
+    else pageData.forEach((r) => next.add(rowKey(r)));
+    setSelected(next);
   };
-
   const toggleRow = (id: string) => {
     const next = new Set(selected);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    if (next.has(id)) next.delete(id); else next.add(id);
     setSelected(next);
   };
 
-  // Skeleton rows
-  if (loading) {
-    return (
-      <div className="glass-card overflow-hidden">
-        <div className="p-4 space-y-3">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="h-10 bg-blush rounded-lg animate-pulse" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const cellPad = dense ? "px-3 py-2" : "px-4 py-3";
+  const alignCls = (a?: "left" | "right" | "center") =>
+    a === "right" ? "text-right" : a === "center" ? "text-center" : "text-left";
+
+  const showToolbar = searchable || filters || onExport || (bulkActions && selected.size > 0);
 
   return (
-    <div className="glass-card overflow-hidden">
-      {/* Toolbar */}
-      <div className="p-4 border-b border-gold/10 flex flex-wrap items-center gap-3">
-        {searchable && (
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-            <input
-              type="text"
+    <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]">
+      {showToolbar && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2.5">
+          {searchable && (
+            <SearchField
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              onChange={(v) => { setSearch(v); setPage(0); }}
               placeholder={searchPlaceholder}
-              className="w-full pl-9 pr-4 py-2 rounded-xl border font-body text-sm text-deep bg-white/80 focus:outline-none focus:ring-2 focus:ring-gold/30 focus:border-gold transition-colors"
-              style={{ borderColor: "rgba(201,149,74,0.2)" }}
+              className="min-w-[200px] max-w-sm flex-1"
             />
-          </div>
-        )}
-        {filters}
-        <div className="flex items-center gap-2 ml-auto">
-          {bulkActions && selected.size > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="font-body text-xs text-muted">{selected.size} selected</span>
-              {bulkActions.map((action) => (
-                <button
-                  key={action.label}
-                  onClick={() => action.onClick(Array.from(selected))}
-                  className={`px-3 py-1.5 rounded-lg font-body text-xs font-medium transition-colors ${
-                    action.variant === "danger"
-                      ? "bg-red-50 text-red-600 hover:bg-red-100"
-                      : "bg-rose-50 text-rose hover:bg-rose-100"
-                  }`}
-                >
-                  {action.label}
-                </button>
-              ))}
-            </div>
           )}
-          {onExport && (
-            <button
-              onClick={onExport}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-medium text-muted hover:text-deep hover:bg-blush transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Export CSV
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Table — scrolls horizontally inside the card on small screens so the
-          page itself never overflows; min-width keeps columns readable. */}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px]">
-          <thead>
-            <tr className="border-b border-gold/10 bg-blush/50">
-              {bulkActions && (
-                <th className="px-4 py-3 w-10">
-                  <input
-                    type="checkbox"
-                    checked={pageData.length > 0 && selected.size === pageData.length}
-                    onChange={toggleAll}
-                    className="rounded border-gold/30 text-rose focus:ring-rose/30"
-                  />
-                </th>
-              )}
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  className={`px-4 py-3 text-left font-body text-xs font-semibold text-muted uppercase tracking-wider ${col.className || ""} ${
-                    col.sortable ? "cursor-pointer select-none hover:text-deep" : ""
-                  }`}
-                  onClick={() => col.sortable && handleSort(col.key)}
-                >
-                  <div className="flex items-center gap-1">
-                    {col.label}
-                    {col.sortable && (
-                      <span className="inline-flex flex-col">
-                        {sortKey === col.key ? (
-                          sortDir === "asc" ? (
-                            <ChevronUp className="w-3 h-3" />
-                          ) : (
-                            <ChevronDown className="w-3 h-3" />
-                          )
-                        ) : (
-                          <ChevronsUpDown className="w-3 h-3 opacity-40" />
-                        )}
-                      </span>
-                    )}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {pageData.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={columns.length + (bulkActions ? 1 : 0)}
-                  className="px-4 py-12 text-center font-body text-sm text-muted"
-                >
-                  {emptyMessage}
-                </td>
-              </tr>
-            ) : (
-              pageData.map((row) => {
-                const id = rowKey(row);
-                return (
-                  <tr
-                    key={id}
-                    className="border-b border-gold/5 hover:bg-blush/30 transition-colors"
+          {filters}
+          <div className="ml-auto flex items-center gap-2">
+            {bulkActions && selected.size > 0 && (
+              <div className="flex items-center gap-2 rounded-lg bg-secondary/70 py-1 pl-2.5 pr-1">
+                <span className="text-[12px] font-medium text-foreground tabular-nums">{selected.size} selected</span>
+                {bulkActions.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    onClick={() => action.onClick(Array.from(selected))}
+                    className={`h-7 rounded-md px-2.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+                      action.variant === "danger"
+                        ? "bg-card text-[#B42343] hover:bg-[#FDECEF]"
+                        : "bg-card text-foreground hover:bg-border/50"
+                    }`}
                   >
-                    {bulkActions && (
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(id)}
-                          onChange={() => toggleRow(id)}
-                          className="rounded border-gold/30 text-rose focus:ring-rose/30"
-                        />
-                      </td>
-                    )}
-                    {columns.map((col) => (
-                      <td key={col.key} className={`px-4 py-3 font-body text-sm text-deep ${col.className || ""}`}>
-                        {col.render ? col.render(row) : String(row[col.key] ?? "")}
-                      </td>
-                    ))}
-                  </tr>
-                );
-              })
+                    {action.label}
+                  </button>
+                ))}
+                <button type="button" onClick={() => setSelected(new Set())}
+                  className="h-7 rounded-md px-2 text-[12px] text-muted2-foreground hover:text-foreground">Clear</button>
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      <div className="p-4 border-t border-gold/10 flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <span className="font-body text-xs text-muted">Show</span>
-          <select
-            value={pageSize}
-            onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
-            className="rounded-lg border px-2 py-1 font-body text-xs text-deep bg-white"
-            style={{ borderColor: "rgba(201,149,74,0.2)" }}
-          >
-            {pageSizes.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-          <span className="font-body text-xs text-muted">
-            of {sorted.length} results
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            aria-label="Previous page"
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            disabled={page === 0}
-            className="p-1.5 rounded-lg hover:bg-blush disabled:opacity-30 transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4 text-deep" />
-          </button>
-          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            let pageNum: number;
-            if (totalPages <= 5) {
-              pageNum = i;
-            } else if (page < 3) {
-              pageNum = i;
-            } else if (page > totalPages - 4) {
-              pageNum = totalPages - 5 + i;
-            } else {
-              pageNum = page - 2 + i;
-            }
-            return (
+            {onExport && (
               <button
-                key={pageNum}
-                onClick={() => setPage(pageNum)}
-                className={`w-8 h-8 rounded-lg font-body text-xs font-medium transition-colors ${
-                  page === pageNum
-                    ? "bg-rose text-white"
-                    : "text-deep/60 hover:bg-blush"
-                }`}
+                type="button"
+                onClick={onExport}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
-                {pageNum + 1}
+                <Download className="h-3.5 w-3.5" aria-hidden />
+                Export CSV
               </button>
-            );
-          })}
-          <button
-            type="button"
-            aria-label="Next page"
-            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-            disabled={page >= totalPages - 1}
-            className="p-1.5 rounded-lg hover:bg-blush disabled:opacity-30 transition-colors"
-          >
-            <ChevronRight className="w-4 h-4 text-deep" />
-          </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {loading ? (
+        <div className="p-3"><SkeletonRows rows={8} /></div>
+      ) : (
+        <div className="overflow-x-auto" data-admin-scroll>
+          <table className="w-full min-w-[720px] border-collapse">
+            <thead>
+              <tr className="border-b border-border/60 bg-secondary/40">
+                {bulkActions && (
+                  <th className={`${cellPad} w-10`}>
+                    <input
+                      type="checkbox"
+                      aria-label="Select all on this page"
+                      checked={allOnPage}
+                      onChange={toggleAll}
+                      className="h-3.5 w-3.5 rounded border-border accent-[#DC1E3C]"
+                    />
+                  </th>
+                )}
+                {columns.map((col) => {
+                  const sortedHere = sortKey === col.key;
+                  return (
+                    <th
+                      key={col.key}
+                      scope="col"
+                      aria-sort={sortedHere ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
+                      className={`${cellPad} ${alignCls(col.align)} whitespace-nowrap text-[11.5px] font-medium text-muted2-foreground ${col.className || ""}`}
+                    >
+                      {col.sortable ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSort(col.key)}
+                          className={`inline-flex items-center gap-1 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${sortedHere ? "text-foreground" : ""}`}
+                        >
+                          {col.label}
+                          {sortedHere
+                            ? (sortDir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)
+                            : <ChevronsUpDown className="h-3 w-3 opacity-40" />}
+                        </button>
+                      ) : col.label}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {pageData.length === 0 ? (
+                <tr>
+                  <td colSpan={columns.length + (bulkActions ? 1 : 0)}>
+                    {emptyState || (
+                      <EmptyState
+                        icon={Inbox}
+                        title={search ? `No results for “${search}”` : emptyMessage}
+                        description={search ? "Try a different search or clear the filters." : undefined}
+                      />
+                    )}
+                  </td>
+                </tr>
+              ) : (
+                pageData.map((row) => {
+                  const id = rowKey(row);
+                  const isSel = selected.has(id);
+                  const isActive = activeRowKey != null && activeRowKey === id;
+                  return (
+                    <tr
+                      key={id}
+                      onClick={onRowClick ? () => onRowClick(row) : undefined}
+                      onKeyDown={onRowClick ? (e) => { if (e.key === "Enter") onRowClick(row); } : undefined}
+                      tabIndex={onRowClick ? 0 : undefined}
+                      aria-selected={bulkActions ? isSel : undefined}
+                      className={[
+                        "border-b border-border/40 last:border-0 transition-colors",
+                        isActive ? "bg-primary/[0.05]" : isSel ? "bg-secondary/60" : "hover:bg-secondary/40",
+                        onRowClick ? "cursor-pointer focus-visible:outline-none focus-visible:bg-secondary/60" : "",
+                      ].join(" ")}
+                    >
+                      {bulkActions && (
+                        <td className={cellPad} onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            aria-label="Select row"
+                            checked={isSel}
+                            onChange={() => toggleRow(id)}
+                            className="h-3.5 w-3.5 rounded border-border accent-[#DC1E3C]"
+                          />
+                        </td>
+                      )}
+                      {columns.map((col) => (
+                        <td key={col.key} className={`${cellPad} ${alignCls(col.align)} text-[13px] text-foreground ${col.align === "right" ? "tabular-nums" : ""} ${col.className || ""}`}>
+                          {col.render ? col.render(row) : String(row[col.key] ?? "")}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!loading && sorted.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[12px] text-muted2-foreground">
+            <label className="flex items-center gap-2">
+              <span>Rows</span>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
+                className="h-7 rounded-md border border-border bg-card px-1.5 text-[12px] text-foreground"
+              >
+                {pageSizes.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </label>
+            <span className="tabular-nums">
+              {safePage * pageSize + 1}–{Math.min(sorted.length, (safePage + 1) * pageSize)} of {sorted.length.toLocaleString("en-GB")}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="Previous page"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={safePage === 0}
+              className="grid h-7 w-7 place-items-center rounded-md text-foreground hover:bg-secondary disabled:opacity-30"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let n: number;
+              if (totalPages <= 5) n = i;
+              else if (safePage < 3) n = i;
+              else if (safePage > totalPages - 4) n = totalPages - 5 + i;
+              else n = safePage - 2 + i;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  aria-current={safePage === n ? "page" : undefined}
+                  onClick={() => setPage(n)}
+                  className={`h-7 min-w-[28px] rounded-md px-1.5 text-[12px] font-medium tabular-nums transition-colors ${
+                    safePage === n ? "bg-foreground text-background" : "text-muted2-foreground hover:bg-secondary hover:text-foreground"
+                  }`}
+                >
+                  {n + 1}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              aria-label="Next page"
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={safePage >= totalPages - 1}
+              className="grid h-7 w-7 place-items-center rounded-md text-foreground hover:bg-secondary disabled:opacity-30"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

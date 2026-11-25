@@ -69,3 +69,4 @@ coverage/
 .cache/
 .git_bak/
 .claude/
+graphify-out/

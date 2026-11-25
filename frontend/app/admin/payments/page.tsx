@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  Search, X, ChevronLeft, ChevronRight, AlertTriangle, Wallet,
-  ArrowDownRight, ArrowUpRight,
+  ChevronLeft, ChevronRight, AlertTriangle, Wallet,
+  ArrowDownRight, ArrowUpRight, Download, CalendarDays, Landmark,
 } from "lucide-react";
-import { Download } from "lucide-react";
-import { PageShell, GlassCard, StatCard, Button, fadeUp } from "@/components/admin/PageShell";
+import { PageShell, StatCard, Button, fadeUp } from "@/components/admin/PageShell";
+import { Segmented, SearchField, EmptyState, SkeletonRows, Pill, relTime, formatDateTime } from "@/components/admin/primitives";
+import { useToast } from "@/components/admin/Toast";
 import { adminApi, ApiError, downloadCsv } from "@/lib/api";
 import { formatGBP } from "@/lib/plans";
+import { usePersistentState, oneOf } from "../_lib/view-state";
 
 interface PaymentRow {
   id: string;
@@ -30,49 +33,51 @@ interface PaymentsSummary {
   lifetime_paise: number;
 }
 
-type DirFilter = "all" | "credit" | "debit";
-type GwFilter  = "all" | "razorpay" | "stripe" | "upi";
+const DIR_KEYS = ["all", "credit", "debit"] as const;
+type DirFilter = (typeof DIR_KEYS)[number];
+const GW_KEYS = ["all", "paypal", "stripe", "razorpay", "upi"] as const;
+type GwFilter = (typeof GW_KEYS)[number];
+const RANGE_KEYS = ["all", "7", "30", "90"] as const;
+type RangeFilter = (typeof RANGE_KEYS)[number];
 
-const DIR_FILTERS: Array<{ key: DirFilter; label: string }> = [
-  { key: "all",    label: "All" },
-  { key: "credit", label: "Credits" },
-  { key: "debit",  label: "Debits" },
+const DIR_FILTERS: Array<{ value: DirFilter; label: string }> = [
+  { value: "all",    label: "All" },
+  { value: "credit", label: "Credits" },
+  { value: "debit",  label: "Debits" },
 ];
 
-const GW_FILTERS: Array<{ key: GwFilter; label: string }> = [
-  { key: "all",      label: "All gateways" },
-  { key: "razorpay", label: "Razorpay" },
-  { key: "stripe",   label: "Stripe" },
-  { key: "upi",      label: "UPI" },
+const GW_FILTERS: Array<{ value: GwFilter; label: string }> = [
+  { value: "all",      label: "All gateways" },
+  { value: "paypal",   label: "PayPal" },
+  { value: "stripe",   label: "Stripe" },
+  { value: "razorpay", label: "Razorpay" },
+  { value: "upi",      label: "UPI" },
 ];
 
-function formatShort(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const diff = Date.now() - d.getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days < 1) {
-    const hrs = Math.floor(diff / 3600000);
-    if (hrs < 1) return "just now";
-    return `${hrs}h ago`;
-  }
-  if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
+const RANGE_FILTERS: Array<{ value: RangeFilter; label: string }> = [
+  { value: "7",   label: "7d" },
+  { value: "30",  label: "30d" },
+  { value: "90",  label: "90d" },
+  { value: "all", label: "All time" },
+];
+
+const GRID = "grid grid-cols-[minmax(190px,1.4fr)_minmax(190px,1.6fr)_100px_110px_80px_100px] gap-4 items-center";
 
 export default function AdminPaymentsPage() {
+  const { toast } = useToast();
   const [items, setItems] = useState<PaymentRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
-  const [dir, setDir] = useState<DirFilter>("all");
-  const [gw, setGw] = useState<GwFilter>("all");
+  const [dir, setDir] = usePersistentState<DirFilter>("payments.dir", "all", oneOf(DIR_KEYS));
+  const [gw, setGw] = usePersistentState<GwFilter>("payments.gateway", "all", oneOf(GW_KEYS));
+  const [range, setRange] = usePersistentState<RangeFilter>("payments.range", "all", oneOf(RANGE_KEYS));
   const [q, setQ] = useState("");
   const [qLive, setQLive] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<PaymentsSummary | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qLive), 250);
@@ -89,17 +94,18 @@ export default function AdminPaymentsPage() {
     })();
   }, []);
 
+  const filters = useCallback(() => ({
+    q: q || undefined,
+    gateway: gw === "all" ? undefined : gw,
+    direction: dir === "all" ? undefined : dir,
+    days: range === "all" ? undefined : Number(range),
+  }), [q, gw, dir, range]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await adminApi.listPayments({
-        q: q || undefined,
-        gateway: gw === "all" ? undefined : gw,
-        direction: dir === "all" ? undefined : dir,
-        page,
-        limit,
-      });
+      const res = await adminApi.listPayments({ ...filters(), page, limit });
       const payload = res.data as any;
       setItems(Array.isArray(payload?.data) ? payload.data : []);
       setTotal(typeof payload?.total === "number" ? payload.total : 0);
@@ -108,276 +114,153 @@ export default function AdminPaymentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [q, gw, dir, page, limit]);
+  }, [filters, page, limit]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(1); }, [dir, gw, q]);
+  useEffect(() => { setPage(1); }, [dir, gw, q, range]);
 
   const pageCount = Math.max(1, Math.ceil(total / limit));
+
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      await downloadCsv(adminApi.exportPaymentsCsvUrl(filters()), "payments.csv");
+    } catch (e) {
+      toast("error", e instanceof Error ? `Export failed: ${e.message}` : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <PageShell
       title="Payments"
-      subtitle={`${total.toLocaleString()} transaction${total === 1 ? "" : "s"}`}
+      subtitle="Every credit and debit on member accounts, newest first."
+      meta={!loading ? <Pill tone="neutral">{total.toLocaleString("en-GB")}</Pill> : undefined}
       actions={
-        <Button
-          variant="secondary"
-          onClick={() => {
-            const url = adminApi.exportPaymentsCsvUrl({
-              q: q || undefined,
-              gateway: gw === "all" ? undefined : gw,
-              direction: dir === "all" ? undefined : dir,
-            });
-            downloadCsv(url, "payments.csv").catch(() => {});
-          }}
-        >
-          <Download style={{ width: 13, height: 13 }} /> Export CSV
+        <Button size="sm" onClick={exportCsv} loading={exporting} title="Exports every row matching the current filters">
+          <Download className="h-3.5 w-3.5" aria-hidden /> Export CSV
         </Button>
       }
     >
       {/* Totals strip */}
-      <motion.div
-        variants={fadeUp}
-        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14, marginBottom: 20 }}
-      >
-        <StatCard label="Today" value={summary ? formatGBP(summary.today_paise) : "—"} tone="info" />
-        <StatCard label="This month" value={summary ? formatGBP(summary.this_month_paise) : "—"} tone="good" />
-        <StatCard label="Lifetime" value={summary ? formatGBP(summary.lifetime_paise) : "—"} hint="All non-cancelled subscriptions" />
+      <motion.div variants={fadeUp} className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatCard label="Today" value={summary ? formatGBP(summary.today_paise) : "—"} icon={CalendarDays} />
+        <StatCard label="This month" value={summary ? formatGBP(summary.this_month_paise) : "—"} icon={Wallet} tone="good" />
+        <StatCard label="Lifetime" value={summary ? formatGBP(summary.lifetime_paise) : "—"} icon={Landmark} hint="All non-cancelled subscriptions" />
       </motion.div>
 
-      {/* Search + filters */}
-      <motion.div variants={fadeUp} style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={searchBoxStyle}>
-          <Search style={{ width: 15, height: 15, color: "#aaa" }} />
-          <input
-            type="text"
-            placeholder="Search by user name or email…"
-            value={qLive}
-            onChange={(e) => setQLive(e.target.value)}
-            style={searchInputStyle}
-          />
-          {qLive && (
-            <button onClick={() => setQLive("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#aaa", display: "flex" }}>
-              <X style={{ width: 14, height: 14 }} />
-            </button>
-          )}
-        </div>
-
-        <FilterPills<DirFilter>
-          layoutId="payments-dir-pill"
-          options={DIR_FILTERS}
-          value={dir}
-          onChange={setDir}
+      {/* Filters — one row */}
+      <motion.div variants={fadeUp} className="mb-4 flex flex-wrap items-center gap-2">
+        <SearchField
+          value={qLive}
+          onChange={setQLive}
+          placeholder="Search by member name or email…"
+          className="w-full max-w-xs"
         />
-        <FilterPills<GwFilter>
-          layoutId="payments-gw-pill"
-          options={GW_FILTERS}
+        <Segmented<DirFilter> ariaLabel="Direction" layoutId="payments-dir-pill" size="sm" options={DIR_FILTERS} value={dir} onChange={setDir} />
+        <Segmented<RangeFilter> ariaLabel="Date range" layoutId="payments-range-pill" size="sm" options={RANGE_FILTERS} value={range} onChange={setRange} />
+        <label className="sr-only" htmlFor="payments-gateway">Gateway</label>
+        <select
+          id="payments-gateway"
           value={gw}
-          onChange={setGw}
-        />
+          onChange={(e) => setGw(e.target.value as GwFilter)}
+          className="h-8 rounded-lg border border-border/80 bg-card px-2.5 text-[12.5px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          {GW_FILTERS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+        </select>
       </motion.div>
 
-      {/* Table — horizontal scroll on small screens keeps the page fixed
-          while the wide grid stays readable inside the card. */}
-      <motion.div variants={fadeUp}>
-        <GlassCard padding={0}>
-          <div style={{ overflowX: "auto" }}>
-          <div style={{ minWidth: 720 }}>
-          <div style={tableHeadStyle}>
-            <div>User</div>
-            <div>Description</div>
-            <div>Gateway</div>
-            <div style={{ textAlign: "right" }}>Amount</div>
-            <div style={{ textAlign: "right" }}>Balance</div>
-            <div style={{ textAlign: "right" }}>When</div>
-          </div>
+      <motion.div variants={fadeUp} className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]">
+        <div className="overflow-x-auto" data-admin-scroll>
+          <div className="min-w-[760px]">
+            <div className={`${GRID} border-b border-border/60 bg-secondary/40 px-4 py-2.5 text-[11.5px] font-medium text-muted2-foreground`}>
+              <div>Member</div>
+              <div>Description</div>
+              <div>Gateway</div>
+              <div className="text-right">Amount</div>
+              <div className="text-right">Balance</div>
+              <div className="text-right">When</div>
+            </div>
 
-          {loading ? (
-            <div style={{ padding: 10 }}>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="m4m-shimmer" style={{ height: 52, margin: "6px 8px", borderRadius: 10 }} />
-              ))}
-            </div>
-          ) : error ? (
-            <div style={{ padding: 20, color: "#a0153c", fontSize: 13 }}>
-              <AlertTriangle style={{ width: 14, height: 14, display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} />
-              {error}
-            </div>
-          ) : items.length === 0 ? (
-            <div style={{ padding: "60px 20px", textAlign: "center", color: "#999" }}>
-              <Wallet style={{ width: 36, height: 36, color: "#e5e5e5", margin: "0 auto 12px", display: "block" }} />
-              <p style={{ fontSize: 13, margin: 0 }}>{q ? `No transactions matching "${q}"` : "No transactions yet."}</p>
-            </div>
-          ) : (
-            items.map((tx, i) => <TxRow key={tx.id} tx={tx} index={i} />)
-          )}
+            {loading ? (
+              <div className="p-3"><SkeletonRows rows={6} /></div>
+            ) : error ? (
+              <div role="alert" className="flex items-center gap-2 px-4 py-5 text-[13px] text-[#9F1239]">
+                <AlertTriangle className="h-4 w-4" aria-hidden /> {error}
+                <Button size="sm" variant="ghost" onClick={load}>Retry</Button>
+              </div>
+            ) : items.length === 0 ? (
+              <EmptyState
+                icon={Wallet}
+                title={q ? `No transactions matching “${q}”` : "No transactions in this view"}
+                description={q || dir !== "all" || gw !== "all" || range !== "all"
+                  ? "Widen the date range or clear the filters."
+                  : "Payments appear here as members buy or renew plans."}
+              />
+            ) : (
+              items.map((tx) => <TxRow key={tx.id} tx={tx} />)
+            )}
           </div>
-          </div>
-        </GlassCard>
+        </div>
       </motion.div>
 
       {pageCount > 1 && (
-        <motion.div variants={fadeUp} style={{ marginTop: 16, display: "flex", justifyContent: "center", alignItems: "center", gap: 10 }}>
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} style={paginationBtn(page <= 1)}>
-            <ChevronLeft style={{ width: 14, height: 14 }} /> Prev
-          </button>
-          <span style={{ fontSize: 13, color: "#666" }}>
-            Page <strong style={{ color: "#1a0a14" }}>{page}</strong> of {pageCount}
+        <motion.nav variants={fadeUp} aria-label="Pagination" className="mt-4 flex items-center justify-center gap-3">
+          <Button size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+          </Button>
+          <span className="text-[12.5px] text-muted2-foreground tabular-nums">
+            Page <strong className="text-foreground">{page}</strong> of {pageCount}
           </span>
-          <button onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount} style={paginationBtn(page >= pageCount)}>
-            Next <ChevronRight style={{ width: 14, height: 14 }} />
-          </button>
-        </motion.div>
+          <Button size="sm" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount}>
+            Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        </motion.nav>
       )}
     </PageShell>
   );
 }
 
-function TxRow({ tx, index }: { tx: PaymentRow; index: number }) {
+function TxRow({ tx }: { tx: PaymentRow }) {
   const isCredit = tx.amount >= 0;
   const amountStr = `${isCredit ? "+" : "−"}${formatGBP(Math.abs(tx.amount))}`;
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(0.6, index * 0.02), duration: 0.28 }}
-      style={tableRowStyle}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <div style={{
-          width: 30, height: 30, borderRadius: 10,
-          background: isCredit ? "rgba(92,122,82,0.12)" : "rgba(220,30,60,0.08)",
-          display: "grid", placeItems: "center", flexShrink: 0,
-        }}>
-          {isCredit
-            ? <ArrowDownRight style={{ width: 14, height: 14, color: "#5C7A52" }} />
-            : <ArrowUpRight   style={{ width: 14, height: 14, color: "#dc1e3c" }} />}
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a14", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.user_name}</div>
-          <div style={{ fontSize: 11, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.user_email || "—"}</div>
+    <div className={`${GRID} border-b border-border/40 px-4 py-3 last:border-0 hover:bg-secondary/30`}>
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${isCredit ? "border-[#CFE0D3] bg-[#EAF2EB] text-[#2F5A3A]" : "border-[#F7CCD5] bg-[#FDECEF] text-[#9F1239]"}`}>
+          {isCredit ? <ArrowDownRight className="h-3.5 w-3.5" aria-hidden /> : <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />}
+          <span className="sr-only">{isCredit ? "Credit" : "Debit"}</span>
+        </span>
+        <div className="min-w-0">
+          <Link
+            href={`/admin/users/${tx.user_id}`}
+            className="block truncate rounded text-[13px] font-medium text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            {tx.user_name}
+          </Link>
+          <div className="truncate text-[11.5px] text-muted2-foreground">{tx.user_email || "—"}</div>
         </div>
       </div>
 
-      <div style={{ fontSize: 12, color: "#555", minWidth: 0 }}>
-        <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.description}</div>
-        {tx.reference_id && <div style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>{tx.reference_id}</div>}
+      <div className="min-w-0 text-[12.5px] text-foreground/80">
+        <div className="truncate">{tx.description}</div>
+        {tx.reference_id && <div className="truncate font-mono text-[10.5px] text-muted2-foreground">{tx.reference_id}</div>}
       </div>
 
       <div>
-        {tx.gateway ? (
-          <span style={gatewayChip(tx.gateway)}>{tx.gateway}</span>
-        ) : <span style={{ color: "#bbb", fontSize: 11 }}>—</span>}
+        {tx.gateway ? <Pill tone="neutral">{tx.gateway.toUpperCase()}</Pill> : <span className="text-[11px] text-muted2-foreground">—</span>}
       </div>
 
-      <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: isCredit ? "#3F5937" : "#a0153c" }}>
+      <div className={`text-right text-[13px] font-semibold tabular-nums ${isCredit ? "text-[#2F5A3A]" : "text-[#9F1239]"}`}>
         {amountStr}
       </div>
 
-      <div style={{ textAlign: "right", fontSize: 12, color: "#666" }}>
-        {tx.balance_after}
-      </div>
+      <div className="text-right text-[12px] text-muted2-foreground tabular-nums">{tx.balance_after}</div>
 
-      <div style={{ textAlign: "right", fontSize: 12, color: "#888" }}>
-        {formatShort(tx.created_at)}
+      <div className="text-right text-[12px] text-muted2-foreground tabular-nums" title={formatDateTime(tx.created_at)}>
+        {relTime(tx.created_at)}
       </div>
-    </motion.div>
-  );
-}
-
-function FilterPills<T extends string>({
-  layoutId, options, value, onChange,
-}: {
-  layoutId: string;
-  options: Array<{ key: T; label: string }>;
-  value: T;
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div style={{ display: "flex", gap: 2, flexWrap: "wrap", background: "rgba(255,255,255,0.6)", padding: 3, borderRadius: 10, border: "1px solid rgba(220,30,60,0.08)", backdropFilter: "blur(6px)" }}>
-      {options.map(({ key, label }) => {
-        const active = value === key;
-        return (
-          <button
-            key={key}
-            onClick={() => onChange(key)}
-            style={{ position: "relative", padding: "7px 12px", borderRadius: 8, border: "none", background: "transparent", fontSize: 12, fontWeight: active ? 600 : 500, color: active ? "#fff" : "#666", cursor: "pointer", zIndex: 1 }}
-          >
-            {active && (
-              <motion.span
-                layoutId={layoutId}
-                transition={{ type: "spring", stiffness: 380, damping: 28 }}
-                style={{
-                  position: "absolute", inset: 0,
-                  background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
-                  borderRadius: 8,
-                  boxShadow: "0 4px 12px rgba(220,30,60,0.3)",
-                  zIndex: -1,
-                }}
-              />
-            )}
-            {label}
-          </button>
-        );
-      })}
     </div>
   );
-}
-
-function gatewayChip(gateway: string): React.CSSProperties {
-  const palette: Record<string, { bg: string; fg: string }> = {
-    razorpay: { bg: "rgba(50,80,180,0.10)",  fg: "#2544a8" },
-    stripe:   { bg: "rgba(120,60,200,0.10)", fg: "#5d3a98" },
-    upi:      { bg: "rgba(60,140,90,0.10)",  fg: "#3f7a55" },
-  };
-  const p = palette[gateway] || { bg: "rgba(0,0,0,0.05)", fg: "#666" };
-  return {
-    fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
-    padding: "4px 8px", borderRadius: 999, background: p.bg, color: p.fg,
-  };
-}
-
-const searchBoxStyle: React.CSSProperties = {
-  display: "flex", alignItems: "center", gap: 8,
-  background: "rgba(255,255,255,0.85)",
-  border: "1px solid rgba(220,30,60,0.12)",
-  borderRadius: 12, padding: "9px 14px", width: 340, maxWidth: "100%",
-  backdropFilter: "blur(8px)",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
-};
-
-const searchInputStyle: React.CSSProperties = {
-  flex: 1, border: "none", outline: "none",
-  fontSize: 13.5, color: "#1a0a14", background: "transparent",
-  fontFamily: "inherit",
-};
-
-const tableHeadStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(180px, 1.4fr) minmax(180px, 1.6fr) 100px 100px 80px 100px",
-  gap: 14, padding: "14px 18px",
-  borderBottom: "1px solid rgba(220,30,60,0.08)",
-  fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em",
-  color: "#888",
-};
-
-const tableRowStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(180px, 1.4fr) minmax(180px, 1.6fr) 100px 100px 80px 100px",
-  gap: 14, padding: "12px 18px",
-  borderBottom: "1px solid rgba(220,30,60,0.04)",
-  alignItems: "center",
-};
-
-function paginationBtn(disabled: boolean): React.CSSProperties {
-  return {
-    display: "inline-flex", alignItems: "center", gap: 4,
-    padding: "8px 14px", borderRadius: 10,
-    background: disabled ? "rgba(0,0,0,0.03)" : "rgba(255,255,255,0.85)",
-    border: `1px solid ${disabled ? "rgba(0,0,0,0.05)" : "rgba(220,30,60,0.12)"}`,
-    fontSize: 12, fontWeight: 600,
-    color: disabled ? "#bbb" : "#1a0a14",
-    cursor: disabled ? "not-allowed" : "pointer",
-    backdropFilter: "blur(6px)",
-  };
 }

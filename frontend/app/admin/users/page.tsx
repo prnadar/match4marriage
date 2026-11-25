@@ -1,26 +1,39 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, X, ChevronLeft, ChevronRight, AlertTriangle, Users as UsersIcon,
-  Download, UserX, UserCheck, BadgeCheck,
+  Download, UserX, UserCheck, BadgeCheck, Send, Megaphone, Tag as TagIcon, CalendarClock, MessageCircle,
 } from "lucide-react";
 import { PageShell, GlassCard, Button, fadeUp } from "@/components/admin/PageShell";
 import { useToast } from "@/components/admin/Toast";
-import { adminApi, ApiError, downloadCsv } from "@/lib/api";
+import ConfirmModal from "@/components/admin/ConfirmModal";
+import { adminApi, adminCrmApi, ApiError, downloadCsv } from "@/lib/api";
+import ComposeDrawer, { type ComposeTarget } from "@/components/admin/crm/ComposeDrawer";
+import {
+  C, CrmStyles, ContactActions, CopyButton, TagChip, Kbd, Segmented, formatPhone, relTime,
+  followUpState, inputStyle, EmptyState,
+} from "@/components/admin/crm/shared";
 
 interface AdminUserRow {
   id: string;
   membership_number: string | null;
   email: string | null;
   phone: string | null;
+  phone_e164?: string | null;
+  phone_country_code?: string | null;
+  whatsapp_number?: string | null;
+  whatsapp_preferred?: boolean;
+  preferred_contact?: string | null;
   is_active: boolean;
   deleted_at: string | null;
   completeness_score: number;
   verification_status: string;
   subscription_tier: string;
+  plan_label?: string;
   first_name: string;
   last_name: string;
   city: string | null;
@@ -30,50 +43,99 @@ interface AdminUserRow {
   primary_photo_url: string | null;
   created_at: string | null;
   last_active_at: string | null;
+  last_contacted_at?: string | null;
   is_email_verified: boolean;
   is_phone_verified: boolean;
+  tags?: string[];
+  follow_up_at?: string | null;
 }
 
 type Filter = "all" | "active" | "suspended" | "deleted" | "verified" | "pending";
 
-const FILTERS: Array<{ key: Filter; label: string }> = [
-  { key: "all",       label: "All" },
-  { key: "active",    label: "Active" },
-  { key: "pending",   label: "Pending" },
-  { key: "verified",  label: "Verified" },
-  { key: "suspended", label: "Suspended" },
-  { key: "deleted",   label: "Deleted" },
+const FILTERS: Array<{ value: Filter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "pending", label: "Pending" },
+  { value: "verified", label: "Verified" },
+  { value: "suspended", label: "Suspended" },
+  { value: "deleted", label: "Deleted" },
 ];
+
+const PLAN_FILTERS = [
+  { value: "", label: "Any plan" }, { value: "free", label: "Free" }, { value: "silver", label: "Basic" },
+  { value: "gold", label: "Premium" }, { value: "platinum", label: "Elite" },
+];
+
+const GRID = "36px minmax(210px, 1.5fr) minmax(250px, 1.7fr) minmax(130px, 0.9fr) minmax(150px, 1fr) minmax(104px, 0.7fr) 84px";
 
 export default function AdminUsersPage() {
   const { toast } = useToast();
+  const router = useRouter();
   const [items, setItems] = useState<AdminUserRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
   const [filter, setFilter] = useState<Filter>("all");
+  const [plan, setPlan] = useState("");
+  const [tag, setTag] = useState("");
+  const [followUp, setFollowUp] = useState<"" | "due" | "upcoming" | "any">("");
   const [q, setQ] = useState("");
   const [qLive, setQLive] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState<null | "suspend" | "activate">(null);
+  const [tagMenu, setTagMenu] = useState(false);
+  const [tagOptions, setTagOptions] = useState<Array<{ tag: string; count?: number }>>([]);
+  const [compose, setCompose] = useState<{ target: ComposeTarget; channels?: Array<"email" | "in_app"> } | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [ready, setReady] = useState(false);
+
+  // Deep links: /admin/users?tag=VIP&follow_up=due&plan=gold&status=pending
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get("tag")) setTag(sp.get("tag") as string);
+      const fu = sp.get("follow_up");
+      if (fu === "due" || fu === "upcoming" || fu === "any") setFollowUp(fu);
+      if (sp.get("plan")) setPlan(sp.get("plan") as string);
+      const st = sp.get("status") as Filter | null;
+      if (st && FILTERS.some((f) => f.value === st)) setFilter(st);
+      if (sp.get("q")) { setQ(sp.get("q") as string); setQLive(sp.get("q") as string); }
+    } catch { /* ignore */ }
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    adminCrmApi.meta().then((r) => {
+      const d = (r.data as any)?.data;
+      if (!d) return;
+      const used: Array<{ tag: string; count: number }> = d.tags || [];
+      const names = new Set(used.map((t) => t.tag));
+      setTagOptions([...used, ...(d.suggested_tags || []).filter((t: string) => !names.has(t)).map((t: string) => ({ tag: t }))]);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qLive), 250);
     return () => clearTimeout(t);
   }, [qLive]);
 
+  const params = useMemo(() => ({
+    q: q || undefined,
+    status_filter: filter === "all" ? undefined : filter,
+    tag: tag || undefined,
+    follow_up: followUp || undefined,
+    plan: plan || undefined,
+  }), [q, filter, tag, followUp, plan]);
+
   const load = useCallback(async () => {
+    if (!ready) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await adminApi.listUsers({
-        q: q || undefined,
-        status_filter: filter === "all" ? undefined : filter,
-        page,
-        limit,
-      });
+      const res = await adminCrmApi.listUsers({ ...params, page, limit });
       const payload = res.data as any;
       setItems(Array.isArray(payload?.data) ? payload.data : []);
       setTotal(typeof payload?.total === "number" ? payload.total : 0);
@@ -82,27 +144,37 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [q, filter, page, limit]);
+  }, [params, page, limit, ready]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(1); }, [filter, q]);
-  useEffect(() => { setSelected(new Set()); }, [filter, q, page]);
+  useEffect(() => { setPage(1); }, [params]);
+  useEffect(() => { setSelected(new Set()); }, [params, page]);
+
+  // Keyboard: "/" focuses search, Esc clears selection.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (compose || confirm) return;
+      const t = e.target as HTMLElement;
+      const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
+      if (e.key === "/" && !typing) { e.preventDefault(); searchRef.current?.focus(); }
+      if (e.key === "Escape" && !typing && selected.size) setSelected(new Set());
+      if (e.key === "Escape" && tagMenu) setTagMenu(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [compose, confirm, selected, tagMenu]);
 
   const pageCount = Math.max(1, Math.ceil(total / limit));
-
   const allOnPageSelected = items.length > 0 && items.every((u) => selected.has(u.id));
   const someOnPageSelected = !allOnPageSelected && items.some((u) => selected.has(u.id));
+  const filtersActive = !!(tag || followUp || plan || q || filter !== "all");
 
   const togglePage = () => {
     const next = new Set(selected);
-    if (allOnPageSelected) {
-      items.forEach((u) => next.delete(u.id));
-    } else {
-      items.forEach((u) => next.add(u.id));
-    }
+    if (allOnPageSelected) items.forEach((u) => next.delete(u.id));
+    else items.forEach((u) => next.add(u.id));
     setSelected(next);
   };
-
   const toggleOne = (id: string) => {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -111,411 +183,523 @@ export default function AdminUsersPage() {
 
   const runBulk = async (action: "suspend" | "activate") => {
     if (busy || selected.size === 0) return;
-    if (!confirm(`${action === "suspend" ? "Suspend" : "Activate"} ${selected.size} user${selected.size === 1 ? "" : "s"}?`)) return;
     setBusy(true);
     try {
       const res = await adminApi.bulkUserAction(action, Array.from(selected));
       const data = (res.data as any)?.data;
-      toast("success", `${action === "suspend" ? "Suspended" : "Activated"} ${data?.affected ?? 0} user${data?.affected === 1 ? "" : "s"}`);
+      toast("success", `${action === "suspend" ? "Suspended" : "Activated"} ${data?.affected ?? 0} member${data?.affected === 1 ? "" : "s"}`);
       setSelected(new Set());
       await load();
     } catch (e: any) {
       toast("error", e?.message || "Bulk action failed");
     } finally {
       setBusy(false);
+      setConfirm(null);
     }
   };
 
-  const exportCsv = () => {
-    const url = adminApi.exportUsersCsvUrl({
-      q: q || undefined,
-      status_filter: filter === "all" ? undefined : filter,
-    });
-    downloadCsv(url, "users.csv").catch((e: any) => toast("error", e?.message || "Export failed"));
+  const bulkTag = async (t: string) => {
+    setTagMenu(false);
+    const rows = items.filter((u) => selected.has(u.id));
+    if (!rows.length) return;
+    setBusy(true);
+    let ok = 0;
+    for (const u of rows) {
+      const current = u.tags || [];
+      if (current.some((x) => x.toLowerCase() === t.toLowerCase())) { ok++; continue; }
+      try { await adminCrmApi.updateMember(u.id, { tags: [...current, t] }); ok++; } catch { /* counted below */ }
+    }
+    setBusy(false);
+    toast(ok === rows.length ? "success" : "warning", `Tagged ${ok} of ${rows.length} member${rows.length === 1 ? "" : "s"} “${t}”`);
+    await load();
   };
+
+  const exportCsv = () => {
+    const url = adminCrmApi.exportUsersCsvUrl(params);
+    downloadCsv(url, "members-contacts.csv").catch((e: any) => toast("error", e?.message || "Export failed"));
+  };
+
+  const clearFilters = () => { setFilter("all"); setPlan(""); setTag(""); setFollowUp(""); setQLive(""); setQ(""); };
+
+  const messageUser = (u: AdminUserRow, channels: Array<"email" | "in_app">) => setCompose({
+    channels,
+    target: {
+      kind: "user",
+      user: {
+        id: u.id, first_name: u.first_name, last_name: u.last_name, email: u.email, phone_e164: u.phone_e164,
+        membership_number: u.membership_number, plan_label: u.plan_label, city: u.city, country: u.country,
+        primary_photo_url: u.primary_photo_url,
+      },
+    },
+  });
 
   return (
     <PageShell
       title="Users"
-      subtitle={`${total.toLocaleString()} user${total === 1 ? "" : "s"} · tenant scoped`}
+      subtitle={`${total.toLocaleString()} member${total === 1 ? "" : "s"}${filtersActive ? " match these filters" : ""}`}
       actions={
-        <Button variant="secondary" onClick={exportCsv}>
-          <Download style={{ width: 13, height: 13 }} /> Export CSV
-        </Button>
+        <>
+          <Button variant="secondary" onClick={exportCsv} title="Export the filtered list with contact details">
+            <Download style={{ width: 13, height: 13 }} /> Export CSV
+          </Button>
+          <Button variant="primary" onClick={() => setCompose({ target: { kind: "audience" } })}>
+            <Megaphone style={{ width: 13, height: 13 }} /> Broadcast
+          </Button>
+        </>
       }
     >
-      {/* Search + filters */}
-      <motion.div variants={fadeUp} style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+      <CrmStyles />
+
+      {/* Toolbar */}
+      <motion.div variants={fadeUp} style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
         <div style={searchBoxStyle}>
-          <Search style={{ width: 15, height: 15, color: "#aaa" }} />
+          <Search aria-hidden style={{ width: 15, height: 15, color: C.muted }} />
           <input
-            type="text"
-            placeholder="Search name, email, phone, membership…"
+            ref={searchRef}
+            type="search"
+            aria-label="Search members"
+            placeholder="Search name, email, phone, membership no."
             value={qLive}
             onChange={(e) => setQLive(e.target.value)}
             style={searchInputStyle}
           />
-          {qLive && (
-            <button onClick={() => setQLive("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#aaa", display: "flex" }}>
+          {qLive ? (
+            <button onClick={() => setQLive("")} aria-label="Clear search" style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: C.muted, display: "flex" }}>
               <X style={{ width: 14, height: 14 }} />
             </button>
-          )}
+          ) : <Kbd>/</Kbd>}
         </div>
-
-        <div style={{ display: "flex", gap: 2, flexWrap: "wrap", background: "rgba(255,255,255,0.6)", padding: 3, borderRadius: 10, border: "1px solid rgba(220,30,60,0.08)", backdropFilter: "blur(6px)" }}>
-          {FILTERS.map(({ key, label }) => {
-            const active = filter === key;
-            return (
-              <button
-                key={key}
-                onClick={() => setFilter(key)}
-                style={{ position: "relative", padding: "7px 14px", borderRadius: 8, border: "none", background: "transparent", fontSize: 12, fontWeight: active ? 600 : 500, color: active ? "#fff" : "#666", cursor: "pointer", zIndex: 1 }}
-              >
-                {active && (
-                  <motion.span
-                    layoutId="user-filter-pill"
-                    transition={{ type: "spring", stiffness: 380, damping: 28 }}
-                    style={{
-                      position: "absolute", inset: 0,
-                      background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
-                      borderRadius: 8,
-                      boxShadow: "0 4px 12px rgba(220,30,60,0.3)",
-                      zIndex: -1,
-                    }}
-                  />
-                )}
-                {label}
-              </button>
-            );
-          })}
-        </div>
+        <Segmented ariaLabel="Status" value={filter} onChange={setFilter} options={FILTERS} />
       </motion.div>
 
-      {/* Table — horizontal scroll on small screens keeps the page fixed
-          while the wide grid stays readable inside the card. */}
-      <motion.div variants={fadeUp}>
-        <GlassCard padding={0}>
-          <div style={{ overflowX: "auto" }}>
-          <div style={{ minWidth: 760 }}>
-          <div style={tableHeadStyle}>
-            <div style={{ display: "grid", placeItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={allOnPageSelected}
-                ref={(el) => { if (el) el.indeterminate = someOnPageSelected; }}
-                onChange={togglePage}
-                aria-label="Select all on page"
-                style={{ accentColor: "#dc1e3c", cursor: "pointer" }}
-              />
-            </div>
-            <div>User</div>
-            <div>Contact</div>
-            <div>Location</div>
-            <div>Status</div>
-            <div>Joined</div>
-          </div>
+      <motion.div variants={fadeUp} style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <FilterSelect label="Plan" value={plan} onChange={setPlan} options={PLAN_FILTERS} />
+        <FilterSelect
+          label="Tag"
+          icon={TagIcon}
+          value={tag}
+          onChange={setTag}
+          options={[{ value: "", label: "Any tag" }, ...tagOptions.map((t) => ({ value: t.tag, label: t.count ? `${t.tag} (${t.count})` : t.tag }))]}
+        />
+        <FilterSelect
+          label="Follow-up"
+          icon={CalendarClock}
+          value={followUp}
+          onChange={(v) => setFollowUp(v as any)}
+          options={[{ value: "", label: "Any follow-up" }, { value: "due", label: "Due or overdue" }, { value: "upcoming", label: "Upcoming" }, { value: "any", label: "Has a follow-up" }]}
+        />
+        {filtersActive && (
+          <button type="button" onClick={clearFilters} className="crm-focus" style={{
+            border: "none", background: "none", color: C.wineDeep, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: "6px 4px", fontFamily: "inherit",
+          }}>Clear filters</button>
+        )}
+        {filtersActive && total > 0 && (
+          <button type="button" className="crm-focus" onClick={() => {
+            if (tag && !q && filter === "all" && !plan && !followUp) setCompose({ target: { kind: "audience", audience: { type: "segment", segment: "tag", value: tag } } });
+            else if (followUp === "due" && !q && filter === "all" && !plan && !tag) setCompose({ target: { kind: "audience", audience: { type: "segment", segment: "follow_up_due" } } });
+            else if (plan && !q && filter === "all" && !tag && !followUp) setCompose({ target: { kind: "audience", audience: { type: "segment", segment: "plan", value: plan } } });
+            else setCompose({ target: { kind: "audience", audience: { type: "users", user_ids: items.map((u) => u.id) } } });
+          }} style={{
+            marginLeft: "auto", border: `1px solid ${C.lineStrong}`, background: "#fff", color: C.ink2, fontSize: 12.5, fontWeight: 600,
+            borderRadius: 9, padding: "6px 11px", cursor: "pointer", display: "inline-flex", gap: 6, alignItems: "center", fontFamily: "inherit",
+          }}>
+            <Send style={{ width: 13, height: 13 }} /> Message these members
+          </button>
+        )}
+      </motion.div>
 
-          {loading ? (
-            <div style={{ padding: 10 }}>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="m4m-shimmer" style={{ height: 58, margin: "6px 8px", borderRadius: 10 }} />
-              ))}
+      {/* Table */}
+      <motion.div variants={fadeUp}>
+        <GlassCard padding={0} style={{ overflow: "hidden" }}>
+          <div style={{ overflow: "auto", maxHeight: "calc(100vh - 250px)", minHeight: 280 }}>
+            <div style={{ minWidth: 1040 }} role="table" aria-label="Members">
+              <div role="row" style={tableHeadStyle}>
+                <div style={{ display: "grid", placeItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={allOnPageSelected}
+                    ref={(el) => { if (el) el.indeterminate = someOnPageSelected; }}
+                    onChange={togglePage}
+                    aria-label="Select all on page"
+                    style={{ accentColor: C.wine, cursor: "pointer", width: 15, height: 15 }}
+                  />
+                </div>
+                <div role="columnheader">Member</div>
+                <div role="columnheader">Contact</div>
+                <div role="columnheader">Plan · status</div>
+                <div role="columnheader">Tags</div>
+                <div role="columnheader">Last contact</div>
+                <div role="columnheader">Joined</div>
+              </div>
+
+              {loading ? (
+                <div style={{ padding: "6px 10px" }}>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="m4m-shimmer" style={{ height: 56, margin: "6px 0", borderRadius: 10, opacity: 1 - i * 0.08 }} />
+                  ))}
+                </div>
+              ) : error ? (
+                <div role="alert" style={{ padding: 20, color: C.wineDeep, fontSize: 13, display: "flex", gap: 8, alignItems: "center" }}>
+                  <AlertTriangle style={{ width: 15, height: 15 }} /> {error}
+                  <button type="button" onClick={load} className="crm-focus" style={{ marginLeft: 8, border: `1px solid ${C.wineLine}`, background: "#fff", color: C.wineDeep, borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>Retry</button>
+                </div>
+              ) : items.length === 0 ? (
+                <EmptyState
+                  icon={UsersIcon}
+                  title={q ? `No members match “${q}”` : filtersActive ? "No members match these filters" : "No members yet"}
+                  body={filtersActive ? "Try a different tag, plan or status — or clear the filters." : "New sign-ups will appear here with their contact details."}
+                  action={filtersActive && <Button variant="secondary" onClick={clearFilters}>Clear filters</Button>}
+                />
+              ) : (
+                items.map((u) => (
+                  <UserRow
+                    key={u.id}
+                    user={u}
+                    checked={selected.has(u.id)}
+                    onToggle={() => toggleOne(u.id)}
+                    onOpen={() => router.push(`/admin/users/${u.id}`)}
+                    onMessage={() => messageUser(u, u.email ? ["email"] : ["in_app"])}
+                    onTag={(t) => setTag(t)}
+                  />
+                ))
+              )}
             </div>
-          ) : error ? (
-            <div style={{ padding: 20, color: "#a0153c", fontSize: 13 }}>
-              <AlertTriangle style={{ width: 14, height: 14, display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} />
-              {error}
-            </div>
-          ) : items.length === 0 ? (
-            <div style={{ padding: "60px 20px", textAlign: "center", color: "#999" }}>
-              <UsersIcon style={{ width: 36, height: 36, color: "#e5e5e5", margin: "0 auto 12px", display: "block" }} />
-              <p style={{ fontSize: 13, margin: 0 }}>{q ? `No users matching "${q}"` : "No users in this category."}</p>
-            </div>
-          ) : (
-            items.map((u, i) => (
-              <UserRow
-                key={u.id}
-                user={u}
-                index={i}
-                checked={selected.has(u.id)}
-                onToggle={() => toggleOne(u.id)}
-              />
-            ))
-          )}
-          </div>
           </div>
         </GlassCard>
       </motion.div>
 
       {pageCount > 1 && (
         <motion.div variants={fadeUp} style={{ marginTop: 16, display: "flex", justifyContent: "center", alignItems: "center", gap: 10 }}>
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} style={paginationBtn(page <= 1)}>
+          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="crm-focus" style={paginationBtn(page <= 1)}>
             <ChevronLeft style={{ width: 14, height: 14 }} /> Prev
           </button>
-          <span style={{ fontSize: 13, color: "#666" }}>
-            Page <strong style={{ color: "#1a0a14" }}>{page}</strong> of {pageCount}
+          <span style={{ fontSize: 13, color: C.muted }}>
+            Page <strong style={{ color: C.ink }}>{page}</strong> of {pageCount}
           </span>
-          <button onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount} style={paginationBtn(page >= pageCount)}>
+          <button onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount} className="crm-focus" style={paginationBtn(page >= pageCount)}>
             Next <ChevronRight style={{ width: 14, height: 14 }} />
           </button>
         </motion.div>
       )}
 
-      {/* Sticky bulk-action bar */}
+      {/* Floating bulk-action bar */}
       <AnimatePresence>
         {selected.size > 0 && (
           <motion.div
-            initial={{ y: 24, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 24, opacity: 0 }}
+            initial={{ y: 24, opacity: 0, x: "-50%" }}
+            animate={{ y: 0, opacity: 1, x: "-50%" }}
+            exit={{ y: 24, opacity: 0, x: "-50%" }}
             transition={{ type: "spring", stiffness: 320, damping: 28 }}
+            role="toolbar"
+            aria-label="Bulk actions"
             style={{
-              position: "fixed",
-              bottom: 24, left: "50%", transform: "translateX(-50%)",
-              zIndex: 900,
-              display: "inline-flex", alignItems: "center", gap: 10,
-              padding: "10px 16px",
-              background: "rgba(26,10,20,0.96)",
-              borderRadius: 999,
+              position: "fixed", bottom: 24, left: "50%", zIndex: 70,
+              display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "center",
+              padding: "8px 10px 8px 16px", maxWidth: "calc(100vw - 32px)",
+              background: "rgba(26,10,20,0.96)", borderRadius: 999,
               boxShadow: "0 14px 38px rgba(0,0,0,0.32), 0 0 0 1px rgba(255,255,255,0.06) inset",
-              backdropFilter: "blur(10px)",
               fontFamily: "var(--font-poppins, sans-serif)",
             }}
           >
-            <span style={{ fontSize: 13, color: "#fff", fontWeight: 600 }}>
-              {selected.size} selected
-            </span>
-            <span style={{ width: 1, height: 18, background: "rgba(255,255,255,0.14)" }} />
+            <span style={{ fontSize: 13, color: "#fff", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{selected.size} selected</span>
+            <span aria-hidden style={{ width: 1, height: 18, background: "rgba(255,255,255,0.14)" }} />
             <button
-              onClick={() => runBulk("activate")}
+              onClick={() => setCompose({ target: { kind: "audience", audience: { type: "users", user_ids: Array.from(selected) } } })}
               disabled={busy}
-              style={bulkBtn("good")}
+              style={bulkBtn("primary")}
             >
+              <Send style={{ width: 13, height: 13 }} /> Message
+            </button>
+            <div style={{ position: "relative" }}>
+              <button onClick={() => setTagMenu((v) => !v)} disabled={busy} style={bulkBtn("neutral")} aria-haspopup="menu" aria-expanded={tagMenu}>
+                <TagIcon style={{ width: 13, height: 13 }} /> Tag
+              </button>
+              {tagMenu && (
+                <div role="menu" style={{
+                  position: "absolute", bottom: "calc(100% + 10px)", left: 0, minWidth: 200, maxHeight: 280, overflowY: "auto",
+                  background: "#fff", borderRadius: 12, padding: 6, boxShadow: "0 14px 38px rgba(26,10,20,0.22)", border: `1px solid ${C.line}`,
+                }}>
+                  <BulkTagInput onSubmit={bulkTag} />
+                  {tagOptions.map((t) => (
+                    <button key={t.tag} role="menuitem" onClick={() => bulkTag(t.tag)} className="crm-row crm-focus" style={{
+                      display: "flex", width: "100%", textAlign: "left", padding: "7px 8px", border: "none", background: "transparent",
+                      borderRadius: 8, cursor: "pointer", fontFamily: "inherit",
+                    }}>
+                      <TagChip tag={t.tag} size="sm" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={() => setConfirm("activate")} disabled={busy} style={bulkBtn("good")}>
               <UserCheck style={{ width: 13, height: 13 }} /> Activate
             </button>
-            <button
-              onClick={() => runBulk("suspend")}
-              disabled={busy}
-              style={bulkBtn("bad")}
-            >
+            <button onClick={() => setConfirm("suspend")} disabled={busy} style={bulkBtn("bad")}>
               <UserX style={{ width: 13, height: 13 }} /> Suspend
             </button>
             <button
               onClick={() => setSelected(new Set())}
               disabled={busy}
-              aria-label="Clear selection"
-              style={{
-                background: "transparent", border: "none", padding: 6, marginLeft: 2,
-                color: "rgba(255,255,255,0.6)", cursor: "pointer", display: "grid", placeItems: "center",
-              }}
+              aria-label="Clear selection (Esc)"
+              title="Clear selection (Esc)"
+              style={{ background: "transparent", border: "none", padding: 6, color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "grid", placeItems: "center" }}
             >
               <X style={{ width: 14, height: 14 }} />
             </button>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmModal
+        open={!!confirm}
+        variant={confirm === "suspend" ? "danger" : "default"}
+        title={`${confirm === "suspend" ? "Suspend" : "Activate"} ${selected.size} member${selected.size === 1 ? "" : "s"}?`}
+        message={confirm === "suspend"
+          ? "Suspended members are signed out immediately and hidden from browse until reactivated."
+          : "Activated members can sign in and appear in browse again (if approved)."}
+        confirmLabel={busy ? "Working…" : confirm === "suspend" ? "Suspend" : "Activate"}
+        onConfirm={() => confirm && runBulk(confirm)}
+        onCancel={() => !busy && setConfirm(null)}
+      />
+
+      <ComposeDrawer
+        open={!!compose}
+        target={compose?.target || null}
+        initialChannels={compose?.channels}
+        onClose={() => setCompose(null)}
+        onSent={() => { setSelected(new Set()); load(); }}
+      />
     </PageShell>
   );
 }
 
-function bulkBtn(tone: "good" | "bad"): React.CSSProperties {
+function BulkTagInput({ onSubmit }: { onSubmit: (t: string) => void }) {
+  const [v, setV] = useState("");
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); if (v.trim()) onSubmit(v.trim()); }} style={{ padding: 4, borderBottom: `1px solid ${C.line}`, marginBottom: 4 }}>
+      <input autoFocus value={v} onChange={(e) => setV(e.target.value)} placeholder="New tag…" aria-label="New tag" className="crm-input" maxLength={40}
+        style={{ ...inputStyle, padding: "6px 9px", fontSize: 12.5 }} />
+    </form>
+  );
+}
+
+function FilterSelect({ label, value, onChange, options, icon: Icon }: {
+  label: string; value: string; onChange: (v: string) => void; options: Array<{ value: string; label: string }>; icon?: typeof TagIcon;
+}) {
+  const active = !!value;
+  return (
+    <label style={{
+      display: "inline-flex", alignItems: "center", gap: 6, padding: "0 4px 0 10px", height: 34, borderRadius: 9,
+      background: active ? "#fff" : "rgba(255,255,255,0.7)", border: `1px solid ${active ? C.wineLine : C.lineStrong}`,
+      fontSize: 12.5, color: active ? C.wineDeep : C.ink2, fontWeight: 600,
+    }}>
+      {Icon && <Icon aria-hidden style={{ width: 13, height: 13 }} />}
+      <span className="sr-only" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>{label}</span>
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="crm-focus"
+        style={{ border: "none", background: "transparent", fontSize: 12.5, fontWeight: 600, color: "inherit", cursor: "pointer", fontFamily: "inherit", outline: "none", padding: "6px 4px" }}
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function bulkBtn(tone: "good" | "bad" | "primary" | "neutral"): React.CSSProperties {
   const palette = tone === "good"
-    ? { bg: "rgba(92,122,82,0.22)", fg: "#a8d090", border: "rgba(92,122,82,0.4)" }
-    : { bg: "rgba(220,30,60,0.22)", fg: "#ff98ae", border: "rgba(220,30,60,0.4)" };
+    ? { bg: "rgba(92,122,82,0.22)", fg: "#b9dca3", border: "rgba(92,122,82,0.4)" }
+    : tone === "bad"
+    ? { bg: "rgba(220,30,60,0.22)", fg: "#ffadc0", border: "rgba(220,30,60,0.4)" }
+    : tone === "primary"
+    ? { bg: "#dc1e3c", fg: "#fff", border: "#dc1e3c" }
+    : { bg: "rgba(255,255,255,0.08)", fg: "#fff", border: "rgba(255,255,255,0.18)" };
   return {
     display: "inline-flex", alignItems: "center", gap: 5,
     padding: "7px 13px", borderRadius: 999,
     background: palette.bg, border: `1px solid ${palette.border}`,
-    color: palette.fg,
-    fontSize: 12, fontWeight: 600,
+    color: palette.fg, fontSize: 12, fontWeight: 600,
     cursor: "pointer", fontFamily: "inherit",
   };
 }
 
 function UserRow({
-  user, index, checked, onToggle,
+  user, checked, onToggle, onOpen, onMessage, onTag,
 }: {
-  user: AdminUserRow; index: number; checked: boolean; onToggle: () => void;
+  user: AdminUserRow; checked: boolean; onToggle: () => void; onOpen: () => void; onMessage: () => void; onTag: (t: string) => void;
 }) {
   const name = [user.first_name, user.last_name].filter(Boolean).join(" ") || "(unnamed)";
-  const location = [user.city, user.country].filter(Boolean).join(", ") || "—";
-  const joined = user.created_at ? formatShort(user.created_at) : "—";
-  const ring = user.verification_status === "approved"
-    ? "linear-gradient(135deg, #8DB870, #5C7A52)"
-    : user.verification_status === "submitted"
-    ? "linear-gradient(135deg, #E8C04B, #C89020)"
-    : "linear-gradient(135deg, #dc1e3c, #a0153c)";
+  const phone = user.phone_e164 || user.phone;
+  const fu = followUpState(user.follow_up_at);
+  const tags = user.tags || [];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(0.6, index * 0.02), duration: 0.28 }}
+    <div
+      role="row"
+      className="crm-row"
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest("a,button,input,label,select")) return;
+        onOpen();
+      }}
+      style={{
+        ...tableRowStyle,
+        background: checked ? "rgba(220,30,60,0.05)" : undefined,
+        cursor: "pointer",
+      }}
     >
-      <Link
-        href={`/admin/users/${user.id}`}
-        style={{
-          ...tableRowStyle,
-          background: checked ? "rgba(220,30,60,0.04)" : "transparent",
-        }}
-        onMouseEnter={(e) => {
-          const el = e.currentTarget as HTMLAnchorElement;
-          if (!checked) el.style.background = "rgba(220,30,60,0.03)";
-        }}
-        onMouseLeave={(e) => {
-          const el = e.currentTarget as HTMLAnchorElement;
-          el.style.background = checked ? "rgba(220,30,60,0.04)" : "transparent";
-        }}
-      >
-        {/* Selection checkbox — stops propagation so it doesn't navigate. */}
-        <div
-          style={{ display: "grid", placeItems: "center" }}
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
-        >
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={() => onToggle()}
-            onClick={(e) => e.stopPropagation()}
-            aria-label={`Select ${name}`}
-            style={{ accentColor: "#dc1e3c", cursor: "pointer" }}
-          />
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-          <div style={{ width: 40, height: 40, padding: 2, borderRadius: "50%", background: ring, flexShrink: 0 }}>
-            <div style={{
-              width: "100%", height: "100%", borderRadius: "50%",
-              background: user.primary_photo_url
-                ? `center / cover no-repeat url(${user.primary_photo_url})`
-                : "linear-gradient(135deg,#dc1e3c,#a0153c)",
-              color: "#fff", fontSize: 13, fontWeight: 700,
-              display: "grid", placeItems: "center",
-              border: "2px solid #fff",
-            }}>
-              {!user.primary_photo_url && (name[0]?.toUpperCase() || "?")}
-            </div>
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a14", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
-            {user.membership_number && (
-              <div style={{ fontSize: 10.5, color: "#a78a8f", fontFamily: "ui-monospace, monospace", letterSpacing: "0.04em", marginTop: 1 }}>
-                {user.membership_number}
-              </div>
-            )}
-            <div style={{ fontSize: 11, color: "#888", textTransform: "capitalize" }}>
-              {user.religion || "—"}{user.occupation ? ` · ${user.occupation}` : ""}
-            </div>
-          </div>
-        </div>
+      <div style={{ display: "grid", placeItems: "center" }}>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onToggle}
+          aria-label={`Select ${name}`}
+          style={{ accentColor: C.wine, cursor: "pointer", width: 15, height: 15 }}
+        />
+      </div>
 
-        <div style={{ fontSize: 12, color: "#555", overflow: "hidden" }}>
+      {/* Member */}
+      <div role="cell" style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+        <span aria-hidden style={{
+          width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+          background: user.primary_photo_url ? `center / cover no-repeat url(${user.primary_photo_url})` : "linear-gradient(135deg,#dc1e3c,#a0153c)",
+          color: "#fff", fontSize: 13, fontWeight: 700, display: "grid", placeItems: "center",
+          boxShadow: `0 0 0 2px #fff, 0 0 0 3.5px ${user.verification_status === "approved" ? "#8DB870" : user.verification_status === "submitted" ? "#E8C04B" : "rgba(26,10,20,0.08)"}`,
+        }}>
+          {!user.primary_photo_url && (name[0]?.toUpperCase() || "?")}
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <Link href={`/admin/users/${user.id}`} className="crm-focus" style={{ fontSize: 13.5, fontWeight: 650, color: C.ink, textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", borderRadius: 4 }}>
+            {name}
+          </Link>
+          <div style={{ fontSize: 11.5, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {[user.membership_number, [user.city, user.country].filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "—"}
+          </div>
+        </div>
+      </div>
+
+      {/* Contact */}
+      <div role="cell" style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1, fontSize: 12.5, lineHeight: 1.5 }}>
           {user.email ? (
-            <div title={user.email} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {user.email}
-              {user.is_email_verified && (
-                <BadgeCheck
-                  aria-label="Email verified"
-                  size={12}
-                  strokeWidth={2.2}
-                  style={{ color: "#5C7A52", marginLeft: 4, verticalAlign: "-2px", display: "inline-block" }}
-                />
+            <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+              <span title={user.email} style={{ color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</span>
+              {user.is_email_verified && <BadgeCheck aria-label="Email verified" size={13} strokeWidth={2.2} style={{ color: "#5C7A52", flexShrink: 0 }} />}
+            </div>
+          ) : <div style={{ color: C.faint }}>No email</div>}
+          {phone ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 5, color: C.ink2, fontVariantNumeric: "tabular-nums" }}>
+              <span style={{ whiteSpace: "nowrap" }}>{formatPhone(phone, user.phone_country_code)}</span>
+              {user.is_phone_verified && <BadgeCheck aria-label="Phone verified" size={13} strokeWidth={2.2} style={{ color: "#5C7A52", flexShrink: 0 }} />}
+              {user.whatsapp_preferred && (
+                <span title="Prefers WhatsApp" style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 10.5, fontWeight: 700, color: C.wa, background: C.waTint, padding: "0 5px", borderRadius: 4 }}>
+                  <MessageCircle style={{ width: 10, height: 10 }} /> WA
+                </span>
               )}
             </div>
-          ) : null}
-          {user.phone ? (
-            <div style={{ color: "#888" }}>
-              {user.phone}
-              {user.is_phone_verified && (
-                <BadgeCheck
-                  aria-label="Phone verified"
-                  size={12}
-                  strokeWidth={2.2}
-                  style={{ color: "#5C7A52", marginLeft: 4, verticalAlign: "-2px", display: "inline-block" }}
-                />
-              )}
-            </div>
-          ) : null}
-          {!user.email && !user.phone && <span>—</span>}
+          ) : <div style={{ color: C.faint }}>No phone</div>}
         </div>
+        <span className="crm-reveal" style={{ display: "inline-flex", gap: 4 }}>
+          {user.email && <CopyButton value={user.email} label="Copy email" size={26} />}
+          <ContactActions email={user.email} phone={phone} whatsapp={user.whatsapp_number} size={26} onEmail={onMessage} />
+        </span>
+      </div>
 
-        <div style={{ fontSize: 12, color: "#666" }}>{location}</div>
+      {/* Plan · status */}
+      <div role="cell" style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink }}>{user.plan_label || user.subscription_tier}</span>
+        <StatusChip user={user} />
+      </div>
 
-        <div><StatusChip user={user} /></div>
+      {/* Tags */}
+      <div role="cell" style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center", minWidth: 0 }}>
+        {tags.slice(0, 3).map((t) => (
+          <button key={t} type="button" onClick={() => onTag(t)} title={`Filter by “${t}”`} style={{ border: "none", background: "none", padding: 0, cursor: "pointer" }}>
+            <TagChip tag={t} size="sm" />
+          </button>
+        ))}
+        {tags.length > 3 && <span style={{ fontSize: 11, color: C.muted }}>+{tags.length - 3}</span>}
+        {fu && (
+          <span title={user.follow_up_at || ""} style={{
+            display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 650, padding: "2px 7px", borderRadius: 99,
+            color: fu.tone === "bad" ? C.wineDeep : fu.tone === "warn" ? C.warn : C.ink2,
+            background: fu.tone === "bad" ? C.wineTint : fu.tone === "warn" ? C.warnTint : C.sunken,
+          }}>
+            <CalendarClock style={{ width: 11, height: 11 }} /> {fu.label}
+          </span>
+        )}
+        {!tags.length && !fu && <span style={{ fontSize: 12, color: C.faint }}>—</span>}
+      </div>
 
-        <div style={{ fontSize: 12, color: "#888" }}>{joined}</div>
-      </Link>
-    </motion.div>
+      <div role="cell" style={{ fontSize: 12, color: user.last_contacted_at ? C.ink2 : C.faint }}>
+        {user.last_contacted_at ? relTime(user.last_contacted_at) : "Never"}
+      </div>
+
+      <div role="cell" style={{ fontSize: 12, color: C.muted }} title={user.created_at || ""}>
+        {user.created_at ? relTime(user.created_at) : "—"}
+      </div>
+    </div>
   );
 }
 
 function StatusChip({ user }: { user: AdminUserRow }) {
   let label = "Active", color = "#3F5937", bg = "rgba(92,122,82,0.12)";
-  if (user.deleted_at) { label = "Deleted"; color = "#666"; bg = "rgba(0,0,0,0.06)"; }
+  if (user.deleted_at) { label = "Deleted"; color = "#555"; bg = "rgba(0,0,0,0.06)"; }
   else if (!user.is_active) { label = "Suspended"; color = "#a0153c"; bg = "rgba(220,30,60,0.08)"; }
-  else if (user.verification_status === "approved") { label = "Verified"; color = "#2544a8"; bg = "rgba(90,120,230,0.08)"; }
-  else if (user.verification_status === "submitted") { label = "Pending"; color = "#8A5F00"; bg = "rgba(200,144,32,0.14)"; }
+  else if (user.verification_status === "approved") { label = "Verified"; color = "#2544a8"; bg = "rgba(90,120,230,0.09)"; }
+  else if (user.verification_status === "submitted") { label = "Pending"; color = "#7a5400"; bg = "rgba(200,144,32,0.15)"; }
   return (
     <span style={{
-      fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
-      padding: "4px 9px", borderRadius: 999, background: bg, color,
+      fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em",
+      padding: "2px 8px", borderRadius: 999, background: bg, color,
     }}>{label}</span>
   );
 }
 
-function formatShort(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const diff = Date.now() - d.getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days < 1) return "today";
-  if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
-}
-
 const searchBoxStyle: React.CSSProperties = {
   display: "flex", alignItems: "center", gap: 8,
-  background: "rgba(255,255,255,0.85)",
-  border: "1px solid rgba(220,30,60,0.12)",
-  borderRadius: 12, padding: "9px 14px", width: 340, maxWidth: "100%",
-  backdropFilter: "blur(8px)",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
+  background: "#fff",
+  border: `1px solid ${C.lineStrong}`,
+  borderRadius: 11, padding: "8px 12px", width: 360, maxWidth: "100%",
+  boxShadow: "0 1px 2px rgba(26,10,20,0.04)",
 };
 
 const searchInputStyle: React.CSSProperties = {
-  flex: 1, border: "none", outline: "none",
-  fontSize: 13.5, color: "#1a0a14", background: "transparent",
+  flex: 1, border: "none", outline: "none", minWidth: 0,
+  fontSize: 13.5, color: C.ink, background: "transparent",
   fontFamily: "inherit",
 };
 
 const tableHeadStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "32px minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(100px, 0.7fr)",
-  background: "rgba(26,10,20,0.03)",
-  borderBottom: "1px solid rgba(0,0,0,0.05)",
-  padding: "10px 18px",
-  fontSize: 11, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.08em",
+  gridTemplateColumns: GRID,
+  gap: 12,
+  position: "sticky", top: 0, zIndex: 2,
+  background: "#faf7f5",
+  borderBottom: `1px solid ${C.line}`,
+  padding: "10px 16px",
+  fontSize: 11.5, fontWeight: 650, color: C.muted,
 };
 
 const tableRowStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "32px minmax(220px, 2fr) minmax(180px, 1.5fr) minmax(130px, 1fr) minmax(120px, 0.8fr) minmax(100px, 0.7fr)",
-  padding: "12px 18px",
-  borderBottom: "1px solid rgba(0,0,0,0.04)",
+  gridTemplateColumns: GRID,
+  gap: 12,
+  padding: "10px 16px",
+  borderBottom: `1px solid ${C.line}`,
   alignItems: "center",
-  textDecoration: "none", color: "inherit",
-  transition: "background 0.12s",
 };
 
 function paginationBtn(disabled: boolean): React.CSSProperties {
   return {
     padding: "8px 14px", borderRadius: 10,
-    background: "rgba(255,255,255,0.85)", border: "1px solid rgba(220,30,60,0.15)",
-    color: disabled ? "#ccc" : "#1a0a14",
+    background: "#fff", border: `1px solid ${C.lineStrong}`,
+    color: disabled ? C.faint : C.ink,
     fontSize: 13, fontWeight: 600,
     display: "inline-flex", alignItems: "center", gap: 4,
     cursor: disabled ? "not-allowed" : "pointer",
-    opacity: disabled ? 0.5 : 1,
-    backdropFilter: "blur(6px)",
+    opacity: disabled ? 0.55 : 1,
     fontFamily: "inherit",
   };
 }

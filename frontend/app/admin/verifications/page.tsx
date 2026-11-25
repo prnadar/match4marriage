@@ -1,15 +1,34 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+/**
+ * Verification queue — built for throughput.
+ *
+ *  · Pending queue is first-in-first-out (oldest first) with an SLA badge.
+ *  · Side-by-side review: the profile on the left, ID documents + contact
+ *    checks + review history on the right.
+ *  · Keyboard: J/K or ↑/↓ move · A approve · R reject · I request info ·
+ *    N next · X select · Esc close · ? help. After a decision the next
+ *    profile opens automatically.
+ *  · Bulk approve selected profiles; rejection / request-info presets.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  CheckCircle2, XCircle, Clock, Image as ImageIcon,
-  ChevronRight, Search, Heart, MessageSquare, AlertTriangle,
-  User, MapPin, GraduationCap, X, Inbox,
+  AlertTriangle, BadgeCheck, CheckCircle2, ChevronLeft, ChevronRight, Clock, ExternalLink, FileText,
+  GraduationCap, Heart, Image as ImageIcon, Inbox, Keyboard, Mail, MapPin, MessageSquare, Phone,
+  ShieldCheck, User, X, XCircle,
 } from "lucide-react";
-import { PageShell, GlassCard, Button, fadeUp } from "@/components/admin/PageShell";
-import { adminApi, ApiError } from "@/lib/api";
+import { PageShell, Button } from "@/components/admin/PageShell";
+import {
+  Avatar, EmptyState, Kbd, Pill, SearchField, Segmented, Skeleton, SkeletonRows,
+  formatDateTime, hoursSince, relTime, waitingLabel, type Tone,
+} from "@/components/admin/primitives";
+import { describeAction } from "@/components/admin/audit-labels";
+import { adminApi, adminOpsApi, ApiError } from "@/lib/api";
 import { useToast } from "@/components/admin/Toast";
+import { cn } from "@/lib/utils";
 
 type Status = "draft" | "submitted" | "approved" | "rejected";
 type Filter = "submitted" | "approved" | "rejected" | "all";
@@ -26,6 +45,7 @@ interface Profile {
   religion?: string | null;
   caste?: string | null;
   mother_tongue?: string | null;
+  marital_status?: string | null;
   height_cm?: number | null;
   education_level?: string | null;
   education_field?: string | null;
@@ -46,6 +66,39 @@ interface Profile {
   partner_prefs?: Record<string, unknown> | null;
 }
 
+interface Review {
+  user: {
+    id: string; email: string | null; phone: string | null; membership_number: string | null;
+    is_email_verified: boolean; is_phone_verified: boolean; created_at: string | null; last_active_at: string | null;
+    subscription_tier: string; is_active: boolean; visa_status: string | null;
+  };
+  documents: Array<{
+    id: string; type: string; status: string; doc_type: string | null; doc_country: string | null;
+    doc_number_masked: string | null; front: { url: string } | null; back: { url: string } | null;
+    selfie: { url: string } | null; submitted_at: string | null; verified_at: string | null;
+  }>;
+  history: Array<{ id: string; created_at: string | null; actor_email: string | null; action: string; summary: string | null }>;
+  open_reports_against: number;
+}
+
+const SLA_HOURS = 48;
+
+const REJECT_PRESETS = [
+  "Photos are unclear or don't clearly show you",
+  "ID document is unreadable — please upload a clearer image",
+  "Name on ID doesn't match the profile",
+  "Selfie doesn't match the ID photo",
+  "Profile is incomplete — please add more about yourself",
+  "Photos or bio contain content that isn't allowed",
+  "Looks like a duplicate of an existing account",
+];
+const INFO_PRESETS = [
+  "Please upload a clear, recent photo of yourself",
+  "Please upload the back of your ID document",
+  "Please add your education and career details",
+  "Please tell us a little more about yourself and your family",
+];
+
 const errorMessage = (e: unknown): string => {
   if (e instanceof ApiError) {
     const d = e.detail;
@@ -54,7 +107,6 @@ const errorMessage = (e: unknown): string => {
       const m = (d as any).message;
       if (typeof m === "string") return m;
       if (Array.isArray((d as any).missing)) return `Missing: ${(d as any).missing.join(", ")}`;
-      return JSON.stringify(d);
     }
     return e.message;
   }
@@ -62,16 +114,10 @@ const errorMessage = (e: unknown): string => {
   return "Unknown error";
 };
 
-const safeString = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : String(v));
-const fullName = (p: Profile): string => {
-  const f = safeString(p.first_name).trim();
-  const l = safeString(p.last_name).trim();
-  return [f, l].filter(Boolean).join(" ") || "(unnamed)";
-};
-const initials = (n: string): string =>
-  n.split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0]?.toUpperCase() || "").join("") || "?";
+const fullName = (p: Profile): string =>
+  [String(p.first_name || "").trim(), String(p.last_name || "").trim()].filter(Boolean).join(" ") || "(unnamed)";
 
-const age = (dob?: string | null) => {
+const ageOf = (dob?: string | null) => {
   if (!dob) return null;
   const d = new Date(dob);
   if (Number.isNaN(d.getTime())) return null;
@@ -82,728 +128,829 @@ const age = (dob?: string | null) => {
   return a;
 };
 
-const formatRelative = (iso?: string | null) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const diff = Date.now() - d.getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-};
-
-const heightInFtIn = (cm?: number | null) => {
+const heightLabel = (cm?: number | null) => {
   if (!cm || cm <= 0) return null;
   const totalIn = cm / 2.54;
   const ft = Math.floor(totalIn / 12);
   const inch = Math.round(totalIn - ft * 12);
-  return `${ft}ft ${inch}in`;
+  return `${ft}′${inch}″ · ${cm} cm`;
 };
 
+const photosOf = (p: Profile) => (Array.isArray(p.photos) ? p.photos : []).filter((x) => !!x?.url) as Array<{ url: string; key?: string | null; is_primary?: boolean }>;
 const primaryPhoto = (p: Profile) => {
-  const list = Array.isArray(p.photos) ? p.photos : [];
-  const pr = list.find((x) => x?.is_primary && x.url);
-  return pr?.url || list.find((x) => x?.url)?.url || null;
+  const list = photosOf(p);
+  return list.find((x) => x.is_primary)?.url || list[0]?.url || null;
 };
+
+const STATUS: Record<Status, { tone: Tone; label: string }> = {
+  draft:     { tone: "neutral", label: "Draft" },
+  submitted: { tone: "warn", label: "Pending" },
+  approved:  { tone: "good", label: "Approved" },
+  rejected:  { tone: "bad", label: "Rejected" },
+};
+
+const isTyping = (t: EventTarget | null) =>
+  t instanceof HTMLElement && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName));
+
+const refreshCounts = () => { try { window.dispatchEvent(new Event("admin:counts-refresh")); } catch { /* noop */ } };
 
 export default function AdminVerificationsPage() {
   const { toast } = useToast();
+  // Deep link (?open=<user_id>). Read from window.location rather than
+  // useSearchParams so the page needs no Suspense boundary.
+  const [deepLink, setDeepLink] = useState<string | null>(null);
+  useEffect(() => {
+    try { setDeepLink(new URLSearchParams(window.location.search).get("open")); } catch { /* ignore */ }
+  }, []);
 
   const [filter, setFilter] = useState<Filter>("submitted");
-  const [items, setItems] = useState<Profile[]>([]);
-  const [counts, setCounts] = useState<Record<Filter, number>>({ submitted: 0, approved: 0, rejected: 0, all: 0 });
+  const [lists, setLists] = useState<Record<"submitted" | "approved" | "rejected", Profile[]>>({ submitted: [], approved: [], rejected: [] });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Profile | null>(null);
-  const [note, setNote] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-  const [photoLightbox, setPhotoLightbox] = useState<string | null>(null);
+  const [mode, setMode] = useState<"reject" | "info" | null>(null);
+  const [note, setNote] = useState("");
+  const [lightbox, setLightbox] = useState<{ urls: string[]; index: number } | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [reviews, setReviews] = useState<Record<string, Review | "error">>({});
+  const noteRef = useRef<HTMLTextAreaElement>(null);
+  const deepLinkUsed = useRef(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
     setLoadError(null);
     try {
-      const [fRes, aRes, rRes] = await Promise.all([
+      const [s, a, r] = await Promise.all([
         adminApi.listVerifications("submitted"),
         adminApi.listVerifications("approved"),
         adminApi.listVerifications("rejected"),
       ]);
-      const sub = Array.isArray((fRes.data as any)?.data) ? (fRes.data as any).data : [];
-      const app = Array.isArray((aRes.data as any)?.data) ? (aRes.data as any).data : [];
-      const rej = Array.isArray((rRes.data as any)?.data) ? (rRes.data as any).data : [];
-      setCounts({
-        submitted: sub.length,
-        approved: app.length,
-        rejected: rej.length,
-        all: sub.length + app.length + rej.length,
-      });
-      const current =
-        filter === "submitted" ? sub :
-        filter === "approved" ? app :
-        filter === "rejected" ? rej :
-        [...sub, ...app, ...rej];
-      setItems(current);
+      const pick = (res: any) => (Array.isArray(res?.data?.data) ? res.data.data : []) as Profile[];
+      // Pending is a FIFO queue: oldest submission first.
+      const sub = pick(s).sort((x, y) => (x.submitted_at || "").localeCompare(y.submitted_at || ""));
+      setLists({ submitted: sub, approved: pick(a), rejected: pick(r) });
     } catch (e) {
       setLoadError(errorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [filter]);
-
+  }, []);
   useEffect(() => { load(); }, [load]);
 
+  const items = useMemo(
+    () => filter === "all" ? [...lists.submitted, ...lists.approved, ...lists.rejected] : lists[filter],
+    [lists, filter],
+  );
   const filtered = useMemo(() => {
-    const qq = search.trim().toLowerCase();
-    if (!qq) return items;
-    return items.filter((p) => {
-      const hay = [
-        fullName(p), p.city, p.occupation, p.religion, p.country, p.education_level,
-      ].filter(Boolean).join(" ").toLowerCase();
-      return hay.includes(qq);
-    });
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((p) =>
+      [fullName(p), p.city, p.occupation, p.religion, p.country, p.education_level]
+        .filter(Boolean).join(" ").toLowerCase().includes(q));
   }, [items, search]);
 
-  useEffect(() => {
-    if (!selected) return;
-    const found = items.find((p) => p.user_id === selected.user_id);
-    setSelected(found || null);
-  }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
+  const selected = useMemo(
+    () => (selectedId ? [...lists.submitted, ...lists.approved, ...lists.rejected].find((p) => p.user_id === selectedId) || null : null),
+    [selectedId, lists],
+  );
 
-  const approve = async (p: Profile) => {
+  // Deep link (?open=<user_id>) from the dashboard / palette.
+  useEffect(() => {
+    if (deepLinkUsed.current || loading || !deepLink) return;
+    deepLinkUsed.current = true;
+    const all = [...lists.submitted, ...lists.approved, ...lists.rejected];
+    const hit = all.find((p) => p.user_id === deepLink);
+    if (hit) {
+      if (!lists.submitted.includes(hit)) setFilter(lists.approved.includes(hit) ? "approved" : "rejected");
+      setSelectedId(hit.user_id);
+    }
+  }, [deepLink, loading, lists]);
+
+  // Load the review panel data (documents/contact/history) for the open profile.
+  useEffect(() => {
+    if (!selectedId || reviews[selectedId]) return;
+    let cancelled = false;
+    adminOpsApi.verificationReview(selectedId)
+      .then((res) => { if (!cancelled) setReviews((m) => ({ ...m, [selectedId]: (res.data as any)?.data })); })
+      .catch(() => { if (!cancelled) setReviews((m) => ({ ...m, [selectedId]: "error" })); });
+    return () => { cancelled = true; };
+  }, [selectedId, reviews]);
+
+  const open = useCallback((p: Profile | null) => {
+    setSelectedId(p?.user_id || null);
+    setMode(null);
+    setNote("");
+  }, []);
+
+  const move = useCallback((dir: 1 | -1) => {
+    if (!filtered.length) return;
+    const idx = selectedId ? filtered.findIndex((p) => p.user_id === selectedId) : -1;
+    const next = filtered[Math.max(0, Math.min(filtered.length - 1, idx + dir))];
+    open(next || null);
+  }, [filtered, selectedId, open]);
+
+  /** Remove decided profile from the pending list and open the next one. */
+  const advanceAfter = useCallback((userId: string, newStatus: Status) => {
+    const idx = filtered.findIndex((p) => p.user_id === userId);
+    const nextCandidate = filtered[idx + 1] || filtered[idx - 1] || null;
+    setLists((l) => {
+      const fromAll = [...l.submitted, ...l.approved, ...l.rejected].find((p) => p.user_id === userId);
+      const strip = (arr: Profile[]) => arr.filter((p) => p.user_id !== userId);
+      const next = { submitted: strip(l.submitted), approved: strip(l.approved), rejected: strip(l.rejected) };
+      if (fromAll && (newStatus === "approved" || newStatus === "rejected")) {
+        next[newStatus] = [{ ...fromAll, verification_status: newStatus, reviewed_at: new Date().toISOString() }, ...next[newStatus]];
+      }
+      return next;
+    });
+    setChecked((c) => { const n = new Set(c); n.delete(userId); return n; });
+    setReviews((m) => { const n = { ...m }; delete n[userId]; return n; });
+    if (filter === "submitted" || filter === newStatus) open(nextCandidate && nextCandidate.user_id !== userId ? nextCandidate : null);
+    refreshCounts();
+  }, [filtered, filter, open]);
+
+  const approve = useCallback(async (p: Profile) => {
+    if (busy) return;
     setBusy(true);
     try {
       await adminApi.approveVerification(p.user_id);
       toast("success", `Approved ${fullName(p)}`);
-      setSelected(null);
-      await load();
+      advanceAfter(p.user_id, "approved");
     } catch (e) { toast("error", errorMessage(e)); }
     finally { setBusy(false); }
-  };
-  const reject = async (p: Profile) => {
-    const reason = note.trim();
-    if (!reason) { toast("warning", "Enter a rejection reason first."); return; }
-    setBusy(true);
-    try {
-      await adminApi.rejectVerification(p.user_id, reason);
-      toast("success", `Rejected ${fullName(p)}`);
-      setSelected(null); setNote("");
-      await load();
-    } catch (e) { toast("error", errorMessage(e)); }
-    finally { setBusy(false); }
-  };
-  const requestInfo = async (p: Profile) => {
-    const n = note.trim();
-    if (!n) { toast("warning", "Enter the info you need first."); return; }
-    setBusy(true);
-    try {
-      await adminApi.requestInfo(p.user_id, n);
-      toast("success", `Requested info from ${fullName(p)}`);
-      setSelected(null); setNote("");
-      await load();
-    } catch (e) { toast("error", errorMessage(e)); }
-    finally { setBusy(false); }
-  };
+  }, [busy, toast, advanceAfter]);
 
+  const submitNote = useCallback(async (p: Profile) => {
+    const text = note.trim();
+    if (!text || !mode) { toast("warning", mode === "info" ? "Say what you need from the member." : "Give the member a reason."); noteRef.current?.focus(); return; }
+    setBusy(true);
+    try {
+      if (mode === "reject") {
+        await adminApi.rejectVerification(p.user_id, text);
+        toast("success", `Rejected ${fullName(p)}`);
+        advanceAfter(p.user_id, "rejected");
+      } else {
+        await adminApi.requestInfo(p.user_id, text);
+        toast("success", `Asked ${fullName(p)} for more information`);
+        advanceAfter(p.user_id, "draft");
+      }
+    } catch (e) { toast("error", errorMessage(e)); }
+    finally { setBusy(false); }
+  }, [note, mode, toast, advanceAfter]);
+
+  const bulkApprove = useCallback(async () => {
+    const ids = Array.from(checked).filter((id) => lists.submitted.some((p) => p.user_id === id));
+    if (!ids.length) return;
+    setBusy(true);
+    try {
+      const res = await adminOpsApi.bulkApproveVerifications(ids);
+      const d = (res.data as any)?.data || {};
+      const approved: string[] = d.approved || [];
+      toast("success", `Approved ${approved.length} profile${approved.length === 1 ? "" : "s"}${(d.skipped || []).length ? ` · ${(d.skipped || []).length} skipped (no longer pending)` : ""}`);
+      setChecked(new Set());
+      if (selectedId && approved.includes(selectedId)) open(null);
+      await load();
+      refreshCounts();
+    } catch (e) { toast("error", errorMessage(e)); }
+    finally { setBusy(false); }
+  }, [checked, lists.submitted, toast, selectedId, open, load]);
+
+  const toggleCheck = (id: string) => setChecked((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const pendingVisible = filtered.filter((p) => p.verification_status === "submitted");
+  const allChecked = pendingVisible.length > 0 && pendingVisible.every((p) => checked.has(p.user_id));
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (!filtered.length) return;
-      const idx = selected ? filtered.findIndex((p) => p.user_id === selected.user_id) : -1;
-      if (e.key === "j" || e.key === "ArrowDown") {
-        e.preventDefault();
-        setSelected(filtered[Math.max(0, Math.min(filtered.length - 1, idx + 1))] || null);
-      } else if (e.key === "k" || e.key === "ArrowUp") {
-        e.preventDefault();
-        setSelected(filtered[Math.max(0, idx - 1)] || null);
-      } else if (e.key === "Escape") {
-        setSelected(null);
-      } else if (selected && !busy && e.key === "a") {
-        e.preventDefault();
-        approve(selected);
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (lightbox) {
+        if (e.key === "Escape") setLightbox(null);
+        if (e.key === "ArrowRight") setLightbox((l) => l && { ...l, index: (l.index + 1) % l.urls.length });
+        if (e.key === "ArrowLeft") setLightbox((l) => l && { ...l, index: (l.index - 1 + l.urls.length) % l.urls.length });
+        return;
       }
+      if (isTyping(e.target)) {
+        if (e.key === "Escape") { (e.target as HTMLElement).blur(); setMode(null); }
+        return;
+      }
+      const k = e.key.toLowerCase();
+      if (k === "?") { setShowHelp((s) => !s); return; }
+      if (k === "j" || e.key === "ArrowDown" || k === "n") { e.preventDefault(); move(1); return; }
+      if (k === "k" || e.key === "ArrowUp") { e.preventDefault(); move(-1); return; }
+      if (e.key === "Escape") { if (mode) setMode(null); else open(null); return; }
+      if (!selected || busy) return;
+      const canAct = selected.verification_status !== "approved";
+      if (k === "x" && selected.verification_status === "submitted") { e.preventDefault(); toggleCheck(selected.user_id); return; }
+      if (!canAct) return;
+      if (k === "a") { e.preventDefault(); approve(selected); }
+      else if (k === "r") { e.preventDefault(); setMode("reject"); setNote(""); setTimeout(() => noteRef.current?.focus(), 30); }
+      else if (k === "i") { e.preventDefault(); setMode("info"); setNote(""); setTimeout(() => noteRef.current?.focus(), 30); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, selected, busy]);
+  }, [lightbox, mode, selected, busy, move, open, approve]);
+
+  const counts = {
+    submitted: lists.submitted.length,
+    approved: lists.approved.length,
+    rejected: lists.rejected.length,
+    all: lists.submitted.length + lists.approved.length + lists.rejected.length,
+  };
+  const overdue = lists.submitted.filter((p) => (hoursSince(p.submitted_at) ?? 0) >= SLA_HOURS).length;
 
   return (
     <PageShell
       title="Verifications"
-      subtitle="Review and approve new profiles before they go live."
-    >
-      {/* Tabs */}
-      <motion.div variants={fadeUp} style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.75)", padding: 3, borderRadius: 12, border: "1px solid rgba(220,30,60,0.08)", backdropFilter: "blur(6px)" }}>
-          {([
-            { k: "submitted", label: "Pending",  tone: "warn" },
-            { k: "approved",  label: "Approved", tone: "good" },
-            { k: "rejected",  label: "Rejected", tone: "bad" },
-            { k: "all",       label: "All",      tone: "neutral" },
-          ] as Array<{ k: Filter; label: string; tone: string }>).map(({ k, label }) => {
-            const active = filter === k;
-            return (
-              <button
-                key={k}
-                onClick={() => setFilter(k)}
-                style={{
-                  position: "relative", padding: "8px 16px", borderRadius: 9,
-                  border: "none", background: "transparent",
-                  fontSize: 12.5, fontWeight: active ? 600 : 500,
-                  color: active ? "#fff" : "#666",
-                  cursor: "pointer",
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                  zIndex: 1,
-                }}
-              >
-                {active && (
-                  <motion.span
-                    layoutId="verif-tab-pill"
-                    transition={{ type: "spring", stiffness: 380, damping: 28 }}
-                    style={{
-                      position: "absolute", inset: 0,
-                      background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
-                      borderRadius: 9,
-                      boxShadow: "0 4px 12px rgba(220,30,60,0.3)",
-                      zIndex: -1,
-                    }}
-                  />
-                )}
-                {label}
-                <span style={{
-                  fontSize: 10, fontWeight: 700,
-                  padding: "2px 7px", borderRadius: 999,
-                  background: active ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.08)",
-                  color: active ? "#fff" : "#999",
-                  minWidth: 22, textAlign: "center",
-                  position: "relative", zIndex: 1,
-                }}>{counts[k]}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.85)", border: "1px solid rgba(220,30,60,0.12)", borderRadius: 12, padding: "9px 14px", width: 320, maxWidth: "100%", backdropFilter: "blur(6px)" }}>
-          <Search style={{ width: 15, height: 15, color: "#aaa" }} />
-          <input
-            type="text"
-            placeholder="Search…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ flex: 1, border: "none", outline: "none", fontSize: 13.5, color: "#1a0a14", background: "transparent", fontFamily: "inherit" }}
+      subtitle="Review new profiles and ID documents before members can browse and be seen."
+      meta={!loading && counts.submitted > 0 ? (
+        <Pill tone={overdue ? "bad" : "warn"}>{counts.submitted} pending{overdue ? ` · ${overdue} over ${SLA_HOURS}h` : ""}</Pill>
+      ) : undefined}
+      actions={
+        <Button size="sm" variant="ghost" onClick={() => setShowHelp((s) => !s)} ariaLabel="Keyboard shortcuts" ariaKeyShortcuts="?">
+          <Keyboard className="h-3.5 w-3.5" aria-hidden /> Shortcuts
+        </Button>
+      }
+      toolbar={
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented<Filter>
+            layoutId="verif-tab" ariaLabel="Filter by status"
+            value={filter}
+            onChange={(v) => { setFilter(v); setChecked(new Set()); }}
+            options={[
+              { value: "submitted", label: "Pending", count: counts.submitted },
+              { value: "approved", label: "Approved", count: counts.approved },
+              { value: "rejected", label: "Rejected", count: counts.rejected },
+              { value: "all", label: "All", count: counts.all },
+            ]}
           />
-          {search && (
-            <button onClick={() => setSearch("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#aaa", display: "flex" }}>
-              <X style={{ width: 14, height: 14 }} />
-            </button>
-          )}
+          <SearchField value={search} onChange={setSearch} placeholder="Filter by name, city, religion…" className="w-full sm:w-72" />
+          <AnimatePresence>
+            {checked.size > 0 && (
+              <motion.div
+                initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -4 }}
+                className="flex items-center gap-2 rounded-lg border border-border bg-card py-1 pl-3 pr-1"
+              >
+                <span className="text-[12.5px] font-medium tabular-nums text-foreground">{checked.size} selected</span>
+                <Button size="sm" variant="success" onClick={bulkApprove} loading={busy}>
+                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Approve {checked.size}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setChecked(new Set())}>Clear</Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-      </motion.div>
-
-      <motion.div
-        variants={fadeUp}
-        style={{
-          display: "grid",
-          gridTemplateColumns: selected ? "minmax(360px, 440px) 1fr" : "1fr",
-          gap: 16, alignItems: "start",
-        }}
-        className="verif-grid"
-      >
-        {/* LIST */}
-        <GlassCard padding={0}>
-          <div data-admin-scroll style={{ maxHeight: "calc(100vh - 240px)", overflowY: "auto" }}>
+      }
+    >
+      <div className={cn("grid items-start gap-4", selected ? "lg:grid-cols-[340px_minmax(0,1fr)]" : "grid-cols-1")}>
+        {/* ── Queue ─────────────────────────────────────────────────────── */}
+        <section
+          aria-label="Verification queue"
+          className={cn("overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]", selected && "hidden lg:block")}
+        >
+          {filter === "submitted" && pendingVisible.length > 1 && (
+            <label className="flex items-center gap-2 border-b border-border/60 px-4 py-2 text-[12px] text-muted2-foreground">
+              <input
+                type="checkbox" checked={allChecked}
+                onChange={() => setChecked(allChecked ? new Set() : new Set(pendingVisible.map((p) => p.user_id)))}
+                className="h-3.5 w-3.5 accent-[#DC1E3C]"
+              />
+              Select all {pendingVisible.length} · oldest first
+            </label>
+          )}
+          <div data-admin-scroll className={cn("overflow-y-auto", selected ? "max-h-[calc(100vh-260px)]" : "max-h-none")}>
             {loading ? (
-              <div style={{ padding: 10 }}>
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="m4m-shimmer" style={{ height: 72, margin: "6px 10px", borderRadius: 12 }} />
-                ))}
-              </div>
+              <div className="p-3"><SkeletonRows rows={6} /></div>
             ) : loadError ? (
-              <div style={{ padding: 20, color: "#a0153c", fontSize: 13 }}>
-                <AlertTriangle style={{ width: 14, height: 14, display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} />
-                {loadError}
-              </div>
+              <EmptyState icon={AlertTriangle} title="Couldn't load the queue" description={loadError} action={<Button size="sm" onClick={() => { setLoading(true); load(); }}>Try again</Button>} />
             ) : filtered.length === 0 ? (
-              <div style={{ padding: "60px 24px", textAlign: "center" }}>
-                <Inbox style={{ width: 40, height: 40, color: "#e5e5e5", margin: "0 auto 12px", display: "block" }} />
-                <p style={{ color: "#888", fontSize: 13, margin: 0 }}>
-                  {search ? `No matches for "${search}"` : "No profiles in this category."}
-                </p>
-                {filter === "submitted" && !search && (
-                  <p style={{ color: "#aaa", fontSize: 12, marginTop: 8 }}>
-                    New submissions appear here when users click "Submit for verification".
-                  </p>
-                )}
-              </div>
+              <EmptyState
+                icon={filter === "submitted" && !search ? ShieldCheck : Inbox}
+                title={search ? `No profiles match “${search}”` : filter === "submitted" ? "Queue is clear" : "No profiles here yet"}
+                description={filter === "submitted" && !search ? "New submissions land here when members press “Submit for verification”." : undefined}
+              />
             ) : (
-              <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                {filtered.map((p, i) => (
-                  <VerificationRow
+              <ul className={cn(!selected && "sm:grid sm:grid-cols-2 xl:grid-cols-3")}>
+                {filtered.map((p) => (
+                  <QueueRow
                     key={p.user_id}
                     profile={p}
-                    index={i}
-                    active={selected?.user_id === p.user_id}
-                    onClick={() => { setSelected(p); setNote(""); }}
+                    active={selectedId === p.user_id}
+                    checked={checked.has(p.user_id)}
+                    onToggle={() => toggleCheck(p.user_id)}
+                    onOpen={() => open(p)}
                   />
                 ))}
               </ul>
             )}
           </div>
-        </GlassCard>
+        </section>
 
-        {/* DETAIL */}
+        {/* ── Review panel ──────────────────────────────────────────────── */}
         <AnimatePresence mode="wait">
           {selected && (
-            <motion.div
+            <motion.section
               key={selected.user_id}
-              initial={{ opacity: 0, x: 30 }}
+              aria-label={`Review ${fullName(selected)}`}
+              initial={{ opacity: 0, x: 12 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ type: "spring", stiffness: 260, damping: 26 }}
-              className="verif-detail"
+              exit={{ opacity: 0, x: 8 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]"
             >
-              <GlassCard padding={0}>
-                <DetailPanel
-                  profile={selected}
-                  note={note}
-                  setNote={setNote}
-                  busy={busy}
-                  onClose={() => { setSelected(null); setNote(""); }}
-                  onApprove={() => approve(selected)}
-                  onReject={() => reject(selected)}
-                  onRequestInfo={() => requestInfo(selected)}
-                  onPhotoClick={setPhotoLightbox}
-                />
-              </GlassCard>
-            </motion.div>
+              <ReviewPanel
+                profile={selected}
+                review={reviews[selected.user_id]}
+                position={{ index: filtered.findIndex((p) => p.user_id === selected.user_id), total: filtered.length }}
+                busy={busy}
+                mode={mode}
+                setMode={(m) => { setMode(m); setNote(""); if (m) setTimeout(() => noteRef.current?.focus(), 30); }}
+                note={note}
+                setNote={setNote}
+                noteRef={noteRef}
+                onClose={() => open(null)}
+                onPrev={() => move(-1)}
+                onNext={() => move(1)}
+                onApprove={() => approve(selected)}
+                onSubmitNote={() => submitNote(selected)}
+                onPhoto={(urls, index) => setLightbox({ urls, index })}
+              />
+            </motion.section>
           )}
         </AnimatePresence>
-      </motion.div>
+      </div>
 
-      {/* Photo lightbox */}
+      {/* ── Lightbox ──────────────────────────────────────────────────────── */}
       <AnimatePresence>
-        {photoLightbox && (
+        {lightbox && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setPhotoLightbox(null)}
-            style={{
-              position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)",
-              zIndex: 100, display: "grid", placeItems: "center", padding: 40,
-              backdropFilter: "blur(8px)",
-            }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+            role="dialog" aria-modal="true" aria-label="Image viewer"
+            onClick={() => setLightbox(null)}
+            className="fixed inset-0 z-[90] grid place-items-center bg-black/85 p-6 sm:p-10"
           >
-            <motion.img
-              initial={{ scale: 0.92, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.92, opacity: 0 }}
-              src={photoLightbox}
-              alt="Profile"
-              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 10, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}
-            />
-            <button
-              onClick={() => setPhotoLightbox(null)}
-              style={{
-                position: "fixed", top: 20, right: 20,
-                background: "rgba(255,255,255,0.14)", color: "#fff", border: "none",
-                borderRadius: "50%", width: 42, height: 42, cursor: "pointer",
-                display: "grid", placeItems: "center",
-                backdropFilter: "blur(12px)",
-              }}
-            >
-              <X style={{ width: 18, height: 18 }} />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={lightbox.urls[lightbox.index]} alt="" onClick={(e) => e.stopPropagation()} className="max-h-full max-w-full rounded-lg object-contain shadow-2xl" />
+            <button onClick={() => setLightbox(null)} aria-label="Close" className="fixed right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25">
+              <X className="h-5 w-5" />
             </button>
+            {lightbox.urls.length > 1 && (
+              <>
+                <button onClick={(e) => { e.stopPropagation(); setLightbox((l) => l && { ...l, index: (l.index - 1 + l.urls.length) % l.urls.length }); }} aria-label="Previous image" className="fixed left-4 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25">
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); setLightbox((l) => l && { ...l, index: (l.index + 1) % l.urls.length }); }} aria-label="Next image" className="fixed right-4 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25">
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+                <div className="fixed bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-white/15 px-3 py-1 text-[12px] tabular-nums text-white">{lightbox.index + 1} / {lightbox.urls.length}</div>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Keyboard hint */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        style={{
-          position: "fixed", bottom: 16, right: 16,
-          background: "rgba(26,10,20,0.85)", color: "#fff", fontSize: 11,
-          padding: "8px 12px", borderRadius: 10, fontFamily: "ui-monospace, monospace",
-          zIndex: 5, letterSpacing: "0.03em",
-          backdropFilter: "blur(10px)",
-          border: "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        <KBD>j</KBD> <KBD>k</KBD> navigate · <KBD>a</KBD> approve · <KBD>esc</KBD> close
-      </motion.div>
-
-      <style jsx>{`
-        @media (max-width: 900px) {
-          :global(.verif-grid) {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
+      {/* ── Shortcut help ─────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showHelp && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.15 }}
+            role="dialog" aria-label="Keyboard shortcuts"
+            className="fixed bottom-4 right-4 z-[60] w-[280px] rounded-xl border border-border bg-card p-4 shadow-[0_12px_32px_rgba(26,10,20,0.16)]"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-[13px] font-semibold text-foreground">Keyboard shortcuts</h2>
+              <button onClick={() => setShowHelp(false)} aria-label="Close shortcuts" className="grid h-6 w-6 place-items-center rounded text-muted2-foreground hover:bg-secondary"><X className="h-3.5 w-3.5" /></button>
+            </div>
+            <dl className="space-y-1.5 text-[12.5px]">
+              {[
+                [["J", "↓"], "Next profile"], [["K", "↑"], "Previous profile"], [["N"], "Next (skip)"],
+                [["A"], "Approve"], [["R"], "Reject with reason"], [["I"], "Request more info"],
+                [["X"], "Select for bulk approve"], [["Esc"], "Close / cancel"], [["?"], "Toggle this panel"],
+              ].map(([keys, label]) => (
+                <div key={label as string} className="flex items-center justify-between gap-3">
+                  <dt className="text-muted2-foreground">{label as string}</dt>
+                  <dd className="flex gap-1">{(keys as string[]).map((k) => <Kbd key={k}>{k}</Kbd>)}</dd>
+                </div>
+              ))}
+            </dl>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </PageShell>
   );
 }
 
-function KBD({ children }: { children: React.ReactNode }) {
-  return <kbd style={{
-    background: "rgba(255,255,255,0.15)", padding: "1px 6px",
-    borderRadius: 4, marginRight: 2, border: "1px solid rgba(255,255,255,0.08)",
-  }}>{children}</kbd>;
-}
+// ─── Queue row ───────────────────────────────────────────────────────────────
 
-function VerificationRow({ profile, active, onClick, index }: {
-  profile: Profile; active: boolean; onClick: () => void; index: number;
+function QueueRow({ profile, active, checked, onToggle, onOpen }: {
+  profile: Profile; active: boolean; checked: boolean; onToggle: () => void; onOpen: () => void;
 }) {
   const name = fullName(profile);
-  const photo = primaryPhoto(profile);
-  const a = age(profile.date_of_birth);
-  const status = profile.verification_status as Status;
-  const ring = status === "approved" ? "linear-gradient(135deg, #8DB870, #5C7A52)"
-    : status === "submitted" ? "linear-gradient(135deg, #E8C04B, #C89020)"
-    : status === "rejected"  ? "linear-gradient(135deg, #ff7a9a, #dc1e3c)"
-    : "linear-gradient(135deg, #cccccc, #999999)";
-
+  const a = ageOf(profile.date_of_birth);
+  const status = (profile.verification_status as Status) || "draft";
+  const pending = status === "submitted";
+  const h = pending ? hoursSince(profile.submitted_at) : null;
+  const over = (h ?? 0) >= SLA_HOURS;
   return (
-    <motion.li
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(0.6, index * 0.025), duration: 0.3 }}
-    >
-      <button
-        onClick={onClick}
-        style={{
-          width: "100%", textAlign: "left",
-          background: active ? "rgba(220,30,60,0.06)" : "transparent",
-          border: "none",
-          borderLeft: active ? "3px solid #dc1e3c" : "3px solid transparent",
-          borderBottom: "1px solid rgba(220,30,60,0.05)",
-          padding: "14px 18px",
-          cursor: "pointer",
-          display: "flex", gap: 12, alignItems: "flex-start",
-          transition: "background 0.12s",
-          fontFamily: "inherit",
-        }}
-        onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(220,30,60,0.03)"; }}
-        onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
-      >
-        <div style={{
-          width: 46, height: 46, padding: 2, borderRadius: "50%",
-          background: ring, flexShrink: 0,
-        }}>
-          <div style={{
-            width: "100%", height: "100%", borderRadius: "50%",
-            background: photo ? `center / cover no-repeat url(${photo})` : "linear-gradient(135deg,#dc1e3c,#a0153c)",
-            display: "grid", placeItems: "center",
-            color: "#fff", fontWeight: 700, fontSize: 13,
-            border: "2px solid #fff",
-          }}>
-            {!photo && initials(name)}
+    <li className={cn("relative border-b border-border/50", active && "bg-primary/[0.045]")}>
+      {active && <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-primary" />}
+      <div className="flex items-start gap-3 px-4 py-3">
+        {pending ? (
+          <input
+            type="checkbox" checked={checked} onChange={onToggle}
+            aria-label={`Select ${name} for bulk approval`}
+            className="mt-3 h-3.5 w-3.5 shrink-0 accent-[#DC1E3C]"
+          />
+        ) : <span className="w-3.5 shrink-0" />}
+        <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+          <Avatar name={name} url={primaryPhoto(profile)} size={40} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-1.5">
+              <span className="truncate text-[13.5px] font-medium text-foreground">{name}</span>
+              {a !== null && <span className="shrink-0 text-[12px] text-muted2-foreground">{a}</span>}
+            </div>
+            <div className="truncate text-[12px] text-muted2-foreground">
+              {[profile.city || profile.country, profile.religion, profile.occupation].filter(Boolean).join(" · ") || "No details yet"}
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {pending
+                ? <Pill tone={over ? "bad" : "warn"}><Clock className="h-3 w-3" aria-hidden />Waiting {waitingLabel(h)}</Pill>
+                : <Pill tone={STATUS[status]?.tone || "neutral"}>{STATUS[status]?.label || status}</Pill>}
+              {typeof profile.completeness_score === "number" && (
+                <span className="text-[11.5px] tabular-nums text-muted2-foreground">{profile.completeness_score}% complete</span>
+              )}
+            </div>
           </div>
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "#1a0a14", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-            {a !== null && <span style={{ fontSize: 12, color: "#888" }}>· {a}</span>}
-          </div>
-          <div style={{ fontSize: 12, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {[profile.city, profile.religion, profile.occupation].filter(Boolean).join(" · ") || "—"}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-            <StatusBadge status={status} />
-            {profile.submitted_at && (
-              <span style={{ fontSize: 11, color: "#aaa" }}>{formatRelative(profile.submitted_at)}</span>
-            )}
-            {typeof profile.completeness_score === "number" && (
-              <span style={{ fontSize: 11, color: "#aaa" }}>· {profile.completeness_score}%</span>
-            )}
-          </div>
-        </div>
-        <ChevronRight style={{ width: 14, height: 14, color: active ? "#dc1e3c" : "#ccc", flexShrink: 0, marginTop: 6 }} />
-      </button>
-    </motion.li>
-  );
-}
-
-function StatusBadge({ status }: { status: Status }) {
-  const styles: Record<Status, { bg: string; fg: string; label: string }> = {
-    draft:     { bg: "rgba(0,0,0,0.06)",      fg: "#666",     label: "Draft" },
-    submitted: { bg: "rgba(200,144,32,0.14)", fg: "#8A5F00",  label: "Pending" },
-    approved:  { bg: "rgba(92,122,82,0.14)",  fg: "#3F5937",  label: "Approved" },
-    rejected:  { bg: "rgba(220,30,60,0.10)",  fg: "#a0153c",  label: "Rejected" },
-  };
-  const s = styles[status] || styles.draft;
-  return (
-    <span style={{
-      fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
-      padding: "3px 8px", borderRadius: 999, background: s.bg, color: s.fg,
-    }}>
-      {s.label}
-    </span>
-  );
-}
-
-function DetailPanel({
-  profile, note, setNote, busy, onClose, onApprove, onReject, onRequestInfo, onPhotoClick,
-}: {
-  profile: Profile;
-  note: string; setNote: (v: string) => void;
-  busy: boolean;
-  onClose: () => void;
-  onApprove: () => void; onReject: () => void; onRequestInfo: () => void;
-  onPhotoClick: (url: string) => void;
-}) {
-  const name = fullName(profile);
-  const a = age(profile.date_of_birth);
-  const photos = (Array.isArray(profile.photos) ? profile.photos : []).filter((p) => !!p?.url);
-  const status = profile.verification_status as Status;
-  const canAct = status !== "approved";
-
-  return (
-    <div>
-      {/* Title strip */}
-      <div style={{
-        padding: "20px 24px",
-        borderBottom: "1px solid rgba(220,30,60,0.08)",
-        display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16,
-        position: "sticky", top: 0, zIndex: 5,
-        background: "rgba(255,255,255,0.72)", backdropFilter: "blur(10px)",
-      }}>
-        <div>
-          <h2 style={{ fontFamily: "var(--font-playfair, serif)", fontSize: 22, fontWeight: 600, color: "#1a0a14", margin: 0, letterSpacing: "-0.01em" }}>
-            {name}{a !== null && `, ${a}`}
-          </h2>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-            <StatusBadge status={status} />
-            {profile.submitted_at && (
-              <span style={{ fontSize: 12, color: "#888" }}>Submitted {formatRelative(profile.submitted_at)}</span>
-            )}
-            {typeof profile.completeness_score === "number" && (
-              <span style={{ fontSize: 12, color: "#888" }}>· {profile.completeness_score}% complete</span>
-            )}
-          </div>
-        </div>
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          style={{
-            background: "rgba(0,0,0,0.04)", border: "none", borderRadius: 10,
-            width: 34, height: 34, cursor: "pointer",
-            display: "grid", placeItems: "center",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.08)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.04)")}
-        >
-          <X style={{ width: 16, height: 16, color: "#666" }} />
         </button>
       </div>
+    </li>
+  );
+}
 
-      <div data-admin-scroll style={{ padding: 24, maxHeight: "calc(100vh - 340px)", overflowY: "auto", display: "flex", flexDirection: "column", gap: 20 }}>
-        {profile.rejection_reason && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            style={{
-              padding: 14, background: "rgba(220,30,60,0.06)",
-              borderRadius: 12, border: "1px solid rgba(220,30,60,0.12)",
-              display: "flex", gap: 10, alignItems: "flex-start",
-            }}
-          >
-            <AlertTriangle style={{ width: 17, height: 17, color: "#dc1e3c", flexShrink: 0, marginTop: 2 }} />
-            <div style={{ fontSize: 13 }}>
-              <strong style={{ color: "#7B2D3A" }}>
-                {status === "rejected" ? "Rejection reason" : "Outstanding request"}:
-              </strong>{" "}
-              <span style={{ color: "#555" }}>{profile.rejection_reason}</span>
+// ─── Review panel ────────────────────────────────────────────────────────────
+
+function ReviewPanel({
+  profile, review, position, busy, mode, setMode, note, setNote, noteRef,
+  onClose, onPrev, onNext, onApprove, onSubmitNote, onPhoto,
+}: {
+  profile: Profile;
+  review: Review | "error" | undefined;
+  position: { index: number; total: number };
+  busy: boolean;
+  mode: "reject" | "info" | null;
+  setMode: (m: "reject" | "info" | null) => void;
+  note: string;
+  setNote: (v: string) => void;
+  noteRef: React.RefObject<HTMLTextAreaElement>;
+  onClose: () => void; onPrev: () => void; onNext: () => void;
+  onApprove: () => void; onSubmitNote: () => void;
+  onPhoto: (urls: string[], index: number) => void;
+}) {
+  const name = fullName(profile);
+  const a = ageOf(profile.date_of_birth);
+  const status = (profile.verification_status as Status) || "draft";
+  const photos = photosOf(profile);
+  const canAct = status !== "approved";
+  const h = status === "submitted" ? hoursSince(profile.submitted_at) : null;
+  const r = review && review !== "error" ? review : null;
+
+  return (
+    <div className="flex max-h-[calc(100vh-200px)] min-h-[480px] flex-col">
+      {/* Header */}
+      <header className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar name={name} url={primaryPhoto(profile)} size={44} />
+          <div className="min-w-0">
+            <h2 className="truncate text-[17px] font-semibold text-foreground">
+              {name}{a !== null && <span className="font-normal text-muted2-foreground">, {a}</span>}
+            </h2>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-muted2-foreground">
+              <Pill tone={STATUS[status]?.tone || "neutral"}>{STATUS[status]?.label || status}</Pill>
+              {h !== null && <Pill tone={h >= SLA_HOURS ? "bad" : "neutral"}><Clock className="h-3 w-3" aria-hidden />Waiting {waitingLabel(h)}</Pill>}
+              {r?.user.membership_number && <span className="tabular-nums">{r.user.membership_number}</span>}
+              {typeof profile.completeness_score === "number" && <span>· {profile.completeness_score}% complete</span>}
             </div>
-          </motion.div>
-        )}
-        {profile.last_rejection_reason && profile.rejection_reason !== profile.last_rejection_reason && (
-          <div style={{ padding: 12, background: "rgba(0,0,0,0.03)", borderRadius: 10, fontSize: 12, color: "#888" }}>
-            <strong>Previous rejection:</strong> {profile.last_rejection_reason}
-          </div>
-        )}
-
-        <Section icon={ImageIcon} title={`Photos (${photos.length})`}>
-          {photos.length === 0 ? (
-            <p style={{ fontSize: 13, color: "#aaa", margin: 0 }}>No photos uploaded.</p>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 10 }}>
-              {photos.map((ph, i) => ph.url ? (
-                <motion.button
-                  key={ph.key || i}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  transition={{ type: "spring", stiffness: 420, damping: 24 }}
-                  onClick={() => onPhotoClick(ph.url!)}
-                  style={{
-                    position: "relative", borderRadius: 12, overflow: "hidden",
-                    aspectRatio: "1", border: "1px solid rgba(220,30,60,0.12)",
-                    cursor: "pointer", padding: 0, background: "none",
-                    boxShadow: "0 4px 14px rgba(0,0,0,0.05)",
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={ph.url} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  {ph.is_primary && (
-                    <span style={{
-                      position: "absolute", top: 8, left: 8,
-                      background: "linear-gradient(135deg, #dc1e3c, #a0153c)", color: "#fff", fontSize: 9, fontWeight: 700,
-                      padding: "3px 8px", borderRadius: 999, textTransform: "uppercase", letterSpacing: "0.06em",
-                      boxShadow: "0 3px 10px rgba(220,30,60,0.35)",
-                    }}>Primary</span>
-                  )}
-                </motion.button>
-              ) : null)}
-            </div>
-          )}
-        </Section>
-
-        <Section icon={User} title="Basic">
-          <DataGrid>
-            <Cell label="Gender">{profile.gender}</Cell>
-            <Cell label="Date of birth">{profile.date_of_birth}</Cell>
-            <Cell label="Age">{a}</Cell>
-            <Cell label="Height">{heightInFtIn(profile.height_cm) || (profile.height_cm ? `${profile.height_cm}cm` : null)}</Cell>
-            <Cell label="Religion">{profile.religion}</Cell>
-            <Cell label="Caste">{profile.caste}</Cell>
-            <Cell label="Mother tongue">{profile.mother_tongue}</Cell>
-          </DataGrid>
-        </Section>
-
-        <Section icon={MapPin} title="Location">
-          <DataGrid>
-            <Cell label="City">{profile.city}</Cell>
-            <Cell label="State">{profile.state}</Cell>
-            <Cell label="Country">{profile.country}</Cell>
-          </DataGrid>
-        </Section>
-
-        <Section icon={GraduationCap} title="Education & Career">
-          <DataGrid>
-            <Cell label="Education">{profile.education_level}</Cell>
-            <Cell label="Field">{profile.education_field}</Cell>
-            <Cell label="College">{profile.college}</Cell>
-            <Cell label="Occupation">{profile.occupation}</Cell>
-            <Cell label="Employer">{profile.employer}</Cell>
-            <Cell label="Annual income">{profile.annual_income_inr ? `£${profile.annual_income_inr.toLocaleString()}` : null}</Cell>
-          </DataGrid>
-        </Section>
-
-        {profile.bio && (
-          <Section icon={MessageSquare} title="About">
-            <p style={{ fontSize: 13, color: "#444", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{profile.bio}</p>
-          </Section>
-        )}
-
-        {profile.about_family && (
-          <Section icon={Heart} title="Family">
-            <p style={{ fontSize: 13, color: "#444", lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{profile.about_family}</p>
-          </Section>
-        )}
-
-        {profile.partner_prefs && Object.keys(profile.partner_prefs).length > 0 && (
-          <Section icon={Heart} title="Partner preferences">
-            <KeyValueList data={profile.partner_prefs} />
-          </Section>
-        )}
-
-        {profile.family_details && Object.keys(profile.family_details).length > 0 && (
-          <Section icon={User} title="Family details">
-            <KeyValueList data={profile.family_details} />
-          </Section>
-        )}
-      </div>
-
-      {canAct && (
-        <div style={{
-          borderTop: "1px solid rgba(220,30,60,0.08)",
-          padding: 20, background: "rgba(253,251,249,0.82)",
-          position: "sticky", bottom: 0,
-          backdropFilter: "blur(12px)",
-          display: "flex", flexDirection: "column", gap: 10,
-        }}>
-          <textarea
-            rows={2}
-            placeholder="Reason (required for Reject or Request Info)…"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            style={{
-              width: "100%", padding: 12, border: "1px solid rgba(220,30,60,0.15)",
-              borderRadius: 10, fontSize: 13, outline: "none", background: "#fff",
-              resize: "vertical", fontFamily: "inherit",
-            }}
-          />
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Button onClick={onApprove} disabled={busy} variant="success" style={{ flex: 1, justifyContent: "center" }}>
-              <CheckCircle2 style={{ width: 14, height: 14 }} /> Approve
-            </Button>
-            <Button onClick={onRequestInfo} disabled={busy} variant="warn">
-              Request info
-            </Button>
-            <Button onClick={onReject} disabled={busy} variant="danger">
-              <XCircle style={{ width: 13, height: 13 }} /> Reject
-            </Button>
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {position.total > 1 && (
+            <span className="mr-1 hidden text-[12px] tabular-nums text-muted2-foreground sm:inline">{position.index + 1} of {position.total}</span>
+          )}
+          <IconBtn label="Previous profile (K)" onClick={onPrev}><ChevronLeft className="h-4 w-4" /></IconBtn>
+          <IconBtn label="Next profile (J)" onClick={onNext}><ChevronRight className="h-4 w-4" /></IconBtn>
+          <Link href={`/admin/users/${profile.user_id}`} title="Open member record" aria-label="Open member record" className="grid h-8 w-8 place-items-center rounded-md text-muted2-foreground hover:bg-secondary hover:text-foreground">
+            <ExternalLink className="h-4 w-4" />
+          </Link>
+          <IconBtn label="Close (Esc)" onClick={onClose}><X className="h-4 w-4" /></IconBtn>
+        </div>
+      </header>
+
+      {/* Body: profile | identity */}
+      <div data-admin-scroll className="flex-1 overflow-y-auto">
+        {(profile.rejection_reason || (profile.last_rejection_reason && profile.last_rejection_reason !== profile.rejection_reason) || (r?.open_reports_against ?? 0) > 0) && (
+          <div className="space-y-2 border-b border-border/60 px-5 py-3">
+            {profile.rejection_reason && (
+              <Callout tone="bad" title={status === "rejected" ? "Rejection reason" : "Outstanding request"}>{profile.rejection_reason}</Callout>
+            )}
+            {profile.last_rejection_reason && profile.last_rejection_reason !== profile.rejection_reason && (
+              <Callout tone="neutral" title="Previously rejected for">{profile.last_rejection_reason}</Callout>
+            )}
+            {(r?.open_reports_against ?? 0) > 0 && (
+              <Callout tone="bad" title={`${r!.open_reports_against} open report${r!.open_reports_against === 1 ? "" : "s"} against this member`}>
+                <Link href="/admin/reports" className="underline">Check reports</Link> before approving.
+              </Callout>
+            )}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 xl:grid-cols-2">
+          {/* Profile column */}
+          <div className="space-y-5 px-5 py-4 xl:border-r xl:border-border/60">
+            <Block icon={ImageIcon} title={`Photos (${photos.length})`}>
+              {photos.length === 0 ? (
+                <p className="text-[12.5px] text-muted2-foreground">No photos uploaded.</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {photos.map((ph, i) => (
+                    <button
+                      key={ph.key || ph.url}
+                      type="button"
+                      onClick={() => onPhoto(photos.map((x) => x.url), i)}
+                      className="group relative aspect-square overflow-hidden rounded-lg border border-border/70 bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      aria-label={`Open photo ${i + 1}`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={ph.url} alt="" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]" loading="lazy" />
+                      {ph.is_primary && <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">Primary</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </Block>
+
+            <Block icon={User} title="Basics">
+              <Facts rows={[
+                ["Gender", profile.gender], ["Date of birth", profile.date_of_birth],
+                ["Height", heightLabel(profile.height_cm)], ["Marital status", profile.marital_status?.replace(/_/g, " ")],
+                ["Religion", profile.religion], ["Community", [profile.caste].filter(Boolean).join(" ")],
+                ["Mother tongue", profile.mother_tongue],
+              ]} />
+            </Block>
+
+            <Block icon={MapPin} title="Location">
+              <Facts rows={[["City", profile.city], ["State / county", profile.state], ["Country", profile.country]]} />
+            </Block>
+
+            <Block icon={GraduationCap} title="Education & career">
+              <Facts rows={[
+                ["Education", profile.education_level], ["Field", profile.education_field], ["College", profile.college],
+                ["Occupation", profile.occupation], ["Employer", profile.employer],
+                ["Annual income", profile.annual_income_inr ? `£${profile.annual_income_inr.toLocaleString("en-GB")}` : null],
+              ]} />
+            </Block>
+
+            {profile.bio && (
+              <Block icon={MessageSquare} title="About">
+                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{profile.bio}</p>
+              </Block>
+            )}
+            {profile.about_family && (
+              <Block icon={Heart} title="Family">
+                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">{profile.about_family}</p>
+              </Block>
+            )}
+            {profile.partner_prefs && Object.keys(profile.partner_prefs).length > 0 && (
+              <Block icon={Heart} title="Partner preferences"><KeyValues data={profile.partner_prefs} /></Block>
+            )}
+          </div>
+
+          {/* Identity column */}
+          <div className="space-y-5 bg-secondary/25 px-5 py-4">
+            <Block icon={FileText} title="ID documents">
+              {review === undefined ? (
+                <div className="grid grid-cols-2 gap-2"><Skeleton className="aspect-[3/2]" /><Skeleton className="aspect-[3/2]" /></div>
+              ) : review === "error" ? (
+                <p className="text-[12.5px] text-[#B42343]">Couldn&apos;t load documents. Close and reopen to retry.</p>
+              ) : review.documents.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-card px-3 py-4 text-[12.5px] text-muted2-foreground">
+                  No ID submitted. Approving verifies the profile only — consider requesting an ID (<Kbd>I</Kbd>).
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {review.documents.map((doc) => {
+                    const imgs = [
+                      doc.front && { label: "Front", url: doc.front.url },
+                      doc.back && { label: "Back", url: doc.back.url },
+                      doc.selfie && { label: "Selfie", url: doc.selfie.url },
+                    ].filter(Boolean) as Array<{ label: string; url: string }>;
+                    return (
+                      <div key={doc.id}>
+                        <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[12.5px]">
+                          <span className="font-medium text-foreground">{doc.doc_type || doc.type.replace(/_/g, " ")}</span>
+                          {doc.doc_country && <span className="text-muted2-foreground">· {doc.doc_country}</span>}
+                          {doc.doc_number_masked && <span className="tabular-nums text-muted2-foreground">· {doc.doc_number_masked}</span>}
+                          <Pill tone={doc.status === "verified" ? "good" : doc.status === "failed" ? "bad" : "warn"}>{doc.status.replace(/_/g, " ")}</Pill>
+                          <span className="ml-auto text-[11.5px] text-muted2-foreground">{relTime(doc.submitted_at)}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {imgs.map((im, i) => (
+                            <button
+                              key={im.label}
+                              type="button"
+                              onClick={() => onPhoto(imgs.map((x) => x.url), i)}
+                              className="group overflow-hidden rounded-lg border border-border/70 bg-card text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                              aria-label={`Open ${im.label.toLowerCase()} image`}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={im.url} alt="" className="aspect-[4/3] w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]" loading="lazy" />
+                              <span className="block px-2 py-1 text-[11.5px] text-muted2-foreground">{im.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                        {doc.selfie && primaryPhoto(profile) && (
+                          <button
+                            type="button"
+                            onClick={() => onPhoto([primaryPhoto(profile)!, doc.selfie!.url, ...(doc.front ? [doc.front.url] : [])], 0)}
+                            className="mt-2 text-[12px] font-medium text-primary hover:underline"
+                          >
+                            Compare profile photo · selfie · ID →
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Block>
+
+            <Block icon={BadgeCheck} title="Contact & account">
+              {r ? (
+                <ul className="space-y-1.5 text-[13px]">
+                  <Check ok={r.user.is_email_verified} icon={Mail} label={r.user.email || "No email"} note={r.user.is_email_verified ? "verified" : "unverified"} />
+                  <Check ok={r.user.is_phone_verified} icon={Phone} label={r.user.phone || "No phone"} note={r.user.is_phone_verified ? "verified" : "unverified"} />
+                  <li className="pt-1 text-[12px] text-muted2-foreground">
+                    Joined {relTime(r.user.created_at)} · last active {relTime(r.user.last_active_at)}
+                    {!r.user.is_active && <> · <span className="font-medium text-[#B42343]">suspended</span></>}
+                  </li>
+                </ul>
+              ) : review === undefined ? <SkeletonRows rows={2} /> : <p className="text-[12.5px] text-muted2-foreground">—</p>}
+            </Block>
+
+            <Block icon={Clock} title="Review history">
+              <ul className="space-y-2 text-[12.5px]">
+                {profile.submitted_at && (
+                  <li className="flex gap-2"><span className="text-muted2-foreground">{formatDateTime(profile.submitted_at)}</span><span className="text-foreground">Submitted</span></li>
+                )}
+                {(r?.history || []).map((h) => (
+                  <li key={h.id} className="flex flex-wrap gap-x-2">
+                    <span className="text-muted2-foreground">{formatDateTime(h.created_at)}</span>
+                    <span className="text-foreground">{(h.actor_email || "Admin").split("@")[0]} {describeAction(h.action)}</span>
+                    {h.summary && <span className="w-full text-muted2-foreground">“{h.summary}”</span>}
+                  </li>
+                ))}
+                {!profile.submitted_at && !(r?.history || []).length && <li className="text-muted2-foreground">No history yet.</li>}
+              </ul>
+            </Block>
+          </div>
+        </div>
+      </div>
+
+      {/* Decision bar */}
+      {canAct && (
+        <footer className="border-t border-border/60 bg-card px-5 py-3">
+          <AnimatePresence initial={false}>
+            {mode && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="overflow-hidden"
+              >
+                <div className="pb-3">
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {(mode === "reject" ? REJECT_PRESETS : INFO_PRESETS).map((p) => (
+                      <button
+                        key={p} type="button" onClick={() => { setNote(p); noteRef.current?.focus(); }}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                          note === p ? "border-primary/40 bg-primary/10 text-primary" : "border-border bg-card text-foreground hover:bg-secondary",
+                        )}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="sr-only" htmlFor="verif-note">{mode === "reject" ? "Reason shown to the member" : "What you need from the member"}</label>
+                  <textarea
+                    id="verif-note"
+                    ref={noteRef}
+                    rows={2}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onSubmitNote(); } }}
+                    placeholder={mode === "reject" ? "Reason the member will see… (⌘↵ to send)" : "What should the member add or fix? (⌘↵ to send)"}
+                    className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-[13px] text-foreground outline-none placeholder:text-muted2-foreground/80 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div className="flex flex-wrap items-center gap-2">
+            {mode ? (
+              <>
+                <Button variant={mode === "reject" ? "danger" : "warn"} onClick={onSubmitNote} loading={busy} disabled={!note.trim()}>
+                  {mode === "reject" ? <><XCircle className="h-3.5 w-3.5" aria-hidden /> Reject profile</> : "Send request"}
+                </Button>
+                <Button variant="ghost" onClick={() => setMode(null)}>Cancel</Button>
+              </>
+            ) : (
+              <>
+                <Button variant="success" onClick={onApprove} loading={busy} ariaKeyShortcuts="a" className="min-w-[132px]">
+                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Approve <Kbd className="ml-1 border-white/30 bg-white/15 text-white shadow-none">A</Kbd>
+                </Button>
+                <Button variant="warn" onClick={() => setMode("info")} disabled={busy} ariaKeyShortcuts="i">
+                  Request info <Kbd className="ml-1">I</Kbd>
+                </Button>
+                <Button variant="danger" onClick={() => setMode("reject")} disabled={busy} ariaKeyShortcuts="r">
+                  Reject <Kbd className="ml-1">R</Kbd>
+                </Button>
+                <span className="ml-auto hidden text-[12px] text-muted2-foreground md:inline">
+                  <Kbd>N</Kbd> skip to next
+                </span>
+              </>
+            )}
+          </div>
+        </footer>
       )}
     </div>
   );
 }
 
-function Section({ icon: Icon, title, children }: { icon: any; title: string; children: React.ReactNode }) {
+// ─── Small pieces ────────────────────────────────────────────────────────────
+
+function IconBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} title={label} aria-label={label}
+      className="grid h-8 w-8 place-items-center rounded-md text-muted2-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+      {children}
+    </button>
+  );
+}
+
+function Block({ icon: Icon, title, children }: { icon: any; title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-        <div style={{ width: 22, height: 22, borderRadius: 7, background: "rgba(220,30,60,0.08)", display: "grid", placeItems: "center" }}>
-          <Icon style={{ width: 12, height: 12, color: "#dc1e3c" }} />
-        </div>
-        <h3 style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#666", margin: 0 }}>
-          {title}
-        </h3>
-      </div>
+      <h3 className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted2-foreground">
+        <Icon className="h-3.5 w-3.5" aria-hidden /> {title}
+      </h3>
       {children}
     </div>
   );
 }
 
-function DataGrid({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>{children}</div>;
+function Facts({ rows }: { rows: Array<[string, unknown]> }) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+      {rows.map(([label, v]) => {
+        const empty = v === null || v === undefined || v === "";
+        return (
+          <div key={label} className="min-w-0">
+            <dt className="text-[11.5px] text-muted2-foreground">{label}</dt>
+            <dd className={cn("truncate text-[13px] capitalize", empty ? "text-muted2-foreground/60" : "text-foreground")} title={empty ? undefined : String(v)}>
+              {empty ? "—" : String(v)}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
 }
 
-function Cell({ label, children }: { label: string; children: React.ReactNode }) {
-  const empty = children === null || children === undefined || children === "" || children === 0;
+function KeyValues({ data }: { data: Record<string, unknown> }) {
+  const entries = Object.entries(data).filter(([, v]) => v !== null && v !== undefined && v !== "" && (Array.isArray(v) ? v.length > 0 : true));
+  if (!entries.length) return <p className="text-[12.5px] text-muted2-foreground">—</p>;
   return (
-    <div>
-      <div style={{ fontSize: 10, fontWeight: 600, color: "#999", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
-      <div style={{ fontSize: 13, color: empty ? "#ccc" : "#1a0a14", marginTop: 2 }}>{empty ? "—" : String(children)}</div>
+    <Facts rows={entries.map(([k, v]) => [
+      k.replace(/[_-]/g, " ").replace(/^./, (c) => c.toUpperCase()),
+      Array.isArray(v) ? v.join(", ") : typeof v === "object" ? JSON.stringify(v) : String(v),
+    ])} />
+  );
+}
+
+function Callout({ tone, title, children }: { tone: "bad" | "neutral"; title: string; children: React.ReactNode }) {
+  return (
+    <div className={cn("flex gap-2 rounded-lg border px-3 py-2 text-[12.5px]", tone === "bad" ? "border-[#F7CCD5] bg-[#FDECEF]/60" : "border-border bg-secondary/50")}>
+      <AlertTriangle className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", tone === "bad" ? "text-[#B42343]" : "text-muted2-foreground")} aria-hidden />
+      <div><span className="font-medium text-foreground">{title}: </span><span className="text-foreground/80">{children}</span></div>
     </div>
   );
 }
 
-function KeyValueList({ data }: { data: Record<string, unknown> }) {
-  const entries = Object.entries(data).filter(([, v]) => v !== null && v !== undefined && v !== "" && (Array.isArray(v) ? v.length > 0 : true));
-  if (entries.length === 0) return <p style={{ fontSize: 13, color: "#aaa", margin: 0 }}>—</p>;
+function Check({ ok, icon: Icon, label, note }: { ok: boolean; icon: any; label: string; note: string }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-      {entries.map(([k, v]) => {
-        const label = k.replace(/[_-]/g, " ").replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()).trim();
-        const value = Array.isArray(v) ? v.join(", ") : typeof v === "object" ? JSON.stringify(v) : String(v);
-        return (
-          <div key={k}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: "#999", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
-            <div style={{ fontSize: 13, color: "#1a0a14", overflowWrap: "anywhere", marginTop: 2 }}>{value}</div>
-          </div>
-        );
-      })}
-    </div>
+    <li className="flex items-center gap-2">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-muted2-foreground" aria-hidden />
+      <span className="min-w-0 flex-1 truncate text-foreground">{label}</span>
+      <Pill tone={ok ? "good" : "neutral"}>{ok ? <CheckCircle2 className="h-3 w-3" aria-hidden /> : null}{note}</Pill>
+    </li>
   );
 }

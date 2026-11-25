@@ -3,13 +3,12 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import {
-  Search, X, ChevronLeft, ChevronRight, AlertTriangle,
-  CreditCard, Crown, ArrowRight,
-} from "lucide-react";
-import { PageShell, GlassCard, fadeUp } from "@/components/admin/PageShell";
+import { ChevronLeft, ChevronRight, AlertTriangle, CreditCard, Crown, ArrowRight, Download } from "lucide-react";
+import { PageShell, Button, fadeUp } from "@/components/admin/PageShell";
+import { Segmented, SearchField, EmptyState, SkeletonRows, Pill, type Tone } from "@/components/admin/primitives";
 import { adminApi, ApiError } from "@/lib/api";
 import { planLabel, formatGBP } from "@/lib/plans";
+import { usePersistentState, oneOf, exportRowsToCsv } from "../_lib/view-state";
 
 interface SubscriptionRow {
   id: string;
@@ -27,49 +26,61 @@ interface SubscriptionRow {
   created_at: string | null;
 }
 
-type StatusFilter = "all" | "active" | "expiring" | "paused" | "past_due" | "cancelled" | "expired";
+const STATUS_KEYS = ["all", "active", "expiring", "past_due", "paused", "cancelled", "expired"] as const;
+type StatusFilter = (typeof STATUS_KEYS)[number];
 
-const STATUS_FILTERS: Array<{ key: StatusFilter; label: string }> = [
-  { key: "all",       label: "All" },
-  { key: "active",    label: "Active" },
-  { key: "expiring",  label: "Expiring" },
-  { key: "past_due",  label: "Past due" },
-  { key: "paused",    label: "Paused" },
-  { key: "cancelled", label: "Cancelled" },
-  { key: "expired",   label: "Expired" },
+const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
+  { value: "all",       label: "All" },
+  { value: "active",    label: "Active" },
+  { value: "expiring",  label: "Expiring · 14d" },
+  { value: "past_due",  label: "Past due" },
+  { value: "paused",    label: "Paused" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "expired",   label: "Expired" },
 ];
 
-const PLAN_META: Record<string, { color: string; gradient: string }> = {
-  silver:   { color: "#7d8a93", gradient: "linear-gradient(90deg, #b8c2c8, #7d8a93)" },
-  gold:     { color: "#c9954a", gradient: "linear-gradient(90deg, #f0c987, #c9954a)" },
-  platinum: { color: "#5d4b8a", gradient: "linear-gradient(90deg, #9c87d3, #5d4b8a)" },
+// Plan identity colour sits on the icon chip only; the label is always text.
+const PLAN_DOT: Record<string, string> = {
+  silver: "#7D8A93",
+  gold: "#B07D35",
+  platinum: "#5D4B8A",
+};
+
+const STATUS_PILL: Record<string, { tone: Tone; label: string }> = {
+  active:    { tone: "good",    label: "Active" },
+  paused:    { tone: "neutral", label: "Paused" },
+  cancelled: { tone: "neutral", label: "Cancelled" },
+  expired:   { tone: "bad",     label: "Expired" },
+  past_due:  { tone: "warn",    label: "Past due" },
 };
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function daysUntil(iso: string | null): { label: string; tone: "ok" | "warn" | "bad" | "neutral" } {
+function daysUntil(iso: string | null): { label: string; tone: Tone } {
   if (!iso) return { label: "—", tone: "neutral" };
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return { label: "—", tone: "neutral" };
   const days = Math.ceil((d.getTime() - Date.now()) / 86400000);
   if (days < 0)  return { label: `${-days}d ago`, tone: "bad" };
-  if (days === 0) return { label: "today", tone: "warn" };
-  if (days <= 7)  return { label: `in ${days}d`, tone: "warn" };
-  if (days <= 30) return { label: `in ${days}d`, tone: "ok" };
-  return { label: `in ${days}d`, tone: "neutral" };
+  if (days === 0) return { label: "Today", tone: "warn" };
+  if (days <= 7)  return { label: `In ${days}d`, tone: "warn" };
+  if (days <= 30) return { label: `In ${days}d`, tone: "good" };
+  return { label: `In ${days}d`, tone: "neutral" };
 }
+
+const GRID = "grid grid-cols-[minmax(200px,1.4fr)_140px_110px_100px_minmax(150px,1fr)_96px] gap-4 items-center";
 
 export default function AdminSubscriptionsPage() {
   const [items, setItems] = useState<SubscriptionRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
-  const [status, setStatus] = useState<StatusFilter>("all");
+  const [status, setStatus] = usePersistentState<StatusFilter>("subscriptions.status", "all", oneOf(STATUS_KEYS));
   const [q, setQ] = useState("");
   const [qLive, setQLive] = useState("");
   const [loading, setLoading] = useState(true);
@@ -99,14 +110,13 @@ export default function AdminSubscriptionsPage() {
               status: "active",
               gateway: null,
               amount_paise: r.amount_paise,
-              currency: "INR",
+              currency: "GBP",
               current_period_start: null,
               current_period_end: r.current_period_end,
               cancelled_at: null,
               created_at: null,
             }))
           : [];
-        // Apply client-side search to the small expiring list.
         const ql = (q || "").toLowerCase();
         const filtered = ql
           ? list.filter((r) => r.user_name.toLowerCase().includes(ql) || (r.user_email || "").toLowerCase().includes(ql))
@@ -136,245 +146,138 @@ export default function AdminSubscriptionsPage() {
 
   const pageCount = Math.max(1, Math.ceil(total / limit));
 
+  const exportCsv = () => exportRowsToCsv<SubscriptionRow>(
+    `subscriptions-${status}.csv`,
+    [
+      { label: "Member", value: (r) => r.user_name },
+      { label: "Email", value: (r) => r.user_email },
+      { label: "Plan", value: (r) => planLabel(r.plan) },
+      { label: "Status", value: (r) => r.status },
+      { label: "Gateway", value: (r) => r.gateway },
+      { label: "Amount (GBP)", value: (r) => (r.amount_paise / 100).toFixed(2) },
+      { label: "Period start", value: (r) => r.current_period_start },
+      { label: "Period end", value: (r) => r.current_period_end },
+      { label: "Cancelled at", value: (r) => r.cancelled_at },
+    ],
+    items,
+  );
+
   return (
     <PageShell
       title="Subscriptions"
-      subtitle={`${total.toLocaleString()} subscription${total === 1 ? "" : "s"}`}
-    >
-      {/* Search + filters */}
-      <motion.div variants={fadeUp} style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={searchBoxStyle}>
-          <Search style={{ width: 15, height: 15, color: "#aaa" }} />
-          <input
-            type="text"
-            placeholder="Search by user name or email…"
+      subtitle="Every paid plan, its billing period and when it renews."
+      meta={!loading ? <Pill tone="neutral">{total.toLocaleString("en-GB")}</Pill> : undefined}
+      actions={
+        <Button size="sm" onClick={exportCsv} disabled={loading || items.length === 0} title="Exports the rows currently shown">
+          <Download className="h-3.5 w-3.5" aria-hidden /> Export CSV
+        </Button>
+      }
+      toolbar={
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField
             value={qLive}
-            onChange={(e) => setQLive(e.target.value)}
-            style={searchInputStyle}
+            onChange={setQLive}
+            placeholder="Search by member name or email…"
+            className="w-full max-w-sm"
           />
-          {qLive && (
-            <button onClick={() => setQLive("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#aaa", display: "flex" }}>
-              <X style={{ width: 14, height: 14 }} />
-            </button>
-          )}
+          <div className="max-w-full overflow-x-auto">
+            <Segmented<StatusFilter>
+              ariaLabel="Filter by status"
+              layoutId="subs-status-pill"
+              options={STATUS_FILTERS}
+              value={status}
+              onChange={setStatus}
+            />
+          </div>
         </div>
+      }
+    >
+      <motion.div variants={fadeUp} className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]">
+        <div className="overflow-x-auto" data-admin-scroll>
+          <div className="min-w-[780px]">
+            <div className={`${GRID} border-b border-border/60 bg-secondary/40 px-4 py-2.5 text-[11.5px] font-medium text-muted2-foreground`}>
+              <div>Member</div>
+              <div>Plan</div>
+              <div>Status</div>
+              <div className="text-right">Amount</div>
+              <div>Period</div>
+              <div className="text-right">Renews</div>
+            </div>
 
-        <div style={{ display: "flex", gap: 2, flexWrap: "wrap", background: "rgba(255,255,255,0.6)", padding: 3, borderRadius: 10, border: "1px solid rgba(220,30,60,0.08)", backdropFilter: "blur(6px)" }}>
-          {STATUS_FILTERS.map(({ key, label }) => {
-            const active = status === key;
-            return (
-              <button
-                key={key}
-                onClick={() => setStatus(key)}
-                style={{ position: "relative", padding: "7px 14px", borderRadius: 8, border: "none", background: "transparent", fontSize: 12, fontWeight: active ? 600 : 500, color: active ? "#fff" : "#666", cursor: "pointer", zIndex: 1 }}
-              >
-                {active && (
-                  <motion.span
-                    layoutId="subs-status-pill"
-                    transition={{ type: "spring", stiffness: 380, damping: 28 }}
-                    style={{
-                      position: "absolute", inset: 0,
-                      background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
-                      borderRadius: 8,
-                      boxShadow: "0 4px 12px rgba(220,30,60,0.3)",
-                      zIndex: -1,
-                    }}
-                  />
-                )}
-                {label}
-              </button>
-            );
-          })}
+            {loading ? (
+              <div className="p-3"><SkeletonRows rows={6} /></div>
+            ) : error ? (
+              <div role="alert" className="flex items-center gap-2 px-4 py-5 text-[13px] text-[#9F1239]">
+                <AlertTriangle className="h-4 w-4" aria-hidden /> {error}
+                <Button size="sm" variant="ghost" onClick={load}>Retry</Button>
+              </div>
+            ) : items.length === 0 ? (
+              <EmptyState
+                icon={CreditCard}
+                title={q ? `No subscriptions matching “${q}”` : "No subscriptions in this view"}
+                description={q ? "Try a different name or email." : status === "expiring" ? "Nothing renews in the next 14 days." : "Paid plans appear here once members subscribe."}
+              />
+            ) : (
+              items.map((s) => <SubRow key={s.id} sub={s} />)
+            )}
+          </div>
         </div>
-      </motion.div>
-
-      {/* Table — horizontal scroll on small screens keeps the page fixed
-          while the wide grid stays readable inside the card. */}
-      <motion.div variants={fadeUp}>
-        <GlassCard padding={0}>
-          <div style={{ overflowX: "auto" }}>
-          <div style={{ minWidth: 740 }}>
-          <div style={tableHeadStyle}>
-            <div>User</div>
-            <div>Plan</div>
-            <div>Status</div>
-            <div style={{ textAlign: "right" }}>Amount</div>
-            <div>Period</div>
-            <div style={{ textAlign: "right" }}>Renews</div>
-          </div>
-
-          {loading ? (
-            <div style={{ padding: 10 }}>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="m4m-shimmer" style={{ height: 56, margin: "6px 8px", borderRadius: 10 }} />
-              ))}
-            </div>
-          ) : error ? (
-            <div style={{ padding: 20, color: "#a0153c", fontSize: 13 }}>
-              <AlertTriangle style={{ width: 14, height: 14, display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} />
-              {error}
-            </div>
-          ) : items.length === 0 ? (
-            <div style={{ padding: "60px 20px", textAlign: "center", color: "#999" }}>
-              <CreditCard style={{ width: 36, height: 36, color: "#e5e5e5", margin: "0 auto 12px", display: "block" }} />
-              <p style={{ fontSize: 13, margin: 0 }}>{q ? `No subscriptions matching "${q}"` : "No subscriptions in this category."}</p>
-            </div>
-          ) : (
-            items.map((s, i) => <SubRow key={s.id} sub={s} index={i} />)
-          )}
-          </div>
-          </div>
-        </GlassCard>
       </motion.div>
 
       {pageCount > 1 && status !== "expiring" && (
-        <motion.div variants={fadeUp} style={{ marginTop: 16, display: "flex", justifyContent: "center", alignItems: "center", gap: 10 }}>
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} style={paginationBtn(page <= 1)}>
-            <ChevronLeft style={{ width: 14, height: 14 }} /> Prev
-          </button>
-          <span style={{ fontSize: 13, color: "#666" }}>
-            Page <strong style={{ color: "#1a0a14" }}>{page}</strong> of {pageCount}
+        <motion.nav variants={fadeUp} aria-label="Pagination" className="mt-4 flex items-center justify-center gap-3">
+          <Button size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Prev
+          </Button>
+          <span className="text-[12.5px] text-muted2-foreground tabular-nums">
+            Page <strong className="text-foreground">{page}</strong> of {pageCount}
           </span>
-          <button onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount} style={paginationBtn(page >= pageCount)}>
-            Next <ChevronRight style={{ width: 14, height: 14 }} />
-          </button>
-        </motion.div>
+          <Button size="sm" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount}>
+            Next <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        </motion.nav>
       )}
     </PageShell>
   );
 }
 
-function SubRow({ sub, index }: { sub: SubscriptionRow; index: number }) {
-  const meta = PLAN_META[sub.plan] || { color: "#888", gradient: "" };
+function SubRow({ sub }: { sub: SubscriptionRow }) {
+  const dot = PLAN_DOT[sub.plan] || "#8A7080";
   const renews = daysUntil(sub.current_period_end);
-  const renewColor = renews.tone === "bad"  ? "#a0153c"
-                   : renews.tone === "warn" ? "#9A6B00"
-                   : renews.tone === "ok"   ? "#3F5937"
-                   : "#888";
+  const st = STATUS_PILL[sub.status] || { tone: "neutral" as Tone, label: sub.status };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(0.6, index * 0.02), duration: 0.28 }}
+    <Link
+      href={`/admin/users/${sub.user_id}`}
+      className={`${GRID} border-b border-border/40 px-4 py-3 text-foreground no-underline transition-colors last:border-0 hover:bg-secondary/40 focus-visible:bg-secondary/60 focus-visible:outline-none`}
     >
-      <Link
-        href={`/admin/users/${sub.user_id}`}
-        style={tableRowStyle}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLAnchorElement).style.background = "rgba(220,30,60,0.03)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <div style={{
-            width: 30, height: 30, borderRadius: 10,
-            background: `${meta.color}1a`,
-            display: "grid", placeItems: "center", flexShrink: 0,
-          }}>
-            <Crown style={{ width: 14, height: 14, color: meta.color }} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#1a0a14", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub.user_name}</div>
-            <div style={{ fontSize: 11, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub.user_email || "—"}</div>
-          </div>
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border/70 bg-secondary/60">
+          <Crown className="h-3.5 w-3.5" style={{ color: dot }} aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-medium">{sub.user_name}</div>
+          <div className="truncate text-[11.5px] text-muted2-foreground">{sub.user_email || "—"}</div>
         </div>
+      </div>
 
-        <div>
-          <span style={{
-            fontSize: 11, fontWeight: 700, textTransform: "capitalize", letterSpacing: "0.04em",
-            padding: "4px 10px", borderRadius: 999,
-            background: `${meta.color}1f`, color: meta.color,
-          }}>{planLabel(sub.plan)}</span>
-          {sub.gateway && (
-            <span style={{ marginLeft: 6, fontSize: 10, color: "#aaa", textTransform: "uppercase" }}>· {sub.gateway}</span>
-          )}
-        </div>
+      <div className="flex items-center gap-1.5 text-[12.5px]">
+        <span className="font-medium">{planLabel(sub.plan)}</span>
+        {sub.gateway && <span className="text-[11px] uppercase text-muted2-foreground">· {sub.gateway}</span>}
+      </div>
 
-        <div><StatusChip status={sub.status} /></div>
+      <div><Pill tone={st.tone}>{st.label}</Pill></div>
 
-        <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: "#1a0a14" }}>
-          {formatGBP(sub.amount_paise)}
-        </div>
+      <div className="text-right text-[13px] font-semibold tabular-nums">{formatGBP(sub.amount_paise)}</div>
 
-        <div style={{ fontSize: 11, color: "#888" }}>
-          {sub.current_period_start ? formatDate(sub.current_period_start) : "—"}
-          <br />
-          <span style={{ color: "#bbb", display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <ArrowRight size={11} strokeWidth={2} /> {formatDate(sub.current_period_end)}
-          </span>
-        </div>
+      <div className="text-[11.5px] leading-5 text-muted2-foreground tabular-nums">
+        {sub.current_period_start ? formatDate(sub.current_period_start) : "—"}
+        <span className="flex items-center gap-1">
+          <ArrowRight className="h-3 w-3" aria-hidden /> {formatDate(sub.current_period_end)}
+        </span>
+      </div>
 
-        <div style={{ textAlign: "right", fontSize: 12, fontWeight: 600, color: renewColor }}>
-          {renews.label}
-        </div>
-      </Link>
-    </motion.div>
+      <div className="text-right"><Pill tone={renews.tone}>{renews.label}</Pill></div>
+    </Link>
   );
-}
-
-function StatusChip({ status }: { status: string }) {
-  const palette: Record<string, { bg: string; fg: string; label: string }> = {
-    active:    { bg: "rgba(92,122,82,0.12)",  fg: "#3F5937", label: "Active" },
-    paused:    { bg: "rgba(140,140,140,0.12)", fg: "#666",   label: "Paused" },
-    cancelled: { bg: "rgba(0,0,0,0.06)",       fg: "#666",   label: "Cancelled" },
-    expired:   { bg: "rgba(220,30,60,0.06)",   fg: "#a0153c", label: "Expired" },
-    past_due:  { bg: "rgba(200,144,32,0.14)",  fg: "#8A5F00", label: "Past due" },
-  };
-  const p = palette[status] || { bg: "rgba(0,0,0,0.05)", fg: "#666", label: status };
-  return (
-    <span style={{
-      fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
-      padding: "4px 9px", borderRadius: 999, background: p.bg, color: p.fg,
-    }}>{p.label}</span>
-  );
-}
-
-const searchBoxStyle: React.CSSProperties = {
-  display: "flex", alignItems: "center", gap: 8,
-  background: "rgba(255,255,255,0.85)",
-  border: "1px solid rgba(220,30,60,0.12)",
-  borderRadius: 12, padding: "9px 14px", width: 340, maxWidth: "100%",
-  backdropFilter: "blur(8px)",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
-};
-
-const searchInputStyle: React.CSSProperties = {
-  flex: 1, border: "none", outline: "none",
-  fontSize: 13.5, color: "#1a0a14", background: "transparent",
-  fontFamily: "inherit",
-};
-
-const tableHeadStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(180px, 1.4fr) 130px 110px 100px minmax(140px, 1fr) 90px",
-  gap: 14, padding: "14px 18px",
-  borderBottom: "1px solid rgba(220,30,60,0.08)",
-  fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em",
-  color: "#888",
-};
-
-const tableRowStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(180px, 1.4fr) 130px 110px 100px minmax(140px, 1fr) 90px",
-  gap: 14, padding: "12px 18px",
-  borderBottom: "1px solid rgba(220,30,60,0.04)",
-  alignItems: "center",
-  textDecoration: "none", color: "inherit",
-  transition: "background 0.15s",
-};
-
-function paginationBtn(disabled: boolean): React.CSSProperties {
-  return {
-    display: "inline-flex", alignItems: "center", gap: 4,
-    padding: "8px 14px", borderRadius: 10,
-    background: disabled ? "rgba(0,0,0,0.03)" : "rgba(255,255,255,0.85)",
-    border: `1px solid ${disabled ? "rgba(0,0,0,0.05)" : "rgba(220,30,60,0.12)"}`,
-    fontSize: 12, fontWeight: 600,
-    color: disabled ? "#bbb" : "#1a0a14",
-    cursor: disabled ? "not-allowed" : "pointer",
-    backdropFilter: "blur(6px)",
-  };
 }

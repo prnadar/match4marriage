@@ -107,6 +107,19 @@ class User(TenantModel):
     is_profile_complete: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_active_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
+    # Member-controlled account settings: notification/communication prefs plus
+    # self-service deactivation / deletion markers. Shape (all keys optional):
+    #   {"notifications": {"email_interests": bool, ...},
+    #    "deactivation": {"at": iso, "by": "self"},
+    #    "deletion": {"at": iso, "reason": str, ...}}
+    # DEFERRED + no ORM-side default on purpose: plain `select(User)` never
+    # reads it and INSERTs never write it, so every other code path keeps
+    # working even on a database where the boot-time schema guard (main.py)
+    # hasn't added the column yet. Only routers/auth.py reads/writes it.
+    account_settings: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, deferred=True
+    )
+
     # Relationships
     profile: Mapped["UserProfile"] = relationship(
         "UserProfile", back_populates="user", uselist=False, lazy="select"

@@ -7,13 +7,13 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   signInWithEmailAndPassword,
-  sendPasswordResetEmail,
+  signOut,
   RecaptchaVerifier,
   signInWithPhoneNumber,
   type ConfirmationResult,
 } from "firebase/auth";
-import { firebaseAuth, rememberSessionUid } from "@/lib/firebase";
-import { profileApi } from "@/lib/api";
+import { clearClientState, firebaseAuth, rememberSessionUid } from "@/lib/firebase";
+import { accountApi, apiErrorMessage, profileApi } from "@/lib/api";
 import {
   Heart, Phone, Mail, Eye, EyeOff, ArrowRight, AlertCircle,
   CheckCircle2, Loader2, ArrowLeft,
@@ -102,7 +102,28 @@ export default function LoginPage() {
     if (routingRef.current) return;
     routingRef.current = true;
     try {
-      const res = await profileApi.me();
+      let res: Awaited<ReturnType<typeof profileApi.me>>;
+      try {
+        res = await profileApi.me();
+      } catch (e: any) {
+        // A member who deactivated their own account is reactivated simply by
+        // signing in again. Accounts disabled by an admin stay locked.
+        if (e?.status === 403 && /disabled/i.test(String(e?.message || ""))) {
+          try {
+            await accountApi.reactivate();
+            setInfo("Welcome back — your account is active again.");
+            res = await profileApi.me();
+          } catch (re: any) {
+            try { await signOut(firebaseAuth); } catch {}
+            clearClientState();
+            routingRef.current = false;
+            setError(apiErrorMessage(re, "This account has been disabled. Please contact support."));
+            return;
+          }
+        } else {
+          throw e;
+        }
+      }
       const p = (res.data as any)?.data;
       // Only a COMPLETE member (profile + verified phone) goes to the
       // dashboard. Anyone else lands on onboarding directly — never flashed
@@ -145,14 +166,21 @@ export default function LoginPage() {
     } finally { setLoading(false); }
   };
 
-  const handleReset = async () => {
-    clearMsgs();
-    if (!email.includes("@")) return setError("Enter your email first, then click reset.");
-    try {
-      await sendPasswordResetEmail(firebaseAuth, email.trim());
-      setInfo("Password reset email sent. Check your inbox.");
-    } catch (e: any) { setError(e?.message || "Could not send reset email."); }
-  };
+  // Messages handed over via the URL by the reset / settings flows, plus an
+  // optional prefilled email. Read from window.location (not useSearchParams)
+  // so this page doesn't need a Suspense boundary.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    const pre = q.get("email");
+    if (pre) setEmail(pre);
+    if (q.get("reset") === "done") setInfo("Your password has been updated. Sign in with your new password.");
+    else if (q.get("deactivated") === "1") setInfo("Your account is deactivated and hidden from other members. Sign in any time to reactivate it.");
+    else if (q.get("deleted") === "1") setInfo("Your account has been deleted. We wish you every happiness.");
+    else if (q.get("signedout") === "all") setInfo("You've been signed out on all devices.");
+  }, []);
+
+  const forgotHref = `/auth/forgot-password${email.includes("@") ? `?email=${encodeURIComponent(email.trim())}` : ""}`;
 
   const getRecaptcha = () => {
     // Start clean each time: a stale widget left in the container (re-mount,
@@ -514,16 +542,14 @@ export default function LoginPage() {
                   icon={null}
                   label="Password"
                   right={
-                    <button
-                      type="button"
-                      onClick={handleReset}
+                    <Link
+                      href={forgotHref}
                       style={{
-                        background: "none", border: "none", padding: 0, cursor: "pointer",
-                        fontSize: 11, fontWeight: 600, color: "#dc1e3c", fontFamily: "inherit",
+                        fontSize: 11, fontWeight: 600, color: "#dc1e3c", textDecoration: "none",
                       }}
                     >
-                      Forgot?
-                    </button>
+                      Forgot password?
+                    </Link>
                   }
                 >
                   <input

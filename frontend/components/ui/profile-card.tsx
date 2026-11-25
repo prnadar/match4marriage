@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
-  MapPin, Briefcase, GraduationCap, BadgeCheck, Sparkles,
+  MapPin, Briefcase, GraduationCap, BadgeCheck, Sparkles, Check, Compass,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Portrait } from "./portrait";
@@ -57,6 +57,10 @@ export interface ProfileCardData {
   gender?: "male" | "female" | string;
   /** Optional pill shown top-left ("Top Match", "Featured", etc.) */
   ribbon?: string;
+  /** Optional "why you match" reasons (My Matches feed). */
+  reasons?: string[];
+  /** Optional muted footnote, e.g. "Outside your age range". */
+  note?: string;
 }
 
 /**
@@ -103,6 +107,7 @@ export function ProfileCard({
         "rounded-[22px] border border-rose-100/70",
         "shadow-luxe transition-[box-shadow] duration-300",
         "hover:shadow-luxe-hover",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
         className,
       )}
       style={{ animationDelay: `${Math.min(index, 12) * 40}ms` }}
@@ -248,6 +253,33 @@ export function ProfileCard({
           {data.religion && <Chip>{data.religion}</Chip>}
         </div>
       </div>
+
+      {/* Why you match (optional — My Matches feed) */}
+      {((data.reasons && data.reasons.length > 0) || data.note) && (
+        <div className="border-t border-rose-100/70 px-4 pb-4 pt-3">
+          {data.reasons && data.reasons.length > 0 && (
+            <>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-rose-900/50">
+                Why you match
+              </p>
+              <ul className="space-y-1">
+                {data.reasons.slice(0, 3).map((r) => (
+                  <li key={r} className="flex items-start gap-1.5 text-[12px] leading-snug text-rose-950/75">
+                    <Check className="mt-[2px] h-3 w-3 shrink-0 text-rose-600" strokeWidth={2.6} />
+                    <span>{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {data.note && (
+            <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-snug text-amber-800/90">
+              <Compass className="mt-[1px] h-3 w-3 shrink-0" />
+              <span>{data.note}</span>
+            </p>
+          )}
+        </div>
+      )}
     </Link>
     </Tilt3D>
   );

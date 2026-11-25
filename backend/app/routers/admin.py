@@ -28,6 +28,9 @@ from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import SubscriptionTier, User, UserProfile
 from app.schemas.common import APIResponse, PaginatedResponse
 from app.schemas.user import ProfileRead
+from app.models.admin_crm import AdminCommunication, UserCrmProfile
+from app.services.crm import extract_contact, plan_label
+from app.services.audit import record_admin_action
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = get_logger(__name__)
@@ -89,14 +92,34 @@ def _serialize_user(u: User, p: UserProfile | None) -> dict[str, Any]:
         "primary_photo_url": primary,
         "completeness_score": int(p.completeness_score) if p and p.completeness_score is not None else 0,
         "verification_status": p.verification_status if p else "draft",
+        # CRM: contact details normalised for one-click call / WhatsApp / email
+        # (phone_e164, phone_country_code, whatsapp_number, preferred_contact…).
+        "gender": p.gender.value if (p and p.gender) else None,
+        "plan_label": plan_label(u.subscription_tier.value if u.subscription_tier else None),
+        **extract_contact(u, p),
     }
 
 
+def _serialize_user_crm(u: User, p: UserProfile | None, crm: UserCrmProfile | None) -> dict[str, Any]:
+    d = _serialize_user(u, p)
+    d["tags"] = list(crm.tags or []) if crm and crm.deleted_at is None else []
+    d["follow_up_at"] = crm.follow_up_at.isoformat() if crm and crm.deleted_at is None and crm.follow_up_at else None
+    d["follow_up_note"] = crm.follow_up_note if crm and crm.deleted_at is None else None
+    return d
+
+
 USER_CSV_COLS = [
-    "id", "membership_number", "first_name", "last_name", "email", "phone",
-    "city", "country", "religion", "occupation", "subscription_tier",
+    "id", "membership_number", "first_name", "last_name", "gender",
+    # Contact
+    "email", "is_email_verified", "phone_e164", "phone_country_code", "is_phone_verified",
+    "whatsapp_number", "preferred_contact", "best_time_to_call", "alt_phone",
+    "contact_person_name", "contact_relationship", "address",
+    # Profile / account
+    "city", "country", "religion", "occupation", "subscription_tier", "plan_label",
     "verification_status", "completeness_score", "is_active",
-    "is_email_verified", "is_phone_verified", "created_at", "last_active_at",
+    "created_at", "last_active_at",
+    # CRM
+    "tags", "follow_up_at", "follow_up_note",
 ]
 
 
@@ -110,15 +133,36 @@ async def list_users(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=200),
     format: str | None = Query(default=None, description="json (default) | csv"),
+    tag: str | None = Query(default=None, max_length=40, description="CRM tag, e.g. VIP"),
+    follow_up: str | None = Query(default=None, description="due | upcoming | any"),
+    plan: str | None = Query(default=None, description="free | silver | gold | platinum"),
 ):
     _require_admin(current_user)
     tenant_uuid = await _tenant_uuid_from_slug(db, tenant_slug)
 
     base = (
-        select(User, UserProfile)
+        select(User, UserProfile, UserCrmProfile)
         .outerjoin(UserProfile, UserProfile.user_id == User.id)
+        .outerjoin(UserCrmProfile, (UserCrmProfile.user_id == User.id) & (UserCrmProfile.tenant_id == tenant_uuid))
         .where(User.tenant_id == tenant_uuid)
     )
+
+    # CRM filters
+    if tag:
+        from sqlalchemy import cast as _cast
+        from sqlalchemy.dialects.postgresql import JSONB as _JSONB
+        base = base.where(UserCrmProfile.deleted_at.is_(None), _cast(UserCrmProfile.tags, _JSONB).contains([tag.strip()]))
+    if follow_up in ("due", "upcoming", "any"):
+        base = base.where(UserCrmProfile.deleted_at.is_(None), UserCrmProfile.follow_up_at.is_not(None))
+        if follow_up == "due":
+            base = base.where(UserCrmProfile.follow_up_at <= date.today())
+        elif follow_up == "upcoming":
+            base = base.where(UserCrmProfile.follow_up_at > date.today())
+    if plan:
+        try:
+            base = base.where(User.subscription_tier == SubscriptionTier(plan.lower()))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="plan must be one of free, silver, gold, platinum")
 
     # Filters
     if status_filter == "active":
@@ -154,7 +198,7 @@ async def list_users(
         return _stream_csv(
             filename="users.csv",
             cols=USER_CSV_COLS,
-            row_iter=(_csv_row(_serialize_user(u, p), USER_CSV_COLS) for u, p in rows),
+            row_iter=(_csv_row(_serialize_user_crm(u, p, crm), USER_CSV_COLS) for u, p, crm in rows),
         )
 
     total: int = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
@@ -164,7 +208,25 @@ async def list_users(
         base.order_by(User.created_at.desc()).offset(offset).limit(limit)
     )).all()
 
-    items = [_serialize_user(u, p) for u, p in rows]
+    items = [_serialize_user_crm(u, p, crm) for u, p, crm in rows]
+
+    # Last admin contact per row (one grouped query for the page).
+    if items:
+        page_ids = [u.id for u, _, _ in rows]
+        last_rows = (await db.execute(
+            select(AdminCommunication.user_id, func.max(AdminCommunication.created_at))
+            .where(
+                AdminCommunication.tenant_id == tenant_uuid,
+                AdminCommunication.user_id.in_(page_ids),
+                AdminCommunication.deleted_at.is_(None),
+                AdminCommunication.status.in_(["sent", "logged"]),
+            )
+            .group_by(AdminCommunication.user_id)
+        )).all()
+        last_map = {str(uid): ts.isoformat() if ts else None for uid, ts in last_rows}
+        for it in items:
+            it["last_contacted_at"] = last_map.get(it["id"])
+
     return PaginatedResponse.create(items=items, total=total, page=page, limit=limit)
 
 
@@ -180,6 +242,8 @@ def _csv_row(d: dict[str, Any], cols: list[str]) -> list[str]:
             out.append("")
         elif isinstance(v, bool):
             out.append("true" if v else "false")
+        elif isinstance(v, (list, tuple)):
+            out.append("; ".join(str(x) for x in v))
         else:
             out.append(str(v))
     return out
@@ -271,6 +335,7 @@ async def bulk_user_action(
             logger.warning("bulk_firebase_revoke_skipped", error=str(exc))
 
     logger.info("admin_bulk_user_action", admin=current_user.get("sub"), action=action, requested=len(ids), affected=affected)
+    await record_admin_action(db, current_user, f"user.bulk_{action}", tenant_id=tenant_uuid, target_type="user", summary=f"Bulk {action}: {affected} of {len(ids)} member(s)", details={"user_ids": [str(i) for i in ids][:50], "affected": affected})
     return APIResponse(success=True, data={
         "action": action,
         "requested": len(ids),
@@ -309,7 +374,45 @@ async def get_user_detail(
         select(func.count()).where(Report.reporter_id == user_id, Report.deleted_at.is_(None))
     )).scalar_one()
 
-    return APIResponse(success=True, data={**base, "profile": profile, "reports_against": reports_against, "reports_filed": reports_filed})
+    # CRM: tags + follow-up, current subscription, last admin contact.
+    crm = (await db.execute(
+        select(UserCrmProfile).where(
+            UserCrmProfile.tenant_id == tenant_uuid,
+            UserCrmProfile.user_id == user_id,
+            UserCrmProfile.deleted_at.is_(None),
+        )
+    )).scalar_one_or_none()
+    sub = (await db.execute(
+        select(Subscription).where(
+            Subscription.tenant_id == tenant_uuid,
+            Subscription.user_id == user_id,
+            Subscription.deleted_at.is_(None),
+        ).order_by(Subscription.current_period_end.desc()).limit(1)
+    )).scalar_one_or_none()
+    last_contacted = (await db.execute(
+        select(func.max(AdminCommunication.created_at)).where(
+            AdminCommunication.tenant_id == tenant_uuid,
+            AdminCommunication.user_id == user_id,
+            AdminCommunication.deleted_at.is_(None),
+            AdminCommunication.status.in_(["sent", "logged"]),
+        )
+    )).scalar_one_or_none()
+    crm_fields = {
+        "tags": list(crm.tags or []) if crm else [],
+        "follow_up_at": crm.follow_up_at.isoformat() if crm and crm.follow_up_at else None,
+        "follow_up_note": crm.follow_up_note if crm else None,
+        "last_contacted_at": last_contacted.isoformat() if last_contacted else None,
+        "subscription": {
+            "plan": sub.plan,
+            "plan_label": plan_label(sub.plan),
+            "status": sub.status.value if sub.status else None,
+            "current_period_end": sub.current_period_end.isoformat() if sub.current_period_end else None,
+            "amount_pence": sub.amount_paise,
+            "currency": sub.currency,
+        } if sub else None,
+    }
+
+    return APIResponse(success=True, data={**base, **crm_fields, "profile": profile, "reports_against": reports_against, "reports_filed": reports_filed})
 
 
 async def _load_user_for_admin(db: AsyncSession, user_id: uuid.UUID, tenant_uuid: uuid.UUID) -> User:
@@ -345,6 +448,7 @@ async def suspend_user(
     except Exception as exc:
         logger.warning("firebase_revoke_skipped", error=str(exc))
     logger.info("admin_suspend_user", admin=current_user.get("sub"), target=str(user_id))
+    await record_admin_action(db, current_user, "user.suspend", tenant_id=tenant_uuid, target_type="user", target_id=user_id, target_label=u.email or u.membership_number)
     return APIResponse(success=True, data={"id": str(u.id), "is_active": u.is_active})
 
 
@@ -361,6 +465,7 @@ async def activate_user(
     u.is_active = True
     await db.flush()
     logger.info("admin_activate_user", admin=current_user.get("sub"), target=str(user_id))
+    await record_admin_action(db, current_user, "user.activate", tenant_id=tenant_uuid, target_type="user", target_id=user_id, target_label=u.email or u.membership_number)
     return APIResponse(success=True, data={"id": str(u.id), "is_active": u.is_active})
 
 
@@ -394,6 +499,7 @@ async def soft_delete_user(
     except Exception:
         pass
     logger.info("admin_soft_delete_user", admin=current_user.get("sub"), target=str(user_id))
+    await record_admin_action(db, current_user, "user.delete", tenant_id=tenant_uuid, target_type="user", target_id=user_id, target_label=u.email or u.membership_number)
     return APIResponse(success=True, data={"id": str(u.id)})
 
 
@@ -420,6 +526,7 @@ async def restore_user(
         prof.deleted_at = None
     await db.flush()
     logger.info("admin_restore_user", admin=current_user.get("sub"), target=str(user_id))
+    await record_admin_action(db, current_user, "user.restore", tenant_id=tenant_uuid, target_type="user", target_id=user_id, target_label=u.email or u.membership_number)
     return APIResponse(success=True, data={"id": str(u.id)})
 
 
@@ -473,16 +580,29 @@ async def dashboard_stats(
     rejected = await _count(rejected_q)
     open_reports = await _count(reports_open_q)
 
-    # Registration trend (last 14 days, bucketed by day)
+    # Registration trend (last 90 days, bucketed by day). `registration_trend`
+    # keeps its historical 14-day window; the dashboard charts the 90-day one.
     trend_rows = (await db.execute(sa_text("""
         SELECT DATE(created_at AT TIME ZONE 'UTC') AS d, COUNT(*) AS c
         FROM users
         WHERE tenant_id = :tid AND deleted_at IS NULL
-          AND created_at >= NOW() - INTERVAL '14 days'
+          AND created_at >= NOW() - INTERVAL '90 days'
         GROUP BY d
         ORDER BY d
     """), {"tid": str(tenant_uuid)})).all()
-    trend = [{"date": r[0].isoformat(), "count": int(r[1])} for r in trend_rows]
+    trend_90d = [{"date": r[0].isoformat(), "count": int(r[1])} for r in trend_rows]
+    _cut14 = (now - timedelta(days=14)).date().isoformat()
+    trend = [t for t in trend_90d if t["date"] >= _cut14]
+
+    # ── Extended console metrics (one round-trip for all scalar counts) ──
+    # Isolated in a savepoint: a failure here must never take down the core
+    # stats the notification bell and dashboard rely on.
+    ext: dict[str, Any] = {}
+    try:
+        async with db.begin_nested():
+            ext = await _dashboard_extended(db, tenant_uuid, now)
+    except Exception as exc:
+        logger.warning("dashboard_extended_failed", error=str(exc))
 
     # Religion distribution
     relig_rows = (await db.execute(sa_text("""
@@ -626,9 +746,149 @@ async def dashboard_stats(
         "plan_distribution": plan_distribution,
         "renewals_due": renewals_due,
         "registration_trend": trend,
+        "registration_trend_90d": trend_90d,
         "religion_distribution": religion,
         "recent_activity": recent,
+        **ext,
     })
+
+
+async def _dashboard_extended(db: AsyncSession, tenant_uuid: uuid.UUID, now: datetime) -> dict[str, Any]:
+    """Period-over-period deltas, funnel, engagement, breakdowns and the
+    needs-attention queue for the admin dashboard. Additive to /admin/stats."""
+    tid = str(tenant_uuid)
+    month_start = datetime(now.year, now.month, 1)
+    prev_month_start = datetime(now.year - 1, 12, 1) if now.month == 1 else datetime(now.year, now.month - 1, 1)
+
+    s = (await db.execute(sa_text("""
+        SELECT
+          (SELECT COUNT(*) FROM users WHERE tenant_id = :tid AND deleted_at IS NULL
+             AND created_at >= NOW() - INTERVAL '14 days' AND created_at < NOW() - INTERVAL '7 days'),
+          (SELECT COUNT(*) FROM users WHERE tenant_id = :tid AND deleted_at IS NULL
+             AND created_at >= NOW() - INTERVAL '60 days' AND created_at < NOW() - INTERVAL '30 days'),
+          (SELECT COUNT(*) FROM users WHERE tenant_id = :tid AND deleted_at IS NULL AND is_profile_complete),
+          (SELECT COUNT(*) FROM profiles WHERE tenant_id = :tid AND deleted_at IS NULL
+             AND (submitted_at IS NOT NULL OR verification_status IN ('submitted','approved','rejected'))),
+          (SELECT COUNT(DISTINCT user_id) FROM subscriptions WHERE tenant_id = :tid
+             AND UPPER(status::text) = 'ACTIVE' AND current_period_end >= NOW()),
+          (SELECT COUNT(*) FROM interests WHERE tenant_id = :tid AND deleted_at IS NULL
+             AND created_at >= NOW() - INTERVAL '30 days'),
+          (SELECT COUNT(*) FROM interests WHERE tenant_id = :tid AND deleted_at IS NULL
+             AND created_at >= NOW() - INTERVAL '60 days' AND created_at < NOW() - INTERVAL '30 days'),
+          (SELECT COUNT(*) FROM matches WHERE tenant_id = :tid AND deleted_at IS NULL
+             AND UPPER(status::text) = 'MUTUAL'),
+          (SELECT COUNT(*) FROM matches WHERE tenant_id = :tid AND deleted_at IS NULL
+             AND UPPER(status::text) = 'MUTUAL' AND updated_at >= NOW() - INTERVAL '30 days'),
+          (SELECT COUNT(*) FROM messages WHERE tenant_id = :tid AND deleted_at IS NULL
+             AND created_at >= NOW() - INTERVAL '30 days'),
+          (SELECT COUNT(*) FROM messages WHERE tenant_id = :tid AND deleted_at IS NULL
+             AND created_at >= NOW() - INTERVAL '60 days' AND created_at < NOW() - INTERVAL '30 days'),
+          (SELECT COALESCE(SUM(amount_paise), 0) FROM subscriptions WHERE tenant_id = :tid
+             AND UPPER(status::text) IN ('ACTIVE', 'PAST_DUE', 'EXPIRED', 'PAUSED')
+             AND current_period_start >= :prev_month_start AND current_period_start < :month_start),
+          (SELECT COUNT(*) FROM enquiries WHERE tenant_id = :tid AND deleted_at IS NULL
+             AND UPPER(status::text) = 'NEW'),
+          (SELECT AVG(EXTRACT(EPOCH FROM (reviewed_at - submitted_at))) / 3600.0 FROM profiles
+             WHERE tenant_id = :tid AND deleted_at IS NULL AND submitted_at IS NOT NULL
+             AND reviewed_at IS NOT NULL AND reviewed_at >= submitted_at
+             AND verification_status IN ('approved','rejected')
+             AND reviewed_at >= NOW() - INTERVAL '30 days')
+    """), {"tid": tid, "month_start": month_start, "prev_month_start": prev_month_start})).one()
+    (new_prev_7d, new_prev_30d, profile_complete, submitted_ever, paid_members,
+     interests_30d, interests_prev_30d, mutual_total, mutual_30d, messages_30d,
+     messages_prev_30d, revenue_prev_month, new_enquiries, avg_review_hours) = s
+
+    sub_rows = (await db.execute(sa_text("""
+        SELECT LOWER(plan) AS p, COUNT(*) AS c, COALESCE(SUM(amount_paise), 0) AS amt
+        FROM subscriptions
+        WHERE tenant_id = :tid AND UPPER(status::text) = 'ACTIVE' AND current_period_end >= NOW()
+        GROUP BY LOWER(plan)
+    """), {"tid": tid})).all()
+    active_by_plan = {k: {"count": 0, "amount_paise": 0} for k in ("silver", "gold", "platinum")}
+    for p, c, amt in sub_rows:
+        active_by_plan.setdefault(p, {"count": 0, "amount_paise": 0})
+        active_by_plan[p] = {"count": int(c), "amount_paise": int(amt)}
+
+    gender_rows = (await db.execute(sa_text("""
+        SELECT LOWER(COALESCE(gender::text, 'unknown')) AS g, COUNT(*) FROM profiles
+        WHERE tenant_id = :tid AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC
+    """), {"tid": tid})).all()
+    country_rows = (await db.execute(sa_text("""
+        SELECT COALESCE(NULLIF(TRIM(country), ''), 'Unknown') AS c, COUNT(*) FROM profiles
+        WHERE tenant_id = :tid AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC LIMIT 8
+    """), {"tid": tid})).all()
+
+    waiting_rows = (await db.execute(sa_text("""
+        SELECT user_id, first_name, last_name, submitted_at, completeness_score
+        FROM profiles
+        WHERE tenant_id = :tid AND deleted_at IS NULL AND verification_status = 'submitted'
+        ORDER BY submitted_at ASC NULLS LAST
+        LIMIT 6
+    """), {"tid": tid})).all()
+    now_naive = now.replace(tzinfo=None)
+    oldest_pending = [
+        {
+            "user_id": str(r[0]),
+            "name": f"{(r[1] or '').strip()} {(r[2] or '').strip()}".strip() or "(unnamed)",
+            "submitted_at": r[3].isoformat() if r[3] else None,
+            "waiting_hours": round((now_naive - r[3]).total_seconds() / 3600, 1) if r[3] else None,
+            "completeness_score": int(r[4] or 0),
+        }
+        for r in waiting_rows
+    ]
+
+    # Recent admin actions — the audit table may not exist yet on a fresh DB,
+    # so read it inside a savepoint and degrade to [] instead of failing.
+    recent_admin_actions: list[dict[str, Any]] = []
+    try:
+        async with db.begin_nested():
+            arows = (await db.execute(sa_text("""
+                SELECT created_at, actor_email, action, target_type, target_id, target_label, summary
+                FROM admin_audit_logs WHERE tenant_id = :tid
+                ORDER BY created_at DESC LIMIT 10
+            """), {"tid": tid})).all()
+        recent_admin_actions = [
+            {
+                "created_at": r[0].isoformat() if r[0] else None,
+                "actor_email": r[1], "action": r[2], "target_type": r[3],
+                "target_id": r[4], "target_label": r[5], "summary": r[6],
+            }
+            for r in arows
+        ]
+    except Exception as exc:
+        logger.warning("dashboard_audit_read_failed", error=str(exc))
+
+    return {
+        "deltas": {
+            "new_prev_7d": int(new_prev_7d or 0),
+            "new_prev_30d": int(new_prev_30d or 0),
+            "revenue_prev_month_paise": int(revenue_prev_month or 0),
+            "interests_prev_30d": int(interests_prev_30d or 0),
+            "messages_prev_30d": int(messages_prev_30d or 0),
+        },
+        "funnel": {
+            "profile_complete": int(profile_complete or 0),
+            "submitted": int(submitted_ever or 0),
+            "paid": int(paid_members or 0),
+        },
+        "engagement": {
+            "interests_30d": int(interests_30d or 0),
+            "mutual_matches_total": int(mutual_total or 0),
+            "mutual_matches_30d": int(mutual_30d or 0),
+            "messages_30d": int(messages_30d or 0),
+        },
+        "active_subscriptions_by_plan": [
+            {"plan": k, "count": v["count"], "amount_paise": v["amount_paise"]} for k, v in active_by_plan.items()
+        ],
+        "gender_distribution": [{"gender": r[0], "count": int(r[1])} for r in gender_rows],
+        "country_distribution": [{"country": r[0], "count": int(r[1])} for r in country_rows],
+        "verification_sla": {
+            "avg_review_hours_30d": round(float(avg_review_hours), 1) if avg_review_hours is not None else None,
+            "oldest_pending": oldest_pending,
+        },
+        "enquiries": {"new": int(new_enquiries or 0)},
+        "recent_admin_actions": recent_admin_actions,
+    }
 
 
 # ─── Admin users (people with the `admin` claim) ─────────────────────────────
@@ -709,6 +969,7 @@ async def grant_admin(
     new_claims = {**current, "roles": roles}
     firebase_auth.set_custom_user_claims(user.uid, new_claims, app=app)
     logger.info("admin_granted", uid=user.uid, email=email, by=current_user.get("sub"))
+    await record_admin_action(None, current_user, "admin.grant", target_type="admin", target_id=user.uid, target_label=email, details={"roles": roles, "created": bool(create)})
     return APIResponse(success=True, data={"uid": user.uid, "email": user.email, "roles": roles})
 
 
@@ -739,6 +1000,7 @@ async def revoke_admin(
     except Exception:
         pass
     logger.info("admin_revoked", uid=uid, by=current_user.get("sub"))
+    await record_admin_action(None, current_user, "admin.revoke", target_type="admin", target_id=uid, target_label=user.email)
     return APIResponse(success=True, data={"uid": uid})
 
 
@@ -842,4 +1104,5 @@ async def resolve_report_enriched(
     r.resolved_at = datetime.now(timezone.utc)
     await db.flush()
     logger.info("report_resolved", report_id=str(report_id), status=r.status.value, by=current_user.get("sub"))
+    await record_admin_action(db, current_user, f"report.{r.status.value}", tenant_id=tenant_uuid, target_type="report", target_id=r.id, target_label=(r.category.value if r.category else None), summary=r.action_taken or r.admin_notes, details={"reported_user_id": str(r.reported_user_id)})
     return APIResponse(success=True, data={"id": str(r.id), "status": r.status.value})

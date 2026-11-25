@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle, Tag, Plus, X, Trash2, Edit3, GripVertical, Check,
-  Eye, EyeOff,
+  Eye, EyeOff, ArrowUp, ArrowDown,
 } from "lucide-react";
-import { PageShell, GlassCard, Button, fadeUp } from "@/components/admin/PageShell";
+import { PageShell, Button, fadeUp } from "@/components/admin/PageShell";
+import { Segmented, EmptyState, Skeleton, Pill } from "@/components/admin/primitives";
+import ConfirmModal from "@/components/admin/ConfirmModal";
+import { useToast } from "@/components/admin/Toast";
 import { adminApi, ApiError } from "@/lib/api";
 import { formatGBP } from "@/lib/plans";
+import { usePersistentState, oneOf } from "../_lib/view-state";
 
 type Tier = "silver" | "gold" | "platinum";
 type Period = "monthly" | "quarterly" | "half_yearly" | "yearly";
@@ -39,14 +43,14 @@ const PERIOD_LABEL: Record<Period, string> = {
 };
 
 // Tier metadata. `label` is the marketing name members see on /pricing and the
-// subscription cards — we surface it everywhere in this admin UI so operators
-// don't have to remember the silver/gold/platinum → Basic/Premium/Elite mapping
-// (matches config.py + the DB pricing_plans members pay against). `slug` is the
-// raw backend tier value (kept beneath the label as a subtitle for diagnostics).
-const TIERS: Array<{ key: Tier; label: string; slug: string; color: string }> = [
-  { key: "silver",   label: "Basic",   slug: "silver",   color: "#7d8a93" },
-  { key: "gold",     label: "Premium", slug: "gold",     color: "#c9954a" },
-  { key: "platinum", label: "Elite",   slug: "platinum", color: "#5d4b8a" },
+// subscription cards — surfaced everywhere here so operators don't have to
+// remember the silver/gold/platinum → Basic/Premium/Elite mapping. The colour
+// marks the tier on the card's top rule and check icons only; the label is
+// always text.
+const TIERS: Array<{ key: Tier; label: string; color: string }> = [
+  { key: "silver",   label: "Basic",   color: "#7D8A93" },
+  { key: "gold",     label: "Premium", color: "#B07D35" },
+  { key: "platinum", label: "Elite",   color: "#5D4B8A" },
 ];
 
 const PERIODS: Array<{ key: Period; label: string }> = [
@@ -55,6 +59,9 @@ const PERIODS: Array<{ key: Period; label: string }> = [
   { key: "half_yearly", label: "Every 6 months" },
   { key: "yearly",      label: "Yearly" },
 ];
+
+const VIEW_KEYS = ["all", "live", "hidden"] as const;
+type View = (typeof VIEW_KEYS)[number];
 
 const EMPTY_PLAN: Omit<Plan, "id" | "sort_order"> = {
   key: "",
@@ -68,14 +75,20 @@ const EMPTY_PLAN: Omit<Plan, "id" | "sort_order"> = {
   is_active: true,
 };
 
+type Draftable = Plan | (Omit<Plan, "id" | "sort_order"> & { id?: undefined; sort_order?: undefined });
+
 export default function AdminPricingPage() {
+  const { toast } = useToast();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Plan | (Omit<Plan, "id" | "sort_order"> & { id?: undefined; sort_order?: undefined }) | null>(null);
+  const [editing, setEditing] = useState<Draftable | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Plan | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  const [view, setView] = usePersistentState<View>("pricing.view", "all", oneOf(VIEW_KEYS));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,8 +106,28 @@ export default function AdminPricingPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Reorder via HTML5 DnD ──────────────────────────────────────────────────
-  const reorderTo = async (sourceId: string, targetId: string) => {
+  const visible = useMemo(
+    () => plans.filter((p) => view === "all" || (view === "live" ? p.is_active : !p.is_active)),
+    [plans, view],
+  );
+  const liveCount = plans.filter((p) => p.is_active).length;
+
+  // ── Reorder (drag-and-drop, plus keyboard-accessible up/down buttons) ──────
+  const commitOrder = async (next: Plan[]) => {
+    // Renormalise sort_order in increments of 10 so future inserts have headroom.
+    const renumbered = next.map((p, i) => ({ ...p, sort_order: (i + 1) * 10 }));
+    setPlans(renumbered); // optimistic
+    try {
+      const res = await adminApi.reorderPricingPlans(renumbered.map((p) => ({ id: p.id, sort_order: p.sort_order })));
+      const list = (res.data as any)?.data;
+      if (Array.isArray(list)) setPlans(list);
+    } catch (e) {
+      load(); // revert
+      setError(e instanceof Error ? e.message : "Reorder failed");
+    }
+  };
+
+  const reorderTo = (sourceId: string, targetId: string) => {
     if (sourceId === targetId) return;
     const src = plans.findIndex((p) => p.id === sourceId);
     const tgt = plans.findIndex((p) => p.id === targetId);
@@ -102,28 +135,40 @@ export default function AdminPricingPage() {
     const next = plans.slice();
     const [moved] = next.splice(src, 1);
     next.splice(tgt, 0, moved);
-    // Renormalise sort_order in increments of 10 so future inserts have headroom.
-    const renumbered = next.map((p, i) => ({ ...p, sort_order: (i + 1) * 10 }));
-    setPlans(renumbered); // optimistic
+    commitOrder(next);
+  };
+
+  const move = (id: string, delta: -1 | 1) => {
+    const i = plans.findIndex((p) => p.id === id);
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= plans.length) return;
+    const next = plans.slice();
+    [next[i], next[j]] = [next[j], next[i]];
+    commitOrder(next);
+  };
+
+  const toggleLive = async (p: Plan) => {
+    if (togglingId) return;
+    setTogglingId(p.id);
     try {
-      const res = await adminApi.reorderPricingPlans(
-        renumbered.map((p) => ({ id: p.id, sort_order: p.sort_order }))
-      );
-      const list = (res.data as any)?.data;
-      if (Array.isArray(list)) setPlans(list);
+      await adminApi.updatePricingPlan(p.id, { is_active: !p.is_active });
+      setPlans((prev) => prev.map((x) => x.id === p.id ? { ...x, is_active: !p.is_active } : x));
+      toast("success", `${p.name} is now ${p.is_active ? "hidden" : "live"}`);
     } catch (e) {
-      // Revert on failure
-      load();
-      setError(e instanceof Error ? e.message : "Reorder failed");
+      toast("error", e instanceof Error ? e.message : "Could not update plan");
+    } finally {
+      setTogglingId(null);
     }
   };
 
-  const onDelete = async (id: string) => {
+  const onDelete = async (p: Plan) => {
+    setConfirmDelete(null);
     if (deletingId) return;
-    setDeletingId(id);
+    setDeletingId(p.id);
     try {
-      await adminApi.deletePricingPlan(id);
-      setPlans((prev) => prev.filter((p) => p.id !== id));
+      await adminApi.deletePricingPlan(p.id);
+      setPlans((prev) => prev.filter((x) => x.id !== p.id));
+      toast("success", `Deleted ${p.name}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Delete failed");
     } finally {
@@ -134,61 +179,72 @@ export default function AdminPricingPage() {
   return (
     <PageShell
       title="Pricing plans"
-      subtitle="The plans your members can subscribe to. Drag to reorder."
+      subtitle="The plans members can subscribe to. Order here is the order on the public pricing page."
+      meta={!loading ? <Pill tone="good">{liveCount} live</Pill> : undefined}
       actions={
-        <Button onClick={() => setEditing({ ...EMPTY_PLAN, features: [""] })}>
-          <Plus style={{ width: 14, height: 14 }} /> New plan
+        <Button variant="primary" size="sm" onClick={() => setEditing({ ...EMPTY_PLAN, features: [""] })}>
+          <Plus className="h-3.5 w-3.5" aria-hidden /> New plan
         </Button>
+      }
+      toolbar={
+        plans.length > 0 ? (
+          <Segmented<View>
+            ariaLabel="Filter plans"
+            layoutId="pricing-view-pill"
+            size="sm"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "all", label: "All", count: plans.length },
+              { value: "live", label: "Live", count: liveCount },
+              { value: "hidden", label: "Hidden", count: plans.length - liveCount },
+            ]}
+          />
+        ) : undefined
       }
     >
       {error && (
-        <div style={{
-          padding: "10px 14px", marginBottom: 14,
-          background: "#ffe9ec", border: "1px solid rgba(220,30,60,0.18)",
-          borderRadius: 10, fontSize: 12, color: "#a0153c",
-        }}>
-          <AlertTriangle style={{ width: 13, height: 13, display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} />
-          {error}
+        <div role="alert" className="mb-4 flex items-center gap-2 rounded-lg border border-[#F7CCD5] bg-[#FDECEF] px-3 py-2 text-[12.5px] text-[#9F1239]">
+          <AlertTriangle className="h-3.5 w-3.5" aria-hidden /> {error}
+          <button type="button" onClick={() => setError(null)} aria-label="Dismiss error" className="ml-auto rounded p-0.5 hover:bg-white/60">
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
       )}
 
       {loading ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="m4m-shimmer" style={{ height: 220, borderRadius: 16 }} />
-          ))}
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-3">
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-[240px] rounded-xl" />)}
         </div>
       ) : plans.length === 0 ? (
-        <GlassCard>
-          <div style={{ padding: "60px 20px", textAlign: "center", color: "#999" }}>
-            <Tag style={{ width: 36, height: 36, color: "#e5e5e5", margin: "0 auto 12px", display: "block" }} />
-            <p style={{ fontSize: 13, margin: "0 0 14px" }}>No plans yet. Create your first.</p>
-            <Button onClick={() => setEditing({ ...EMPTY_PLAN, features: [""] })}>
-              <Plus style={{ width: 14, height: 14 }} /> New plan
-            </Button>
-          </div>
-        </GlassCard>
+        <div className="rounded-xl border border-border/70 bg-card">
+          <EmptyState
+            icon={Tag}
+            title="No plans yet"
+            description="Create Basic, Premium and Elite plans so members can subscribe."
+            action={
+              <Button variant="primary" size="sm" onClick={() => setEditing({ ...EMPTY_PLAN, features: [""] })}>
+                <Plus className="h-3.5 w-3.5" aria-hidden /> New plan
+              </Button>
+            }
+          />
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="rounded-xl border border-border/70 bg-card">
+          <EmptyState icon={view === "live" ? Eye : EyeOff} title={view === "live" ? "No live plans" : "No hidden plans"} description="Switch the filter to see the rest." />
+        </div>
       ) : (
-        <motion.div
-          variants={fadeUp}
-          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))", gap: 14 }}
-        >
-          {plans.map((p, i) => {
+        <motion.div variants={fadeUp} className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-3">
+          {visible.map((p) => {
             const meta = TIERS.find((t) => t.key === p.tier) || TIERS[0];
             const isOver = overId === p.id;
             const isDragging = dragId === p.id;
+            const idx = plans.findIndex((x) => x.id === p.id);
             return (
-              <motion.div
+              <div
                 key={p.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: isDragging ? 0.45 : 1, y: 0 }}
-                transition={{ delay: Math.min(0.5, i * 0.04), duration: 0.28 }}
-                draggable
-                onDragStart={(e) => {
-                  setDragId(p.id);
-                  // Required for Firefox to start a drag.
-                  (e as unknown as DragEvent).dataTransfer?.setData("text/plain", p.id);
-                }}
+                draggable={view === "all"}
+                onDragStart={(e) => { setDragId(p.id); e.dataTransfer?.setData("text/plain", p.id); }}
                 onDragOver={(e) => { e.preventDefault(); if (overId !== p.id) setOverId(p.id); }}
                 onDragLeave={() => { if (overId === p.id) setOverId(null); }}
                 onDrop={(e) => {
@@ -198,115 +254,88 @@ export default function AdminPricingPage() {
                   setDragId(null);
                 }}
                 onDragEnd={() => { setDragId(null); setOverId(null); }}
-                style={{
-                  position: "relative",
-                  padding: 18,
-                  borderRadius: 16,
-                  background: p.is_active
-                    ? `linear-gradient(160deg, #ffffff 0%, ${meta.color}10 100%)`
-                    : "#f7f6f5",
-                  border: `1px solid ${isOver ? meta.color : "rgba(220,30,60,0.10)"}`,
-                  boxShadow: isOver
-                    ? `0 8px 24px ${meta.color}38`
-                    : "0 4px 16px rgba(220,30,60,0.05)",
-                  transition: "border-color 0.15s, box-shadow 0.15s",
-                  cursor: "grab",
-                  opacity: p.is_active ? 1 : 0.72,
-                }}
+                className={[
+                  "relative flex flex-col overflow-hidden rounded-xl border bg-card p-4 transition-[border-color,box-shadow,opacity] duration-150",
+                  isOver ? "border-primary/50 shadow-[0_4px_16px_rgba(26,10,20,0.10)]" : "border-border/70 shadow-[0_1px_2px_rgba(26,10,20,0.04)]",
+                  isDragging ? "opacity-50" : p.is_active ? "" : "opacity-75",
+                ].join(" ")}
               >
-                {/* Drag handle hint */}
-                <div style={{
-                  position: "absolute", top: 12, left: 12,
-                  color: "#bbb", display: "flex", alignItems: "center",
-                }}>
-                  <GripVertical style={{ width: 14, height: 14 }} />
-                </div>
+                <span aria-hidden className="absolute inset-x-0 top-0 h-[3px]" style={{ background: meta.color }} />
 
-                {/* Tier chip — marketing label (Basic / Premium / Elite) */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginLeft: 22, marginBottom: 12 }}>
-                  <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em",
-                      padding: "3px 10px", borderRadius: 999,
-                      background: `${meta.color}22`, color: meta.color,
-                    }}>
-                      {meta.label}
-                    </span>
+                <div className="mb-3 flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    {view === "all" && <GripVertical className="h-4 w-4 cursor-grab text-muted2-foreground/60" aria-hidden />}
+                    <span className="text-[12px] font-semibold text-foreground">{meta.label}</span>
+                    <span className="text-[11px] text-muted2-foreground">· {PERIODS.find((x) => x.key === p.period)?.label ?? p.period}</span>
                   </div>
-                  <span style={{
-                    fontSize: 10, fontWeight: 600, color: p.is_active ? "#3F5937" : "#999",
-                    display: "inline-flex", alignItems: "center", gap: 4,
-                  }}>
-                    {p.is_active
-                      ? <><Eye style={{ width: 11, height: 11 }} /> Live</>
-                      : <><EyeOff style={{ width: 11, height: 11 }} /> Hidden</>}
-                  </span>
+                  {p.is_active
+                    ? <Pill tone="good"><Eye className="h-3 w-3" aria-hidden /> Live</Pill>
+                    : <Pill tone="neutral"><EyeOff className="h-3 w-3" aria-hidden /> Hidden</Pill>}
                 </div>
 
-                {/* Name + key */}
-                <div style={{ marginLeft: 22, marginBottom: 6 }}>
-                  <div style={{
-                    fontFamily: "var(--font-playfair, serif)",
-                    fontSize: 20, fontWeight: 700, color: "#1a0a14",
-                  }}>{p.name}</div>
-                  <div style={{ fontSize: 11, color: "#aaa", fontFamily: "monospace" }}>{p.key}</div>
+                <div className="mb-1">
+                  <div className="text-[17px] font-semibold text-foreground">{p.name}</div>
+                  <div className="font-mono text-[11px] text-muted2-foreground">{p.key}</div>
                 </div>
 
-                {/* Price */}
-                <div style={{ marginLeft: 22, display: "flex", alignItems: "baseline", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-                  <span style={{
-                    fontFamily: "var(--font-playfair, serif)",
-                    fontSize: 28, fontWeight: 700, color: "#1a0a14",
-                  }}>
-                    {formatGBP(p.price_paise)}
-                  </span>
+                <div className="mb-3 flex flex-wrap items-baseline gap-1.5">
+                  <span className="text-[28px] font-semibold tracking-[-0.02em] text-foreground">{formatGBP(p.price_paise)}</span>
                   {p.original_price_paise != null && p.original_price_paise > p.price_paise && (
-                    <span style={{ fontSize: 14, color: "#aaa", textDecoration: "line-through" }}>
-                      {formatGBP(p.original_price_paise)}
-                    </span>
+                    <span className="text-[14px] text-muted2-foreground line-through">{formatGBP(p.original_price_paise)}</span>
                   )}
-                  <span style={{ fontSize: 12, color: "#888" }}>/ {PERIOD_LABEL[p.period] ?? p.period}</span>
+                  <span className="text-[12px] text-muted2-foreground">/ {PERIOD_LABEL[p.period] ?? p.period}</span>
                 </div>
 
-                {/* Features */}
-                <ul style={{
-                  margin: "0 0 14px 22px", padding: 0, listStyle: "none",
-                  display: "flex", flexDirection: "column", gap: 6,
-                }}>
+                <ul className="mb-4 flex flex-col gap-1.5">
                   {p.features.length === 0 ? (
-                    <li style={{ fontSize: 12, color: "#bbb", fontStyle: "italic" }}>No features listed</li>
+                    <li className="text-[12px] italic text-muted2-foreground">No features listed</li>
                   ) : (
                     p.features.slice(0, 4).map((f, j) => (
-                      <li key={j} style={{
-                        fontSize: 12, color: "#555", display: "flex", gap: 8, alignItems: "flex-start",
-                      }}>
-                        <Check style={{ width: 12, height: 12, color: meta.color, marginTop: 3, flexShrink: 0 }} />
+                      <li key={j} className="flex items-start gap-2 text-[12.5px] text-foreground/80">
+                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: meta.color }} aria-hidden />
                         <span>{f}</span>
                       </li>
                     ))
                   )}
                   {p.features.length > 4 && (
-                    <li style={{ fontSize: 11, color: "#aaa", marginLeft: 20 }}>+ {p.features.length - 4} more</li>
+                    <li className="pl-5 text-[11.5px] text-muted2-foreground">+ {p.features.length - 4} more</li>
                   )}
                 </ul>
 
-                {/* Actions */}
-                <div style={{ marginLeft: 22, display: "flex", gap: 6 }}>
-                  <button
-                    onClick={() => setEditing(p)}
-                    style={smallBtnStyle}
-                  >
-                    <Edit3 style={{ width: 12, height: 12 }} /> Edit
-                  </button>
-                  <button
-                    onClick={() => onDelete(p.id)}
-                    disabled={deletingId === p.id}
-                    style={{ ...smallBtnStyle, color: "#a0153c", borderColor: "rgba(220,30,60,0.2)" }}
-                  >
-                    <Trash2 style={{ width: 12, height: 12 }} /> {deletingId === p.id ? "Deleting…" : "Delete"}
-                  </button>
+                <div className="mt-auto flex flex-wrap items-center gap-1.5">
+                  <Button size="sm" onClick={() => setEditing(p)}>
+                    <Edit3 className="h-3.5 w-3.5" aria-hidden /> Edit
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => toggleLive(p)} loading={togglingId === p.id}>
+                    {p.is_active ? <><EyeOff className="h-3.5 w-3.5" aria-hidden /> Hide</> : <><Eye className="h-3.5 w-3.5" aria-hidden /> Publish</>}
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => setConfirmDelete(p)} loading={deletingId === p.id}>
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden /> Delete
+                  </Button>
+                  {view === "all" && (
+                    <div className="ml-auto flex items-center">
+                      <button
+                        type="button"
+                        aria-label={`Move ${p.name} earlier`}
+                        disabled={idx <= 0}
+                        onClick={() => move(p.id, -1)}
+                        className="grid h-7 w-7 place-items-center rounded-md text-muted2-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Move ${p.name} later`}
+                        disabled={idx >= plans.length - 1}
+                        onClick={() => move(p.id, 1)}
+                        className="grid h-7 w-7 place-items-center rounded-md text-muted2-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
-              </motion.div>
+              </div>
             );
           })}
         </motion.div>
@@ -315,26 +344,39 @@ export default function AdminPricingPage() {
       <PlanEditor
         plan={editing}
         onClose={() => setEditing(null)}
-        onSaved={() => { setEditing(null); load(); }}
+        onSaved={(name, isNew) => { setEditing(null); toast("success", isNew ? `Created ${name}` : `Saved ${name}`); load(); }}
+      />
+
+      <ConfirmModal
+        open={!!confirmDelete}
+        title={`Delete ${confirmDelete?.name ?? "plan"}?`}
+        message="It disappears from the public pricing page. Members already on it keep their subscription."
+        confirmLabel="Delete plan"
+        onConfirm={() => confirmDelete && onDelete(confirmDelete)}
+        onCancel={() => setConfirmDelete(null)}
       />
     </PageShell>
   );
 }
 
-// ─── Editor modal ────────────────────────────────────────────────────────────
+// ─── Editor dialog ───────────────────────────────────────────────────────────
+
+const inputCls =
+  "h-9 w-full rounded-lg border border-border bg-card px-3 text-[13.5px] text-foreground outline-none " +
+  "focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-60";
 
 function PlanEditor({
   plan, onClose, onSaved,
 }: {
-  plan: Plan | (Omit<Plan, "id" | "sort_order"> & { id?: undefined }) | null;
+  plan: Draftable | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (name: string, isNew: boolean) => void;
 }) {
   const [draft, setDraft] = useState<Omit<Plan, "id" | "sort_order">>({ ...EMPTY_PLAN, features: [""] });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Reset draft each time the modal opens with a different plan
+  // Reset draft each time the dialog opens with a different plan
   useEffect(() => {
     if (plan) {
       setDraft({
@@ -352,22 +394,27 @@ function PlanEditor({
     }
   }, [plan]);
 
-  if (!plan) return null;
-  const isNew = !("id" in plan && plan.id);
+  useEffect(() => {
+    if (!plan) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [plan, onClose]);
+
+  const isNew = !!plan && !("id" in plan && plan.id);
 
   const save = async () => {
-    if (saving) return;
+    if (saving || !plan) return;
+    if (!draft.name.trim()) { setErr("Give the plan a display name."); return; }
+    if (isNew && !draft.key.trim()) { setErr("Give the plan an internal key, e.g. elite-6m."); return; }
     setSaving(true);
     setErr(null);
     try {
       const cleanFeatures = draft.features.map((s) => s.trim()).filter(Boolean);
       const body = { ...draft, features: cleanFeatures };
-      if (isNew) {
-        await adminApi.createPricingPlan(body);
-      } else {
-        await adminApi.updatePricingPlan((plan as Plan).id, body);
-      }
-      onSaved();
+      if (isNew) await adminApi.createPricingPlan(body);
+      else await adminApi.updatePricingPlan((plan as Plan).id, body);
+      onSaved(draft.name, isNew);
     } catch (e: any) {
       const detail = (e as any)?.detail ?? e?.response?.data?.detail;
       setErr(typeof detail === "string" ? detail : (e?.message || "Save failed"));
@@ -378,130 +425,111 @@ function PlanEditor({
 
   return (
     <AnimatePresence>
-      <motion.div
-        key="editor-backdrop"
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        transition={{ duration: 0.2 }}
-        onClick={onClose}
-        style={{
-          position: "fixed", inset: 0, zIndex: 1000,
-          background: "rgba(26,10,20,0.55)", backdropFilter: "blur(6px)",
-          display: "grid", placeItems: "center", padding: 16,
-        }}
-      >
+      {plan && (
         <motion.div
-          key="editor-card"
-          initial={{ opacity: 0, y: 12, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -6, scale: 0.98 }}
-          transition={{ type: "spring", stiffness: 300, damping: 26 }}
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            position: "relative", width: "100%", maxWidth: 520,
-            maxHeight: "90vh", overflowY: "auto",
-            padding: "26px 28px 22px", borderRadius: 18,
-            background: "#fff", border: "1px solid rgba(220,30,60,0.12)",
-            boxShadow: "0 24px 60px rgba(220,30,60,0.18)",
-          }}
+          key="editor-backdrop"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          onClick={onClose}
+          className="fixed inset-0 z-[1000] grid place-items-center bg-[rgba(26,10,20,0.45)] p-4"
         >
-          <button onClick={onClose} aria-label="Close" style={{
-            position: "absolute", top: 12, right: 12,
-            background: "rgba(0,0,0,0.04)", border: "none", borderRadius: 8,
-            width: 30, height: 30, display: "grid", placeItems: "center",
-            cursor: "pointer", color: "#888",
-          }}>
-            <X style={{ width: 14, height: 14 }} />
-          </button>
+          <motion.div
+            key="editor-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="plan-editor-title"
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.99 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-h-[90vh] w-full max-w-[540px] overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-[0_24px_60px_rgba(26,10,20,0.22)]"
+          >
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-md text-muted2-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              <X className="h-4 w-4" />
+            </button>
 
-          <h3 style={{
-            fontFamily: "var(--font-playfair, serif)", fontSize: 20, fontWeight: 700,
-            margin: "0 0 4px", color: "#1a0a14",
-          }}>
-            {isNew ? "New plan" : "Edit plan"}
-          </h3>
-          <p style={{ fontSize: 12, color: "#888", margin: "0 0 18px" }}>
-            Plans control what shows on your public pricing page.
-          </p>
+            <h3 id="plan-editor-title" className="mb-1 text-[18px] font-semibold text-foreground">
+              {isNew ? "New plan" : `Edit ${plan.name}`}
+            </h3>
+            <p className="mb-5 text-[12.5px] text-muted2-foreground">Plans control what shows on your public pricing page.</p>
 
-          {err && (
-            <div style={{
-              padding: "10px 12px", marginBottom: 14,
-              background: "#ffe9ec", border: "1px solid rgba(220,30,60,0.18)",
-              borderRadius: 8, fontSize: 12, color: "#a0153c",
-            }}>{err}</div>
-          )}
+            {err && (
+              <div role="alert" className="mb-4 rounded-lg border border-[#F7CCD5] bg-[#FDECEF] px-3 py-2 text-[12.5px] text-[#9F1239]">{err}</div>
+            )}
 
-          <div style={{ display: "grid", gap: 14 }}>
-            <div className="m4m-pe-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <Field label="Display name">
+            <div className="grid gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Display name" htmlFor="pe-name">
+                  <input id="pe-name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Elite" className={inputCls} />
+                </Field>
+                <Field label="Internal key" htmlFor="pe-key" hint={isNew ? undefined : "Fixed after creation"}>
+                  <input
+                    id="pe-key"
+                    value={draft.key}
+                    onChange={(e) => setDraft({ ...draft, key: e.target.value.toLowerCase() })}
+                    placeholder="e.g. elite-6m"
+                    disabled={!isNew}
+                    className={`${inputCls} font-mono`}
+                  />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Tier" htmlFor="pe-tier">
+                  <select id="pe-tier" value={draft.tier} onChange={(e) => setDraft({ ...draft, tier: e.target.value as Tier })} className={inputCls}>
+                    {TIERS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Billing period" htmlFor="pe-period">
+                  <select id="pe-period" value={draft.period} onChange={(e) => setDraft({ ...draft, period: e.target.value as Period })} className={inputCls}>
+                    {PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                  </select>
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label={`Price (${draft.currency})`} htmlFor="pe-price">
+                  <input
+                    id="pe-price"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={draft.price_paise / 100}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value || "0");
+                      setDraft({ ...draft, price_paise: Math.max(0, Math.round(v * 100)) });
+                    }}
+                    className={`${inputCls} tabular-nums`}
+                  />
+                </Field>
+                <Field label="Currency" htmlFor="pe-currency">
+                  <input
+                    id="pe-currency"
+                    value={draft.currency}
+                    onChange={(e) => setDraft({ ...draft, currency: e.target.value.toUpperCase().slice(0, 3) })}
+                    className={`${inputCls} font-mono`}
+                  />
+                </Field>
+              </div>
+
+              <Field
+                label={`Regular price (${draft.currency}), optional`}
+                htmlFor="pe-original"
+                hint="Shown struck through next to the live price, e.g. a free inaugural offer that's regularly £100."
+              >
                 <input
-                  value={draft.name}
-                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  placeholder="e.g. Elite"
-                  style={inputStyle}
-                />
-              </Field>
-              <Field label="Internal key">
-                <input
-                  value={draft.key}
-                  onChange={(e) => setDraft({ ...draft, key: e.target.value.toLowerCase() })}
-                  placeholder="e.g. elite-monthly"
-                  disabled={!isNew}
-                  style={{ ...inputStyle, fontFamily: "monospace", opacity: isNew ? 1 : 0.6 }}
-                />
-              </Field>
-            </div>
-
-            <div className="m4m-pe-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <Field label="Tier">
-                <select
-                  value={draft.tier}
-                  onChange={(e) => setDraft({ ...draft, tier: e.target.value as Tier })}
-                  style={inputStyle}
-                >
-                  {TIERS.map((t) => (
-                    <option key={t.key} value={t.key}>{t.label}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Period">
-                <select
-                  value={draft.period}
-                  onChange={(e) => setDraft({ ...draft, period: e.target.value as Period })}
-                  style={inputStyle}
-                >
-                  {PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
-                </select>
-              </Field>
-            </div>
-
-            <div className="m4m-pe-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <Field label={`Price (${draft.currency})`}>
-                <input
+                  id="pe-original"
                   type="number"
                   min={0}
-                  value={draft.price_paise / 100}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value || "0");
-                    setDraft({ ...draft, price_paise: Math.max(0, Math.round(v * 100)) });
-                  }}
-                  style={inputStyle}
-                />
-              </Field>
-              <Field label="Currency">
-                <input
-                  value={draft.currency}
-                  onChange={(e) => setDraft({ ...draft, currency: e.target.value.toUpperCase().slice(0, 3) })}
-                  style={{ ...inputStyle, fontFamily: "monospace" }}
-                />
-              </Field>
-            </div>
-
-            <div className="m4m-pe-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <Field label={`Regular price (${draft.currency}) — optional`}>
-                <input
-                  type="number"
-                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
                   placeholder="Leave blank for none"
                   value={draft.original_price_paise != null ? draft.original_price_paise / 100 : ""}
                   onChange={(e) => {
@@ -510,132 +538,77 @@ function PlanEditor({
                     const v = parseFloat(raw);
                     setDraft({ ...draft, original_price_paise: Number.isFinite(v) ? Math.max(0, Math.round(v * 100)) : null });
                   }}
-                  style={inputStyle}
+                  className={`${inputCls} tabular-nums sm:max-w-[50%]`}
                 />
               </Field>
-              <div style={{ display: "flex", alignItems: "flex-end" }}>
-                <p style={{ fontSize: 11, color: "#999", lineHeight: 1.4, margin: "0 0 10px" }}>
-                  Shown struck through next to the live price — e.g. a free
-                  inaugural offer that's regularly £100.
-                </p>
-              </div>
+
+              <Field label="Features">
+                <div className="flex flex-col gap-1.5">
+                  {draft.features.map((f, i) => (
+                    <div key={i} className="flex gap-1.5">
+                      <input
+                        value={f}
+                        aria-label={`Feature ${i + 1}`}
+                        onChange={(e) => {
+                          const next = draft.features.slice();
+                          next[i] = e.target.value;
+                          setDraft({ ...draft, features: next });
+                        }}
+                        placeholder="e.g. Unlimited interests"
+                        className={`${inputCls} flex-1`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setDraft({ ...draft, features: draft.features.filter((_, j) => j !== i) })}
+                        aria-label={`Remove feature ${i + 1}`}
+                        className="grid w-9 shrink-0 place-items-center rounded-lg border border-border text-muted2-foreground hover:bg-[#FDECEF] hover:text-[#9F1239] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setDraft({ ...draft, features: [...draft.features, ""] })}
+                    className="inline-flex h-8 items-center gap-1 self-start rounded-lg border border-dashed border-border px-3 text-[12px] font-medium text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  >
+                    <Plus className="h-3.5 w-3.5" aria-hidden /> Add feature
+                  </button>
+                </div>
+              </Field>
+
+              <label className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 text-[13px] ${draft.is_active ? "border-[#CFE0D3] bg-[#EAF2EB]/60" : "border-border bg-secondary/40"}`}>
+                <input
+                  type="checkbox"
+                  checked={draft.is_active}
+                  onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })}
+                  className="h-4 w-4 accent-[#DC1E3C]"
+                />
+                <span className="font-medium text-foreground">
+                  {draft.is_active ? "Live, visible on the public pricing page" : "Hidden, not shown to members"}
+                </span>
+              </label>
             </div>
 
-            <Field label="Features">
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {draft.features.map((f, i) => (
-                  <div key={i} style={{ display: "flex", gap: 6 }}>
-                    <input
-                      value={f}
-                      onChange={(e) => {
-                        const next = draft.features.slice();
-                        next[i] = e.target.value;
-                        setDraft({ ...draft, features: next });
-                      }}
-                      placeholder="e.g. Unlimited interests"
-                      style={{ ...inputStyle, flex: 1 }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setDraft({ ...draft, features: draft.features.filter((_, j) => j !== i) })}
-                      style={{
-                        background: "rgba(220,30,60,0.06)", border: "none", borderRadius: 8,
-                        width: 36, display: "grid", placeItems: "center",
-                        cursor: "pointer", color: "#a0153c",
-                      }}
-                      aria-label="Remove feature"
-                    >
-                      <X style={{ width: 13, height: 13 }} />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setDraft({ ...draft, features: [...draft.features, ""] })}
-                  style={{
-                    alignSelf: "flex-start",
-                    background: "transparent", border: "1px dashed rgba(220,30,60,0.25)",
-                    borderRadius: 8, padding: "6px 12px",
-                    fontSize: 12, fontWeight: 600, color: "#a0153c",
-                    cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4,
-                  }}
-                >
-                  <Plus style={{ width: 12, height: 12 }} /> Add feature
-                </button>
-              </div>
-            </Field>
-
-            <label style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "10px 12px", borderRadius: 10,
-              background: draft.is_active ? "rgba(92,122,82,0.08)" : "rgba(0,0,0,0.03)",
-              border: `1px solid ${draft.is_active ? "rgba(92,122,82,0.2)" : "rgba(0,0,0,0.06)"}`,
-              cursor: "pointer", fontSize: 13,
-            }}>
-              <input
-                type="checkbox"
-                checked={draft.is_active}
-                onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })}
-                style={{ accentColor: "#dc1e3c" }}
-              />
-              <span style={{ flex: 1, color: "#1a0a14", fontWeight: 500 }}>
-                {draft.is_active ? "Live, visible on public pricing page" : "Hidden, not shown to users"}
-              </span>
-            </label>
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 22 }}>
-            <button onClick={onClose} style={cancelBtnStyle}>Cancel</button>
-            <Button onClick={save} disabled={saving}>
-              {saving ? "Saving…" : isNew ? "Create plan" : "Save changes"}
-            </Button>
-          </div>
-
-          {/* Paired fields stack on very narrow phones so inputs stay usable. */}
-          <style jsx>{`
-            @media (max-width: 420px) {
-              :global(.m4m-pe-row) {
-                grid-template-columns: 1fr !important;
-              }
-            }
-          `}</style>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button variant="primary" onClick={save} loading={saving}>
+                {isNew ? "Create plan" : "Save changes"}
+              </Button>
+            </div>
+          </motion.div>
         </motion.div>
-      </motion.div>
+      )}
     </AnimatePresence>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, htmlFor, hint, children }: { label: string; htmlFor?: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{
-        fontSize: 11, fontWeight: 600, color: "#555",
-        textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4,
-      }}>{label}</div>
+      <label htmlFor={htmlFor} className="mb-1 block text-[12px] font-medium text-muted2-foreground">{label}</label>
       {children}
+      {hint && <p className="mt-1 text-[11.5px] leading-snug text-muted2-foreground">{hint}</p>}
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  fontFamily: "inherit", fontSize: 13.5, color: "#1a0a14",
-  border: "1px solid rgba(220,30,60,0.18)", borderRadius: 8,
-  padding: "9px 12px", outline: "none", background: "#fff",
-  boxSizing: "border-box",
-};
-
-const smallBtnStyle: React.CSSProperties = {
-  display: "inline-flex", alignItems: "center", gap: 4,
-  padding: "6px 12px", borderRadius: 8,
-  background: "#fff", border: "1px solid rgba(0,0,0,0.08)",
-  fontSize: 12, fontWeight: 600, color: "#1a0a14",
-  cursor: "pointer", fontFamily: "inherit",
-};
-
-const cancelBtnStyle: React.CSSProperties = {
-  padding: "9px 16px", borderRadius: 10,
-  background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.06)",
-  fontSize: 13, fontWeight: 600, color: "#666",
-  cursor: "pointer", fontFamily: "inherit",
-};

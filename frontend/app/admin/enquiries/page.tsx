@@ -3,11 +3,17 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, X, AlertTriangle, Inbox, Mail, Phone, ChevronLeft, ChevronRight,
-  CheckCircle2, MessageSquareReply, Trash2, UserCheck, Download,
+  AlertTriangle, Inbox, Mail, Phone, ChevronLeft, ChevronRight,
+  CheckCircle2, MessageSquareReply, Trash2, UserCheck, Download, RotateCcw, Reply,
 } from "lucide-react";
-import { PageShell, GlassCard, Button, fadeUp } from "@/components/admin/PageShell";
+import { PageShell, Button, fadeUp } from "@/components/admin/PageShell";
+import {
+  Segmented, SearchField, EmptyState, SkeletonRows, Pill, Kbd, relTime, formatDateTime, type Tone,
+} from "@/components/admin/primitives";
+import ConfirmModal from "@/components/admin/ConfirmModal";
+import { useToast } from "@/components/admin/Toast";
 import { adminApi, ApiError, downloadCsv } from "@/lib/api";
+import { usePersistentState, oneOf } from "../_lib/view-state";
 
 type Status = "new" | "in_review" | "responded" | "closed";
 type Source = "contact_form" | "landing" | "profile_interest" | "other";
@@ -32,19 +38,22 @@ interface Counts {
   new: number; in_review: number; responded: number; closed: number; total: number;
 }
 
-const STATUS_FILTERS: Array<{ key: "all" | Status; label: string }> = [
-  { key: "all",       label: "All" },
-  { key: "new",       label: "New" },
-  { key: "in_review", label: "In review" },
-  { key: "responded", label: "Responded" },
-  { key: "closed",    label: "Closed" },
+const FILTER_KEYS = ["all", "new", "in_review", "responded", "closed"] as const;
+type Filter = (typeof FILTER_KEYS)[number];
+
+const STATUS_FILTERS: Array<{ value: Filter; label: string }> = [
+  { value: "new",       label: "New" },
+  { value: "in_review", label: "In review" },
+  { value: "responded", label: "Responded" },
+  { value: "closed",    label: "Closed" },
+  { value: "all",       label: "All" },
 ];
 
-const STATUS_META: Record<Status, { label: string; color: string; bg: string }> = {
-  new:       { label: "New",       color: "#a0153c", bg: "rgba(220,30,60,0.1)" },
-  in_review: { label: "In review", color: "#8A5F00", bg: "rgba(200,144,32,0.16)" },
-  responded: { label: "Responded", color: "#3F5937", bg: "rgba(92,122,82,0.14)" },
-  closed:    { label: "Closed",    color: "#666",    bg: "rgba(0,0,0,0.06)" },
+const STATUS_META: Record<Status, { label: string; tone: Tone }> = {
+  new:       { label: "New",       tone: "brand" },
+  in_review: { label: "In review", tone: "warn" },
+  responded: { label: "Responded", tone: "good" },
+  closed:    { label: "Closed",    tone: "neutral" },
 };
 
 const SOURCE_LABEL: Record<Source, string> = {
@@ -54,40 +63,28 @@ const SOURCE_LABEL: Record<Source, string> = {
   other:            "Other",
 };
 
-function formatRel(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const diff = Date.now() - d.getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function formatFull(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
 export default function AdminEnquiriesPage() {
+  const { toast } = useToast();
   const [items, setItems] = useState<Enquiry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
-  const [filter, setFilter] = useState<"all" | Status>("all");
+  const [filter, setFilter] = usePersistentState<Filter>("enquiries.status", "new", oneOf(FILTER_KEYS));
   const [q, setQ] = useState("");
   const [qLive, setQLive] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [counts, setCounts] = useState<Counts>({ new: 0, in_review: 0, responded: 0, closed: 0, total: 0 });
+  const [exporting, setExporting] = useState(false);
+
+  // Deep link from the ⌘K palette: /admin/enquiries?q=<email or name>.
+  useEffect(() => {
+    try {
+      const pre = new URLSearchParams(window.location.search).get("q");
+      if (pre) { setQLive(pre); setQ(pre); setFilter("all"); }
+    } catch { /* ignore */ }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qLive), 250);
@@ -116,21 +113,13 @@ export default function AdminEnquiriesPage() {
       const list: Enquiry[] = Array.isArray(payload?.data) ? payload.data : [];
       setItems(list);
       setTotal(typeof payload?.total === "number" ? payload.total : 0);
-      // Auto-select the first one when nothing's selected (or when current selection is no longer in the list).
-      if (list.length > 0) {
-        if (!selectedId || !list.some((e) => e.id === selectedId)) {
-          setSelectedId(list[0].id);
-        }
-      } else {
-        setSelectedId(null);
-      }
+      // Auto-select the first one when nothing's selected (or the selection left the list).
+      setSelectedId((cur) => (list.length === 0 ? null : cur && list.some((e) => e.id === cur) ? cur : list[0].id));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to load");
     } finally {
       setLoading(false);
     }
-    // selectedId intentionally not in deps — we update it inside, don't react to it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, filter, page, limit]);
 
   useEffect(() => { load(); loadCounts(); }, [load, loadCounts]);
@@ -138,6 +127,25 @@ export default function AdminEnquiriesPage() {
 
   const selected = useMemo(() => items.find((e) => e.id === selectedId) || null, [items, selectedId]);
   const pageCount = Math.max(1, Math.ceil(total / limit));
+
+  // j / k (or ↓ / ↑) moves through the inbox when focus isn't in a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || !items.length) return;
+      const idx = items.findIndex((x) => x.id === selectedId);
+      if (e.key === "j" || e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedId(items[Math.min(items.length - 1, idx + 1)].id);
+      } else if (e.key === "k" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedId(items[Math.max(0, idx - 1)].id);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [items, selectedId]);
 
   const onUpdated = (updated: Enquiry) => {
     setItems((prev) => prev.map((e) => e.id === updated.id ? updated : e));
@@ -149,233 +157,154 @@ export default function AdminEnquiriesPage() {
     loadCounts();
   };
 
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const url = adminApi.exportEnquiriesCsvUrl({
+        q: q || undefined,
+        status_filter: filter === "all" ? undefined : filter,
+      });
+      await downloadCsv(url, "enquiries.csv");
+    } catch (e) {
+      toast("error", e instanceof Error ? `Export failed: ${e.message}` : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const countFor = (k: Filter) => (k === "all" ? counts.total : counts[k] ?? 0);
+
   return (
     <PageShell
       title="Enquiries"
-      subtitle={`${counts.total.toLocaleString()} lead${counts.total === 1 ? "" : "s"} · ${counts.new} new`}
+      subtitle="Leads from the contact form and landing pages. Reply, assign and close them here."
+      meta={counts.new > 0 ? <Pill tone="brand" dot>{counts.new} new</Pill> : undefined}
       actions={
-        <Button
-          variant="secondary"
-          onClick={() => {
-            const url = adminApi.exportEnquiriesCsvUrl({
-              q: q || undefined,
-              status_filter: filter === "all" ? undefined : filter,
-            });
-            downloadCsv(url, "enquiries.csv").catch(() => {});
-          }}
-        >
-          <Download style={{ width: 13, height: 13 }} /> Export CSV
+        <Button size="sm" onClick={exportCsv} loading={exporting} title="Exports every enquiry matching the current filters">
+          <Download className="h-3.5 w-3.5" aria-hidden /> Export CSV
         </Button>
       }
+      toolbar={
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchField value={qLive} onChange={setQLive} placeholder="Search name, email, subject…" className="w-full max-w-xs" />
+          <div className="max-w-full overflow-x-auto">
+            <Segmented<Filter>
+              ariaLabel="Filter by status"
+              layoutId="enq-status-pill"
+              options={STATUS_FILTERS.map((f) => ({ ...f, count: countFor(f.value) }))}
+              value={filter}
+              onChange={setFilter}
+            />
+          </div>
+        </div>
+      }
     >
-      {/* Search + status filter pills with counts */}
-      <motion.div variants={fadeUp} style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={searchBoxStyle}>
-          <Search style={{ width: 15, height: 15, color: "#aaa" }} />
-          <input
-            type="text"
-            placeholder="Search name, email, subject…"
-            value={qLive}
-            onChange={(e) => setQLive(e.target.value)}
-            style={searchInputStyle}
-          />
-          {qLive && (
-            <button onClick={() => setQLive("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#aaa", display: "flex" }}>
-              <X style={{ width: 14, height: 14 }} />
-            </button>
-          )}
-        </div>
-
-        <div style={{ display: "flex", gap: 2, flexWrap: "wrap", background: "rgba(255,255,255,0.6)", padding: 3, borderRadius: 10, border: "1px solid rgba(220,30,60,0.08)", backdropFilter: "blur(6px)" }}>
-          {STATUS_FILTERS.map(({ key, label }) => {
-            const active = filter === key;
-            const count = key === "all" ? counts.total : (counts[key as Status] ?? 0);
-            return (
-              <button
-                key={key}
-                onClick={() => setFilter(key)}
-                style={{ position: "relative", padding: "7px 14px", borderRadius: 8, border: "none", background: "transparent", fontSize: 12, fontWeight: active ? 600 : 500, color: active ? "#fff" : "#666", cursor: "pointer", zIndex: 1, display: "inline-flex", alignItems: "center", gap: 6 }}
-              >
-                {active && (
-                  <motion.span
-                    layoutId="enq-status-pill"
-                    transition={{ type: "spring", stiffness: 380, damping: 28 }}
-                    style={{
-                      position: "absolute", inset: 0,
-                      background: "linear-gradient(135deg, #dc1e3c, #a0153c)",
-                      borderRadius: 8,
-                      boxShadow: "0 4px 12px rgba(220,30,60,0.3)",
-                      zIndex: -1,
-                    }}
-                  />
-                )}
-                {label}
-                {count > 0 && (
-                  <span style={{
-                    fontSize: 10, fontWeight: 700,
-                    padding: "1px 6px", borderRadius: 999,
-                    background: active ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.06)",
-                    color: active ? "#fff" : "#888",
-                  }}>{count}</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </motion.div>
-
-      {/* Dual-pane layout */}
-      <motion.div
-        variants={fadeUp}
-        style={{ display: "grid", gridTemplateColumns: "minmax(280px, 360px) minmax(0, 1fr)", gap: 14, alignItems: "start" }}
-        className="enq-grid"
-      >
+      <motion.div variants={fadeUp} className="grid items-start gap-4 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
         {/* Left: list */}
-        <GlassCard padding={0}>
+        <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]">
           {loading ? (
-            <div style={{ padding: 10 }}>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="m4m-shimmer" style={{ height: 70, margin: "6px 8px", borderRadius: 10 }} />
-              ))}
-            </div>
+            <div className="p-3"><SkeletonRows rows={6} /></div>
           ) : error ? (
-            <div style={{ padding: 20, color: "#a0153c", fontSize: 13 }}>
-              <AlertTriangle style={{ width: 14, height: 14, display: "inline", verticalAlign: "text-bottom", marginRight: 6 }} />
-              {error}
+            <div role="alert" className="flex items-center gap-2 px-4 py-5 text-[13px] text-[#9F1239]">
+              <AlertTriangle className="h-4 w-4" aria-hidden /> {error}
+              <Button size="sm" variant="ghost" onClick={load}>Retry</Button>
             </div>
           ) : items.length === 0 ? (
-            <div style={{ padding: "60px 20px", textAlign: "center", color: "#999" }}>
-              <Inbox style={{ width: 36, height: 36, color: "#e5e5e5", margin: "0 auto 12px", display: "block" }} />
-              <p style={{ fontSize: 13, margin: 0 }}>{q ? `No enquiries matching "${q}"` : "No enquiries in this view."}</p>
-            </div>
+            <EmptyState
+              icon={filter === "new" && !q ? CheckCircle2 : Inbox}
+              title={q ? `No enquiries matching “${q}”` : filter === "new" ? "Inbox zero" : "No enquiries in this view"}
+              description={q ? "Try a different name, email or subject." : filter === "new" ? "Every new lead has been picked up." : "Switch status to see other enquiries."}
+            />
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", padding: 6 }}>
-              {items.map((e, i) => (
-                <ListRow
-                  key={e.id}
-                  e={e}
-                  selected={e.id === selectedId}
-                  index={i}
-                  onClick={() => setSelectedId(e.id)}
-                />
+            <ul role="listbox" aria-label="Enquiries" className="flex flex-col p-1.5">
+              {items.map((e) => (
+                <ListRow key={e.id} e={e} selected={e.id === selectedId} onClick={() => setSelectedId(e.id)} />
               ))}
-            </div>
+            </ul>
           )}
 
           {pageCount > 1 && (
-            <div style={{ padding: "10px 12px", display: "flex", justifyContent: "center", alignItems: "center", gap: 8, borderTop: "1px solid rgba(220,30,60,0.06)" }}>
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} style={paginationBtn(page <= 1)}>
-                <ChevronLeft style={{ width: 13, height: 13 }} />
+            <nav aria-label="Pagination" className="flex items-center justify-center gap-2 border-t border-border/60 px-3 py-2">
+              <button
+                type="button"
+                aria-label="Previous page"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="grid h-7 w-7 place-items-center rounded-md text-foreground hover:bg-secondary disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                <ChevronLeft className="h-4 w-4" />
               </button>
-              <span style={{ fontSize: 12, color: "#666" }}>
-                {page} / {pageCount}
-              </span>
-              <button onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount} style={paginationBtn(page >= pageCount)}>
-                <ChevronRight style={{ width: 13, height: 13 }} />
+              <span className="text-[12px] text-muted2-foreground tabular-nums">{page} / {pageCount}</span>
+              <button
+                type="button"
+                aria-label="Next page"
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                disabled={page >= pageCount}
+                className="grid h-7 w-7 place-items-center rounded-md text-foreground hover:bg-secondary disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                <ChevronRight className="h-4 w-4" />
               </button>
+            </nav>
+          )}
+          {!loading && items.length > 1 && (
+            <div className="hidden items-center gap-1.5 border-t border-border/60 px-3 py-2 text-[11px] text-muted2-foreground lg:flex">
+              <Kbd>j</Kbd><Kbd>k</Kbd> to move between enquiries
             </div>
           )}
-        </GlassCard>
+        </div>
 
         {/* Right: detail panel */}
-        <GlassCard padding={0}>
+        <div className="rounded-xl border border-border/70 bg-card shadow-[0_1px_2px_rgba(26,10,20,0.04)]">
           <AnimatePresence mode="wait">
             {selected ? (
               <motion.div
                 key={selected.id}
-                initial={{ opacity: 0, y: 6 }}
+                initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.18 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.16 }}
               >
                 <DetailPane enquiry={selected} onUpdated={onUpdated} onDeleted={onDeleted} />
               </motion.div>
             ) : (
-              <motion.div
-                key="empty-detail"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                transition={{ duration: 0.18 }}
-                style={{ padding: "80px 24px", textAlign: "center", color: "#aaa" }}
-              >
-                <Inbox style={{ width: 36, height: 36, color: "#e5e5e5", margin: "0 auto 12px", display: "block" }} />
-                <p style={{ fontSize: 13, margin: 0 }}>Select an enquiry to view details.</p>
+              <motion.div key="empty-detail" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <EmptyState icon={Inbox} title="Select an enquiry" description="Its message, contact details and notes appear here." />
               </motion.div>
             )}
           </AnimatePresence>
-        </GlassCard>
+        </div>
       </motion.div>
-
-      <style jsx>{`
-        @media (max-width: 900px) {
-          :global(.enq-grid) {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
     </PageShell>
   );
 }
 
 // ─── List row ────────────────────────────────────────────────────────────────
 
-function ListRow({ e, selected, index, onClick }: { e: Enquiry; selected: boolean; index: number; onClick: () => void }) {
-  const meta = STATUS_META[e.status];
+function ListRow({ e, selected, onClick }: { e: Enquiry; selected: boolean; onClick: () => void }) {
+  const meta = STATUS_META[e.status] || STATUS_META.new;
   return (
-    <motion.button
-      type="button"
-      initial={{ opacity: 0, x: -6 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: Math.min(0.4, index * 0.02), duration: 0.25 }}
-      onClick={onClick}
-      style={{
-        position: "relative",
-        display: "block", textAlign: "left", width: "100%",
-        background: selected ? "rgba(220,30,60,0.06)" : "transparent",
-        border: "none",
-        borderRadius: 10,
-        padding: "10px 12px",
-        cursor: "pointer",
-        transition: "background 0.15s",
-        fontFamily: "inherit",
-      }}
-      onMouseEnter={(ev) => { if (!selected) (ev.currentTarget as HTMLButtonElement).style.background = "rgba(220,30,60,0.03)"; }}
-      onMouseLeave={(ev) => { if (!selected) (ev.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
-    >
-      {selected && (
-        <motion.span
-          layoutId="enq-row-marker"
-          transition={{ type: "spring", stiffness: 380, damping: 30 }}
-          style={{
-            position: "absolute", left: 0, top: 8, bottom: 8, width: 3,
-            background: "linear-gradient(180deg, #dc1e3c, #a0153c)",
-            borderRadius: 2,
-          }}
-        />
-      )}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 4 }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{
-            fontSize: 13, fontWeight: 600, color: "#1a0a14",
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>{e.name}</div>
-          <div style={{ fontSize: 11, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {e.subject || e.email || e.phone || "—"}
+    <li role="option" aria-selected={selected}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`relative block w-full rounded-lg px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+          selected ? "bg-primary/[0.06]" : "hover:bg-secondary/50"
+        }`}
+      >
+        {selected && <span aria-hidden className="absolute bottom-2 left-0 top-2 w-[2px] rounded-full bg-primary" />}
+        <div className="mb-0.5 flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className={`truncate text-[13px] ${e.status === "new" ? "font-semibold" : "font-medium"} text-foreground`}>{e.name}</div>
+            <div className="truncate text-[11.5px] text-muted2-foreground">{e.subject || e.email || e.phone || "—"}</div>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <span className="text-[11px] text-muted2-foreground tabular-nums">{relTime(e.created_at)}</span>
+            <Pill tone={meta.tone}>{meta.label}</Pill>
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-          <span style={{ fontSize: 10, color: "#aaa" }}>{formatRel(e.created_at)}</span>
-          <span style={{
-            fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
-            padding: "2px 7px", borderRadius: 999,
-            background: meta.bg, color: meta.color,
-          }}>{meta.label}</span>
-        </div>
-      </div>
-      <div style={{
-        fontSize: 12, color: "#666",
-        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-      }}>{e.message}</div>
-    </motion.button>
+        <div className="truncate text-[12px] text-muted2-foreground">{e.message}</div>
+      </button>
+    </li>
   );
 }
 
@@ -388,14 +317,16 @@ function DetailPane({
   onUpdated: (e: Enquiry) => void;
   onDeleted: (id: string) => void;
 }) {
+  const { toast } = useToast();
   const [notes, setNotes] = useState(enquiry.admin_notes || "");
   const [saving, setSaving] = useState<null | "status" | "notes" | "delete" | "assign">(null);
   const [err, setErr] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Reset notes draft when the selected enquiry changes
-  useEffect(() => { setNotes(enquiry.admin_notes || ""); setErr(null); }, [enquiry.id]);
+  useEffect(() => { setNotes(enquiry.admin_notes || ""); setErr(null); }, [enquiry.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const meta = STATUS_META[enquiry.status];
+  const meta = STATUS_META[enquiry.status] || STATUS_META.new;
 
   const updateStatus = async (status: Status) => {
     if (saving) return;
@@ -404,6 +335,7 @@ function DetailPane({
     try {
       const res = await adminApi.updateEnquiry(enquiry.id, { status });
       onUpdated((res.data as any)?.data);
+      toast("success", `Marked ${STATUS_META[status].label.toLowerCase()}`);
     } catch (e: any) {
       setErr(e?.message || "Could not update status");
     } finally {
@@ -417,6 +349,7 @@ function DetailPane({
     try {
       const res = await adminApi.updateEnquiry(enquiry.id, { assign_to_me: true });
       onUpdated((res.data as any)?.data);
+      toast("success", "Assigned to you");
     } catch (e: any) {
       setErr(e?.message || "Could not assign");
     } finally {
@@ -431,6 +364,7 @@ function DetailPane({
     try {
       const res = await adminApi.updateEnquiry(enquiry.id, { admin_notes: notes || null });
       onUpdated((res.data as any)?.data);
+      toast("success", "Notes saved");
     } catch (e: any) {
       setErr(e?.message || "Could not save notes");
     } finally {
@@ -439,196 +373,128 @@ function DetailPane({
   };
 
   const remove = async () => {
+    setConfirmDelete(false);
     if (saving) return;
-    if (!confirm("Soft-delete this enquiry? It will stop appearing in the inbox.")) return;
     setSaving("delete");
     try {
       await adminApi.deleteEnquiry(enquiry.id);
       onDeleted(enquiry.id);
+      toast("success", "Enquiry deleted");
     } catch (e: any) {
       setErr(e?.message || "Could not delete");
       setSaving(null);
     }
   };
 
+  const replyHref = enquiry.email
+    ? `mailto:${enquiry.email}?subject=${encodeURIComponent(`Re: ${enquiry.subject || "Your enquiry to Match4Marriage"}`)}`
+    : null;
+
   return (
-    <div style={{ padding: 22 }}>
+    <div className="p-5">
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 6 }}>
-        <div style={{ minWidth: 0 }}>
-          <h2 style={{
-            fontFamily: "var(--font-playfair, serif)",
-            fontSize: 20, fontWeight: 700, color: "#1a0a14",
-            margin: "0 0 4px", letterSpacing: "-0.01em",
-          }}>{enquiry.name}</h2>
-          <div style={{ fontSize: 11, color: "#888", display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <span>{formatFull(enquiry.created_at)}</span>
-            <span style={{ color: "#bbb" }}>·</span>
-            <span>{SOURCE_LABEL[enquiry.source]}</span>
+      <div className="mb-1 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="truncate text-[18px] font-semibold text-foreground">{enquiry.name}</h2>
+          <div className="mt-0.5 flex flex-wrap gap-x-2 text-[12px] text-muted2-foreground">
+            <span className="tabular-nums">{formatDateTime(enquiry.created_at)}</span>
+            <span aria-hidden>·</span>
+            <span>{SOURCE_LABEL[enquiry.source] || enquiry.source}</span>
+            {enquiry.assigned_admin_id && (<><span aria-hidden>·</span><span>Assigned</span></>)}
           </div>
         </div>
-        <span style={{
-          fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
-          padding: "4px 9px", borderRadius: 999,
-          background: meta.bg, color: meta.color,
-          flexShrink: 0,
-        }}>{meta.label}</span>
+        <Pill tone={meta.tone}>{meta.label}</Pill>
       </div>
 
       {/* Contact info */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 14, marginBottom: 18 }}>
+      <div className="mb-4 mt-3 flex flex-wrap gap-2">
         {enquiry.email && (
-          <a href={`mailto:${enquiry.email}`} style={contactPill}>
-            <Mail style={{ width: 12, height: 12 }} />
-            {enquiry.email}
+          <a href={`mailto:${enquiry.email}`} className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-secondary/50 px-3 text-[12px] font-medium text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+            <Mail className="h-3 w-3" aria-hidden /> {enquiry.email}
           </a>
         )}
         {enquiry.phone && (
-          <a href={`tel:${enquiry.phone}`} style={contactPill}>
-            <Phone style={{ width: 12, height: 12 }} />
-            {enquiry.phone}
+          <a href={`tel:${enquiry.phone}`} className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-secondary/50 px-3 text-[12px] font-medium text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+            <Phone className="h-3 w-3" aria-hidden /> {enquiry.phone}
           </a>
         )}
       </div>
 
       {/* Subject + message */}
-      {enquiry.subject && (
-        <div style={{
-          fontSize: 13, fontWeight: 700, color: "#1a0a14",
-          marginBottom: 6,
-        }}>{enquiry.subject}</div>
-      )}
-      <div style={{
-        padding: "14px 16px",
-        background: "#fdfbf9",
-        border: "1px solid rgba(220,30,60,0.08)",
-        borderRadius: 12,
-        fontSize: 13.5, color: "#444", lineHeight: 1.6,
-        whiteSpace: "pre-wrap",
-        marginBottom: 20,
-      }}>
+      {enquiry.subject && <div className="mb-1.5 text-[13px] font-semibold text-foreground">{enquiry.subject}</div>}
+      <div className="mb-5 whitespace-pre-wrap rounded-lg border border-border/70 bg-secondary/30 px-4 py-3 text-[13.5px] leading-relaxed text-foreground/90" style={{ maxWidth: "75ch" }}>
         {enquiry.message}
       </div>
 
       {err && (
-        <div style={{
-          padding: "8px 12px", marginBottom: 14,
-          background: "#ffe9ec", border: "1px solid rgba(220,30,60,0.18)",
-          borderRadius: 8, fontSize: 12, color: "#a0153c",
-        }}>{err}</div>
+        <div role="alert" className="mb-4 rounded-lg border border-[#F7CCD5] bg-[#FDECEF] px-3 py-2 text-[12.5px] text-[#9F1239]">{err}</div>
       )}
 
       {/* Quick actions */}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
-        {enquiry.status !== "in_review" && (
-          <button onClick={() => updateStatus("in_review")} disabled={!!saving} style={actionBtn("warn")}>
-            <UserCheck style={{ width: 13, height: 13 }} /> Mark in review
-          </button>
+      <div className="mb-5 flex flex-wrap gap-2">
+        {replyHref && (
+          <a
+            href={replyHref}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary bg-primary px-3 text-[12.5px] font-medium text-primary-foreground hover:bg-[#C21933] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            <Reply className="h-3.5 w-3.5" aria-hidden /> Reply by email
+          </a>
         )}
-        {enquiry.status !== "responded" && (
-          <button onClick={() => updateStatus("responded")} disabled={!!saving} style={actionBtn("good")}>
-            <MessageSquareReply style={{ width: 13, height: 13 }} /> Mark responded
-          </button>
+        {enquiry.status !== "in_review" && enquiry.status !== "closed" && (
+          <Button size="sm" variant="warn" onClick={() => updateStatus("in_review")} disabled={!!saving}>
+            <UserCheck className="h-3.5 w-3.5" aria-hidden /> Mark in review
+          </Button>
         )}
-        {enquiry.status !== "closed" && (
-          <button onClick={() => updateStatus("closed")} disabled={!!saving} style={actionBtn("muted")}>
-            <CheckCircle2 style={{ width: 13, height: 13 }} /> Close
-          </button>
+        {enquiry.status !== "responded" && enquiry.status !== "closed" && (
+          <Button size="sm" variant="success" onClick={() => updateStatus("responded")} disabled={!!saving}>
+            <MessageSquareReply className="h-3.5 w-3.5" aria-hidden /> Mark responded
+          </Button>
         )}
-        {enquiry.status === "closed" && (
-          <button onClick={() => updateStatus("new")} disabled={!!saving} style={actionBtn("muted")}>
-            Reopen
-          </button>
+        {enquiry.status !== "closed" ? (
+          <Button size="sm" onClick={() => updateStatus("closed")} disabled={!!saving}>
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Close
+          </Button>
+        ) : (
+          <Button size="sm" onClick={() => updateStatus("new")} disabled={!!saving}>
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Reopen
+          </Button>
         )}
         {!enquiry.assigned_admin_id && (
-          <button onClick={assignToMe} disabled={!!saving} style={actionBtn("default")}>
+          <Button size="sm" variant="ghost" onClick={assignToMe} disabled={!!saving} loading={saving === "assign"}>
             Assign to me
-          </button>
+          </Button>
         )}
-        <button onClick={remove} disabled={!!saving} style={actionBtn("bad")}>
-          <Trash2 style={{ width: 13, height: 13 }} /> Delete
-        </button>
+        <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)} disabled={!!saving} className="ml-auto">
+          <Trash2 className="h-3.5 w-3.5" aria-hidden /> Delete
+        </Button>
       </div>
 
       {/* Admin notes */}
       <div>
-        <div style={{
-          fontSize: 11, fontWeight: 600, color: "#555",
-          textTransform: "uppercase", letterSpacing: "0.08em",
-          marginBottom: 6,
-        }}>Internal notes</div>
+        <label htmlFor="enq-notes" className="mb-1.5 block text-[12px] font-medium text-muted2-foreground">Internal notes</label>
         <textarea
+          id="enq-notes"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Notes for the team. Never shown to the user."
+          placeholder="Notes for the team. Never shown to the enquirer."
           rows={4}
-          style={{
-            width: "100%", boxSizing: "border-box",
-            border: "1px solid rgba(220,30,60,0.15)", borderRadius: 10,
-            padding: "10px 14px", fontSize: 13, lineHeight: 1.5, color: "#1a0a14",
-            background: "#fff", outline: "none", fontFamily: "inherit", resize: "vertical",
-          }}
+          className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2.5 text-[13px] leading-relaxed text-foreground outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
         />
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-          <Button onClick={saveNotes} disabled={!!saving || (notes === (enquiry.admin_notes || ""))}>
-            {saving === "notes" ? "Saving…" : "Save notes"}
+        <div className="mt-2 flex justify-end">
+          <Button size="sm" onClick={saveNotes} disabled={!!saving || (notes === (enquiry.admin_notes || ""))} loading={saving === "notes"}>
+            Save notes
           </Button>
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmDelete}
+        title="Delete this enquiry?"
+        message={`The enquiry from ${enquiry.name} will be removed from the inbox. This can't be undone from the console.`}
+        confirmLabel="Delete enquiry"
+        onConfirm={remove}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
-}
-
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
-const searchBoxStyle: React.CSSProperties = {
-  display: "flex", alignItems: "center", gap: 8,
-  background: "rgba(255,255,255,0.85)",
-  border: "1px solid rgba(220,30,60,0.12)",
-  borderRadius: 12, padding: "9px 14px", width: 300, maxWidth: "100%",
-  backdropFilter: "blur(8px)",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
-};
-
-const searchInputStyle: React.CSSProperties = {
-  flex: 1, border: "none", outline: "none",
-  fontSize: 13.5, color: "#1a0a14", background: "transparent",
-  fontFamily: "inherit",
-};
-
-const contactPill: React.CSSProperties = {
-  display: "inline-flex", alignItems: "center", gap: 6,
-  padding: "6px 12px", borderRadius: 999,
-  background: "rgba(220,30,60,0.06)", border: "1px solid rgba(220,30,60,0.12)",
-  fontSize: 12, fontWeight: 500, color: "#a0153c",
-  textDecoration: "none",
-};
-
-function actionBtn(tone: "default" | "good" | "warn" | "bad" | "muted"): React.CSSProperties {
-  const palettes: Record<typeof tone, { bg: string; fg: string; border: string }> = {
-    default: { bg: "#fff",                   fg: "#1a0a14", border: "rgba(0,0,0,0.08)" },
-    good:    { bg: "rgba(92,122,82,0.10)",   fg: "#3F5937", border: "rgba(92,122,82,0.25)" },
-    warn:    { bg: "rgba(200,144,32,0.12)",  fg: "#8A5F00", border: "rgba(200,144,32,0.32)" },
-    bad:     { bg: "rgba(220,30,60,0.06)",   fg: "#a0153c", border: "rgba(220,30,60,0.20)" },
-    muted:   { bg: "rgba(0,0,0,0.04)",       fg: "#666",    border: "rgba(0,0,0,0.06)" },
-  };
-  const p = palettes[tone];
-  return {
-    display: "inline-flex", alignItems: "center", gap: 5,
-    padding: "7px 12px", borderRadius: 8,
-    background: p.bg, border: `1px solid ${p.border}`,
-    fontSize: 12, fontWeight: 600, color: p.fg,
-    cursor: "pointer", fontFamily: "inherit",
-  };
-}
-
-function paginationBtn(disabled: boolean): React.CSSProperties {
-  return {
-    display: "inline-flex", alignItems: "center",
-    padding: 6, borderRadius: 8,
-    background: disabled ? "rgba(0,0,0,0.03)" : "rgba(255,255,255,0.85)",
-    border: `1px solid ${disabled ? "rgba(0,0,0,0.05)" : "rgba(220,30,60,0.12)"}`,
-    color: disabled ? "#bbb" : "#1a0a14",
-    cursor: disabled ? "not-allowed" : "pointer",
-  };
 }

@@ -21,6 +21,7 @@ from app.core.security import get_current_user, has_admin_role
 from app.core.tenancy import get_current_tenant_slug
 from app.models.pricing_plan import PricingPeriod, PricingPlan
 from app.schemas.common import APIResponse
+from app.services.audit import record_admin_action
 
 router = APIRouter(tags=["admin-pricing"])
 logger = get_logger(__name__)
@@ -190,6 +191,7 @@ async def admin_create_plan(
         raise HTTPException(status_code=409, detail=f"A plan with key {data['key']!r} already exists")
     await db.refresh(plan)
     logger.info("admin_create_pricing_plan", admin=current_user.get("sub"), plan_id=str(plan.id), key=plan.key)
+    await record_admin_action(db, current_user, "pricing.create", tenant_id=tenant_uuid, target_type="pricing_plan", target_id=plan.id, target_label=plan.name, details=_serialize(plan))
     return APIResponse(success=True, data=_serialize(plan))
 
 
@@ -221,6 +223,7 @@ async def admin_update_plan(
         raise HTTPException(status_code=409, detail="Key collision with another plan")
     await db.refresh(plan)
     logger.info("admin_update_pricing_plan", admin=current_user.get("sub"), plan_id=str(plan.id))
+    await record_admin_action(db, current_user, "pricing.update", tenant_id=tenant_uuid, target_type="pricing_plan", target_id=plan.id, target_label=plan.name, details=dict(data))
     return APIResponse(success=True, data=_serialize(plan))
 
 
@@ -247,6 +250,7 @@ async def admin_delete_plan(
     plan.is_active = False
     await db.flush()
     logger.info("admin_delete_pricing_plan", admin=current_user.get("sub"), plan_id=str(plan_id))
+    await record_admin_action(db, current_user, "pricing.delete", tenant_id=tenant_uuid, target_type="pricing_plan", target_id=plan_id, target_label=plan.name)
     return APIResponse(success=True, data={"id": str(plan_id)})
 
 
@@ -304,6 +308,7 @@ async def admin_reorder_plans(
         .order_by(PricingPlan.sort_order.asc(), PricingPlan.created_at.asc())
     )).scalars().all()
     logger.info("admin_reorder_pricing_plans", admin=current_user.get("sub"), n=len(order))
+    await record_admin_action(db, current_user, "pricing.reorder", tenant_id=tenant_uuid, target_type="pricing_plan", summary=" → ".join(p.name for p in rows))
     return APIResponse(success=True, data=[_serialize(p) for p in rows])
 
 

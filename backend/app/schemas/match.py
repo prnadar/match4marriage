@@ -20,14 +20,32 @@ class MatchRead(TimestampedSchema):
     a_super_liked: bool
     b_super_liked: bool
     mutual_at: datetime | None
-    # Profile card of the other user (populated by service layer)
+    # Profile card of the other user (populated by the matches router via
+    # app.services.matching.build_profile_card).
     other_profile: ProfileCard | None = None
+    # "preferred" = meets every stated partner preference; "broader" = shown
+    # because too few preferred matches exist (see `relaxed_on`).
+    match_tier: str = "preferred"
+    # Short "why you match" reasons, strongest first.
+    reasons: list[str] = []
+    # Preferences a broader match falls outside of (e.g. ["age range"]).
+    relaxed_on: list[str] = []
+    # True if the viewer has already expressed interest in this member.
+    interest_sent: bool = False
 
 
 class DailyMatchFeed(BaseSchema):
     matches: list[MatchRead]
     refreshes_at: str  # ISO datetime of next refresh
     remaining_today: int
+    preferred_count: int = 0
+    broader_count: int = 0
+    # Whether the viewer has stated any partner preferences at all.
+    has_preferences: bool = False
+    # Approved, gender-appropriate members considered for this feed.
+    candidates_considered: int = 0
+    # Set when the feed is empty for a known reason (e.g. "no_profile").
+    empty_reason: str | None = None
 
 
 class SendInterestRequest(BaseSchema):

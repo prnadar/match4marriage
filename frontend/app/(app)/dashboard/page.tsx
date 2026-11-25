@@ -8,7 +8,7 @@ import {
 } from "framer-motion";
 import {
   Shield, Heart, Clock, Sparkles, Search, ArrowRight, AlertCircle,
-  Check, Plus, Crown,
+  Check, Plus, Crown, Compass, RotateCw, SlidersHorizontal,
 } from "lucide-react";
 import { matchApi, profileApi, api, ApiError } from "@/lib/api";
 import { ApprovalGate } from "@/components/ApprovalGate";
@@ -18,14 +18,6 @@ import { RevealText } from "@/components/ui/reveal-text";
 
 /* ── Helpers ────────────────────────────────────────────────────────── */
 
-function cmToFeetInches(cm: number): string {
-  const totalInches = cm / 2.54;
-  const feet = Math.floor(totalInches / 12);
-  const inches = Math.round(totalInches % 12);
-  return `${feet}'${inches}"`;
-}
-
-const RIBBONS = ["Top Match", "Great Match", "Featured"];
 const EASE = [0.22, 1, 0.36, 1] as const;
 const MotionLink = motion(Link);
 
@@ -48,27 +40,37 @@ function CountUp({
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function mapMatch(p: any, idx: number): ProfileCardData {
-  const firstName = p.first_name || p.firstName || "";
-  const lastName = p.last_name || p.lastName || "";
-  const name = `${firstName} ${lastName}`.trim() || p.name || "Member";
+function titleCase(v: string): string {
+  return v ? v.charAt(0).toUpperCase() + v.slice(1).replace(/_/g, " ") : "";
+}
+
+type FeedCard = ProfileCardData & { tier: "preferred" | "broader"; interestSent: boolean };
+
+/** Map a MatchRead (with `other_profile` card) from /matches/daily. */
+function mapMatch(m: any, idx: number): FeedCard | null {
+  const p = m?.other_profile;
+  if (!p?.user_id) return null; // never render a card we can't link to a real member
+  const relaxed: string[] = Array.isArray(m.relaxed_on) ? m.relaxed_on : [];
+  const tier = m.match_tier === "broader" ? "broader" : "preferred";
   return {
-    id: p.id || p.user_id || String(idx),
-    name,
+    id: String(p.user_id),
+    name: (p.first_name || "Member").trim(),
     age: p.age ?? 0,
-    city: p.city || p.location || "",
+    city: p.city || "",
     state: p.state || "",
-    profession: p.profession || p.occupation || "",
-    company: p.company || "",
-    education: p.education_level || p.education || "",
-    religion: p.religion || "",
-    height: p.height_cm ? cmToFeetInches(p.height_cm) : p.height || "",
-    verified: p.is_verified ?? p.verified ?? false,
-    premium: p.is_premium ?? p.premium ?? false,
-    compatibility: p.compatibility ?? p.match_score ?? 0,
-    photoUrl: p.profile_photo || p.photo_url || p.photoUrl || null,
-    gender: p.gender,
-    ribbon: idx < RIBBONS.length ? RIBBONS[idx] : undefined,
+    profession: p.occupation || "",
+    education: p.education_level || "",
+    religion: titleCase(p.religion || ""),
+    verified: p.is_verified ?? false,
+    compatibility: Math.round(Number(m.compatibility_score) || 0),
+    photoUrl: p.primary_photo_url || null,
+    reasons: Array.isArray(m.reasons) ? m.reasons : [],
+    note: tier === "broader" && relaxed.length
+      ? `Outside your ${relaxed.join(", ")} preference`
+      : undefined,
+    ribbon: tier === "preferred" && idx === 0 ? "Top match" : undefined,
+    tier,
+    interestSent: Boolean(m.interest_sent),
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -92,13 +94,18 @@ export default function DashboardPage() {
 
 function DashboardContent() {
   const [interests, setInterests] = useState<Record<string, "sent" | "passed">>({});
-  const [matches, setMatches] = useState<ProfileCardData[]>([]);
+  const [matches, setMatches] = useState<FeedCard[]>([]);
+  const [feedMeta, setFeedMeta] = useState<{
+    hasPreferences: boolean; candidates: number; emptyReason: string | null;
+  }>({ hasPreferences: true, candidates: 0, emptyReason: null });
   const [completion, setCompletion] = useState<CompletionInfo | null>(null);
   const [membershipNumber, setMembershipNumber] = useState<string | null>(null);
   const [plan, setPlan] = useState<string>("free");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [interestError, setInterestError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const sessionSent = useRef<Set<string>>(new Set());
 
   const reduce = useReducedMotion();
   const fadeUp: Variants = {
@@ -143,8 +150,24 @@ function DashboardContent() {
         // `*.value.data` is the whole envelope, so the payload is at `.data.data`.
         if (matchRes.status === "fulfilled") {
           const payload = (matchRes.value.data as any)?.data;
-          const list: any[] = payload?.matches ?? (Array.isArray(payload) ? payload : []);
-          setMatches(list.map(mapMatch));
+          const list: any[] = payload?.matches ?? [];
+          const cards = list
+            .map((m, i) => mapMatch(m, i))
+            .filter((c): c is FeedCard => c !== null);
+          setMatches(cards);
+          setFeedMeta({
+            hasPreferences: payload?.has_preferences ?? true,
+            candidates: payload?.candidates_considered ?? 0,
+            emptyReason: payload?.empty_reason ?? null,
+          });
+          // Hearts reflect interests already sent in earlier sessions.
+          setInterests((prev) => {
+            const next = { ...prev };
+            cards.forEach((c) => { if (c.interestSent) next[c.id] = "sent"; });
+            return next;
+          });
+        } else {
+          setError("We couldn't load your matches right now. Please try again in a moment.");
         }
 
         if (completionRes.status === "fulfilled") {
@@ -158,9 +181,11 @@ function DashboardContent() {
       }
     }
     load();
-  }, []);
+  }, [reloadKey]);
 
   const sendInterest = async (id: string) => {
+    if (interests[id] === "sent") return; // already expressed — hearts are one-way here
+    sessionSent.current.add(id);
     setInterests((p) => ({ ...p, [id]: "sent" }));
     setInterestError(null);
     try {
@@ -170,6 +195,7 @@ function DashboardContent() {
       // because that's the truthful state on the backend. Any other
       // failure rolls back so the user can retry.
       if (err instanceof ApiError && err.status === 409) return;
+      sessionSent.current.delete(id);
       setInterests((p) => { const n = { ...p }; delete n[id]; return n; });
       if (err instanceof ApiError && err.status === 403) {
         // Basic plan quota exhausted — surface the server's message.
@@ -181,8 +207,10 @@ function DashboardContent() {
     }
   };
 
-  const active = matches.filter((m) => !interests[m.id]);
-  const sent = matches.filter((m) => interests[m.id] === "sent");
+  const preferred = matches.filter((m) => m.tier === "preferred");
+  const broader = matches.filter((m) => m.tier === "broader");
+  // Strip only lists interests sent in THIS visit (earlier ones show as filled hearts).
+  const sent = matches.filter((m) => interests[m.id] === "sent" && sessionSent.current.has(m.id));
   const completionScore = completion?.score ?? 0;
 
   return (
@@ -225,18 +253,20 @@ function DashboardContent() {
             )}
             <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-white/55">
               {loading ? (
-                "Loading the introductions our advisors selected for you today…"
+                "Finding members who match your profile and partner preferences…"
+              ) : matches.length === 0 ? (
+                "We'll show your best matches here as soon as compatible members are approved."
               ) : (
                 <>
                   <CountUp to={matches.length} className="font-semibold text-white" />{" "}
-                  hand-picked introductions for you, refreshed daily by our team.
+                  verified {matches.length === 1 ? "member" : "members"} ranked by compatibility with your profile and partner preferences.
                 </>
               )}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3 text-[12px]">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.05] px-3 py-1 text-white/70 ring-1 ring-white/10">
                 <Clock className="h-3.5 w-3.5 text-[#f3c9a8]" />
-                Refreshes 6:00 AM IST
+                Updates as new members are approved
               </span>
               <Link
                 href="/matches"
@@ -454,30 +484,51 @@ function DashboardContent() {
         )}
 
         {/* ── Section heading ────────────────────────────────────────── */}
-        <motion.div {...reveal} className="mt-10 mb-5 flex items-end justify-between gap-4">
+        <motion.div {...reveal} className="mt-10 mb-5 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#f3c9a8]">
-              <Sparkles className="mr-1 inline h-3 w-3" /> Today's introductions
+              <Sparkles className="mr-1 inline h-3 w-3" /> My matches
             </p>
             <h2 className="font-display mt-1 text-[24px] font-semibold text-white">
-              Hand-picked for you
+              Matched to your preferences
             </h2>
+            {!loading && preferred.length > 0 && (
+              <p className="mt-1 text-[13px] text-white/50">
+                {preferred.length} {preferred.length === 1 ? "member meets" : "members meet"} every preference you've set, best match first.
+              </p>
+            )}
           </div>
           <Link
             href="/matches"
-            className="hidden items-center gap-1 text-[13px] font-semibold text-[#f3c9a8] hover:text-white sm:inline-flex"
+            className="hidden items-center gap-1 text-[13px] font-semibold text-[#f3c9a8] transition-colors hover:text-white sm:inline-flex"
           >
-            See all <ArrowRight className="h-3.5 w-3.5" />
+            Browse all profiles <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </motion.div>
 
+        {/* ── Partner-preference nudge ───────────────────────────────── */}
+        {!loading && !error && matches.length > 0 && !feedMeta.hasPreferences && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#C9954A]/25 bg-[#C9954A]/10 px-4 py-3 text-[13px] text-[#f3c9a8]">
+            <span className="flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4 flex-shrink-0" />
+              You haven't set partner preferences yet, so these are ranked on your profile alone.
+            </span>
+            <Link
+              href="/profile/me"
+              className="inline-flex items-center gap-1 font-semibold text-white transition-colors hover:text-[#f3c9a8]"
+            >
+              Set preferences <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        )}
+
         {/* ── Loading skeletons ──────────────────────────────────────── */}
         {loading && (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-hidden>
             {Array.from({ length: 6 }).map((_, i) => (
               <div
                 key={i}
-                className="overflow-hidden rounded-[20px] border border-white/10 bg-white/[0.04]"
+                className="overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.04]"
               >
                 <div className="h-[260px] animate-pulse bg-white/[0.06]" />
                 <div className="p-4">
@@ -488,6 +539,11 @@ function DashboardContent() {
                     <div className="h-5 w-20 animate-pulse rounded-full bg-white/[0.07]" />
                   </div>
                 </div>
+                <div className="space-y-1.5 border-t border-white/[0.06] px-4 pb-4 pt-3">
+                  <div className="h-2.5 w-20 animate-pulse rounded bg-white/[0.07]" />
+                  <div className="h-3 w-4/5 animate-pulse rounded bg-white/[0.06]" />
+                  <div className="h-3 w-3/5 animate-pulse rounded bg-white/[0.06]" />
+                </div>
               </div>
             ))}
           </div>
@@ -496,44 +552,95 @@ function DashboardContent() {
         {/* ── Error state ────────────────────────────────────────────── */}
         {!loading && error && (
           <EmptyState
-            icon={<AlertCircle className="h-10 w-10 text-rose-300/70" />}
+            icon={<AlertCircle className="h-7 w-7 text-rose-300/70" />}
             title="We couldn't load your matches"
             body={error}
+            action={
+              <LuxeButton size="md" onClick={() => setReloadKey((k) => k + 1)}>
+                <RotateCw /> Try again
+              </LuxeButton>
+            }
           />
         )}
 
-        {/* ── Match grid ─────────────────────────────────────────────── */}
+        {/* ── Match grids ────────────────────────────────────────────── */}
         {!loading && !error && (
           <>
-            {active.length === 0 ? (
+            {matches.length === 0 ? (
               <EmptyState
-                icon={<Heart className="h-10 w-10 text-[#ff8aa3]/60" />}
-                title={matches.length === 0 ? "No matches yet" : "All caught up for today"}
+                icon={<Heart className="h-7 w-7 text-[#ff8aa3]/70" />}
+                title={feedMeta.emptyReason === "no_profile" ? "Complete your profile to see matches" : "No matches just yet"}
                 body={
-                  matches.length === 0
-                    ? "Our advisors are reviewing profiles for you. New introductions arrive at 6:00 AM IST."
-                    : "We'll prepare new introductions tomorrow morning. In the meantime, browse our wider community."
+                  feedMeta.emptyReason === "no_profile"
+                    ? "We match members on their profile and partner preferences. Finish yours and we'll start ranking compatible members for you."
+                    : "There are no approved members to match with you yet. New members appear here the moment our team approves them, and our advisors can also hand-pick introductions."
                 }
                 action={
-                  <LuxeButton asChild size="md">
-                    <Link href="/matches">
-                      <Search /> Browse all profiles
-                    </Link>
-                  </LuxeButton>
+                  <div className="flex flex-wrap justify-center gap-3">
+                    <LuxeButton asChild size="md" variant="outline">
+                      <Link href="/profile/me">Review partner preferences</Link>
+                    </LuxeButton>
+                    <LuxeButton asChild size="md">
+                      <Link href="/matches">
+                        <Search /> Browse all profiles
+                      </Link>
+                    </LuxeButton>
+                  </div>
                 }
               />
             ) : (
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {active.map((m, i) => (
-                  <ProfileCard
-                    key={m.id}
-                    data={m}
-                    index={i}
-                    liked={interests[m.id] === "sent"}
-                    onToggleLike={() => sendInterest(m.id)}
-                  />
-                ))}
-              </div>
+              <>
+                {preferred.length > 0 && (
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                    {preferred.map((m, i) => (
+                      <ProfileCard
+                        key={m.id}
+                        data={m}
+                        index={i}
+                        liked={interests[m.id] === "sent"}
+                        onToggleLike={() => sendInterest(m.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {broader.length > 0 && (
+                  <section className={preferred.length > 0 ? "mt-12" : ""} aria-labelledby="broader-heading">
+                    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 border-t border-white/[0.08] pt-6">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#f3c9a8]/80">
+                          <Compass className="mr-1 inline h-3 w-3" /> Broader matches
+                        </p>
+                        <h3 id="broader-heading" className="font-display mt-1 text-[20px] font-semibold text-white">
+                          {preferred.length === 0 ? "Close to what you're looking for" : "Worth a second look"}
+                        </h3>
+                        <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-white/50">
+                          {preferred.length === 0
+                            ? "No one meets every preference you've set yet, so here are the closest members. Each card shows where they differ."
+                            : "These members fall slightly outside one of your preferences but score well on everything else."}
+                        </p>
+                      </div>
+                      <Link
+                        href="/profile/me"
+                        className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#f3c9a8] transition-colors hover:text-white"
+                      >
+                        Adjust preferences <ArrowRight className="h-3 w-3" />
+                      </Link>
+                    </div>
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                      {broader.map((m, i) => (
+                        <ProfileCard
+                          key={m.id}
+                          data={m}
+                          index={i}
+                          liked={interests[m.id] === "sent"}
+                          onToggleLike={() => sendInterest(m.id)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
             )}
           </>
         )}

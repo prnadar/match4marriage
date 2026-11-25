@@ -1,6 +1,15 @@
 "use client";
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { getAuth, signOut, onAuthStateChanged, type Auth, type User as FirebaseUser } from "firebase/auth";
+import {
+  getAuth,
+  signOut,
+  onAuthStateChanged,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  type ActionCodeSettings,
+  type Auth,
+  type User as FirebaseUser,
+} from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -104,4 +113,70 @@ export function rememberSessionUid(uid: string) {
     clearClientState();
   }
   sessionStorage.setItem("m4m_session_uid", uid);
+}
+
+// ─── Account-security helpers (settings page, forgot / reset password) ──────
+
+/**
+ * Where Firebase-sent auth emails (password reset, email verification) should
+ * send the member back to. Firebase only honours this if the domain is listed
+ * under Firebase Console → Authentication → Settings → Authorised domains.
+ * With the console's custom action URL set to `<origin>/auth/reset-password`,
+ * the email link itself lands on our own page; otherwise Firebase's hosted
+ * handler shows a "Continue" button that returns here.
+ */
+export function authActionSettings(path = "/auth/login?reset=done"): ActionCodeSettings {
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  return { url: `${origin}${path}`, handleCodeInApp: false };
+}
+
+/** True when the signed-in member has an email + password sign-in method. */
+export function hasPasswordSignIn(user: FirebaseUser | null = firebaseAuth.currentUser): boolean {
+  return !!user?.providerData.some((p) => p?.providerId === "password");
+}
+
+/**
+ * Re-authenticate the current member with their password, then force a fresh
+ * ID token so the backend sees a recent `auth_time` (required for changing
+ * email/phone, deactivating and deleting). Throws Firebase errors unchanged —
+ * use `authErrorMessage` to present them.
+ */
+export async function reauthenticateWithPassword(password: string): Promise<void> {
+  const user = firebaseAuth.currentUser;
+  if (!user || !user.email) {
+    const err: any = new Error("Please sign in again to continue.");
+    err.code = "auth/requires-recent-login";
+    throw err;
+  }
+  await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
+  await user.getIdToken(true);
+}
+
+/** Map Firebase Auth error codes to member-facing copy. */
+export function authErrorMessage(e: any, fallback = "Something went wrong. Please try again."): string {
+  const code: string = e?.code || "";
+  if (code.includes("wrong-password") || code.includes("invalid-credential") || code.includes("invalid-login-credentials"))
+    return "That password isn't right. Please try again.";
+  if (code.includes("too-many-requests")) return "Too many attempts. Please wait a few minutes and try again.";
+  if (code.includes("weak-password")) return "Choose a stronger password — at least 8 characters.";
+  if (code.includes("requires-recent-login")) return "For your security, please sign out, sign back in and try again.";
+  if (code.includes("invalid-verification-code")) return "That code isn't right. Check the SMS and try again.";
+  if (code.includes("code-expired") || code.includes("expired-action-code")) return "That code has expired. Request a new one.";
+  if (code.includes("invalid-action-code")) return "This link is invalid or has already been used.";
+  if (code.includes("credential-already-in-use") || code.includes("account-exists-with-different-credential"))
+    return "That number is already registered to another account.";
+  if (code.includes("invalid-phone-number")) return "That phone number doesn't look right. Check the country code and digits.";
+  if (code.includes("quota-exceeded")) return "SMS limit reached for today. Please try again tomorrow.";
+  if (code.includes("captcha-check-failed"))
+    return "This site isn't authorised for SMS verification yet. Please contact support.";
+  if (code.includes("network-request-failed")) return "Network problem — check your connection and try again.";
+  if (code.includes("user-disabled")) return "This account has been disabled. Please contact support.";
+  if (code.includes("user-not-found")) return "We couldn't find that account.";
+  return e?.message && !String(e.message).startsWith("Firebase:") ? e.message : fallback;
+}
+
+/** Sign out locally and purge cached per-user state. */
+export async function signOutAndClear(): Promise<void> {
+  try { await signOut(firebaseAuth); } catch { /* already signed out */ }
+  clearClientState();
 }

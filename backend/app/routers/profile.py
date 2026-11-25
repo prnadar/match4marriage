@@ -31,6 +31,7 @@ from app.services.email import send_membership_welcome_email
 from app.services.membership import assign_membership_number
 from app.services.profile_completeness import compute_profile_completeness
 from app.services.storage import generate_photo_upload_signature, generate_upload_url
+from app.services.audit import record_admin_action
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 logger = get_logger(__name__)
@@ -203,9 +204,18 @@ async def browse_profiles(
     education: str | None = Query(default=None),
     marital_status: MaritalStatus | None = Query(default=None),
     has_photo: bool | None = Query(default=None),
+    # Optional "Brides" / "Grooms" narrowing. Browse defaults to EVERY
+    # approved member (any gender); My Matches is the gender-appropriate feed.
+    gender: str | None = Query(default=None, pattern="^(male|female)$"),
+    # Free-text search across first name, city, state, country and occupation
+    # (server-side so it covers every page, not just the loaded one).
+    q: str | None = Query(default=None, max_length=80),
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=24, ge=1, le=100),
 ):
+    from app.models.user import Gender
+    from app.services.matching import build_profile_card
+
     tenant_uuid = await _resolve_tenant_uuid(db, tenant_slug)
     if tenant_uuid is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
@@ -248,12 +258,33 @@ async def browse_profiles(
     )
 
     today = date.today()
+
+    def _years_ago(years: int) -> date:
+        # Feb 29 safe: date(2027, 2, 29) would raise and 500 the endpoint.
+        try:
+            return today.replace(year=today.year - years)
+        except ValueError:
+            return today.replace(year=today.year - years, day=28)
+
     if min_age is not None:
-        max_dob = date(today.year - min_age, today.month, today.day)
-        base_q = base_q.where(UserProfile.date_of_birth <= max_dob)
+        base_q = base_q.where(UserProfile.date_of_birth <= _years_ago(min_age))
     if max_age is not None:
-        min_dob = date(today.year - max_age - 1, today.month, today.day)
-        base_q = base_q.where(UserProfile.date_of_birth >= min_dob)
+        # Born after this date => still `max_age` (not yet max_age + 1).
+        base_q = base_q.where(UserProfile.date_of_birth > _years_ago(max_age + 1))
+    if gender is not None:
+        base_q = base_q.where(UserProfile.gender == Gender(gender))
+    if q and q.strip():
+        from sqlalchemy import or_, func as sqlfunc
+        term = "%" + q.strip().lower().replace("\\", "").replace("%", "").replace("_", "") + "%"
+        base_q = base_q.where(
+            or_(
+                sqlfunc.lower(UserProfile.first_name).like(term),
+                sqlfunc.lower(UserProfile.city).like(term),
+                sqlfunc.lower(UserProfile.state).like(term),
+                sqlfunc.lower(UserProfile.country).like(term),
+                sqlfunc.lower(UserProfile.occupation).like(term),
+            )
+        )
 
     if religion is not None:
         base_q = base_q.where(UserProfile.religion == religion)
@@ -277,9 +308,16 @@ async def browse_profiles(
     if country:
         # Country is stored as the human label (e.g. "United Kingdom") by
         # onboarding, matching the Browse dropdown — case-insensitive exact
-        # match so "united kingdom" and "United Kingdom" both hit.
+        # match so "united kingdom" and "United Kingdom" both hit. Aliases
+        # ("UK", "GB", "USA", "UAE"…) resolve to the same country so older
+        # rows saved with a short code aren't silently dropped.
         from sqlalchemy import func as sqlfunc
-        base_q = base_q.where(sqlfunc.lower(UserProfile.country) == country.lower())
+        from app.services.matching import _COUNTRY_ALIASES, normalize_country
+        canonical = normalize_country(country)
+        variants = {canonical, country.lower().strip()} | {
+            alias for alias, target in _COUNTRY_ALIASES.items() if target == canonical
+        }
+        base_q = base_q.where(sqlfunc.lower(sqlfunc.trim(UserProfile.country)).in_(sorted(variants)))
     if education:
         from sqlalchemy import func as sqlfunc
         base_q = base_q.where(
@@ -294,40 +332,18 @@ async def browse_profiles(
     count_q = select(func.count()).select_from(base_q.subquery())
     total: int = (await db.execute(count_q)).scalar_one()
 
-    rows_q = base_q.order_by(UserProfile.created_at.desc()).offset(offset).limit(limit)
+    # Secondary sort on user_id keeps page boundaries stable (no duplicates or
+    # skipped rows across "Load more" pages when created_at ties).
+    rows_q = (
+        base_q.order_by(UserProfile.created_at.desc(), UserProfile.user_id)
+        .offset(offset)
+        .limit(limit)
+    )
     rows = (await db.execute(rows_q)).all()
 
-    def _age(dob: date | None) -> int | None:
-        if dob is None:
-            return None
-        today_ = date.today()
-        return today_.year - dob.year - ((today_.month, today_.day) < (dob.month, dob.day))
-
-    def _primary_photo(photos: list[dict]) -> str | None:
-        # Premium photos are never the public card thumbnail.
-        main = [p for p in photos if not p.get("is_premium")]
-        for p in main:
-            if p.get("is_primary"):
-                return p.get("url")
-        return main[0].get("url") if main else None
-
-    cards: list[ProfileCard] = []
-    for profile_row, user_row in rows:
-        cards.append(
-            ProfileCard(
-                user_id=profile_row.user_id,
-                first_name=profile_row.first_name,
-                age=_age(profile_row.date_of_birth),
-                city=profile_row.city,
-                state=profile_row.state,
-                occupation=profile_row.occupation,
-                education_level=profile_row.education_level,
-                religion=profile_row.religion,
-                primary_photo_url=_primary_photo(profile_row.photos or []),
-                completeness_score=profile_row.completeness_score,
-                is_verified=(profile_row.verification_status == "approved"),
-            )
-        )
+    # Card building is shared with the My Matches feed (premium photos are
+    # never used as the public thumbnail).
+    cards: list[ProfileCard] = [build_profile_card(profile_row) for profile_row, _user_row in rows]
 
     logger.info("profiles_browsed", caller_id=str(caller_id), tenant=tenant_slug, total=total, page=page)
     return PaginatedResponse.create(items=cards, total=total, page=page, limit=limit)
@@ -1131,6 +1147,7 @@ async def admin_approve(
     profile.rejection_reason = None
     profile.reviewed_at = datetime.utcnow()
     await db.flush()
+    await record_admin_action(db, current_user, "verification.approve", tenant_id=tenant_uuid, target_type="user", target_id=user_id, target_label=f"{profile.first_name or ''} {profile.last_name or ''}".strip())
     await db.refresh(profile)
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
 
@@ -1155,6 +1172,7 @@ async def admin_request_info(
     profile.rejection_reason = f"More info needed: {note}"
     profile.reviewed_at = datetime.utcnow()
     await db.flush()
+    await record_admin_action(db, current_user, "verification.request_info", tenant_id=tenant_uuid, target_type="user", target_id=user_id, target_label=f"{profile.first_name or ''} {profile.last_name or ''}".strip(), summary=note)
     await db.refresh(profile)
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
 
@@ -1179,6 +1197,7 @@ async def admin_reject(
     profile.rejection_reason = reason
     profile.reviewed_at = datetime.utcnow()
     await db.flush()
+    await record_admin_action(db, current_user, "verification.reject", tenant_id=tenant_uuid, target_type="user", target_id=user_id, target_label=f"{profile.first_name or ''} {profile.last_name or ''}".strip(), summary=reason)
     await db.refresh(profile)
     return APIResponse(success=True, data=ProfileRead.model_validate(profile, from_attributes=True))
 

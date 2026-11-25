@@ -17,6 +17,8 @@ from app.models.verification import Verification, VerificationType, Verification
 from app.models.notification import Notification
 from app.models.report import Report, ReportCategory, ReportStatus
 from app.models.success_story import SuccessStory
+from app.models.admin_audit_log import AdminAuditLog
+from app.models.admin_crm import AdminCommunication, AdminBroadcast, AdminUserNote, UserCrmProfile
 
 __all__ = [
     "TenantModel",
@@ -57,4 +59,9 @@ __all__ = [
     "ReportCategory",
     "ReportStatus",
     "SuccessStory",
+    "AdminCommunication",
+    "AdminBroadcast",
+    "AdminUserNote",
+    "UserCrmProfile",
+    "AdminAuditLog",
 ]

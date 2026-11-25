@@ -19,6 +19,7 @@ from app.core.security import get_current_user, has_admin_role
 from app.core.tenancy import get_current_tenant_slug
 from app.models.site_setting import SiteSetting
 from app.schemas.common import APIResponse
+from app.services.audit import record_admin_action
 
 router = APIRouter(tags=["admin-settings"])
 logger = get_logger(__name__)
@@ -196,6 +197,7 @@ async def admin_update_site_settings(
     await db.flush()
     await db.refresh(row)
     logger.info("admin_update_site_settings", admin=current_user.get("sub"), tenant=str(tenant_uuid))
+    await record_admin_action(db, current_user, "settings.site.update", tenant_id=tenant_uuid, target_type="settings", target_label="Site settings", summary="Changed: " + ", ".join(sorted(payload.keys())), details={k: payload[k] for k in payload if k != "extras"})
     return APIResponse(success=True, data=_serialize(row))
 
 
@@ -243,6 +245,7 @@ async def admin_update_appearance(
     await db.flush()
     await db.refresh(row)
     logger.info("admin_update_appearance", admin=current_user.get("sub"), tenant=str(tenant_uuid))
+    await record_admin_action(db, current_user, "settings.appearance.update", tenant_id=tenant_uuid, target_type="settings", target_label="Appearance", summary="Changed: " + ", ".join(sorted(payload.keys())), details=dict(payload))
     return APIResponse(success=True, data=_serialize_appearance(row))
 
 

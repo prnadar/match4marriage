@@ -1,6 +1,6 @@
 """
 Matches router.
-GET  /api/v1/matches/daily       — today's 5 curated matches
+GET  /api/v1/matches/daily       — ranked "My Matches" feed (up to 20)
 POST /api/v1/interests/{match_id} — send interest
 GET  /api/v1/interests/received   — received interests
 POST /api/v1/quiz/submit          — personality quiz
@@ -11,7 +11,7 @@ from datetime import date, datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -30,7 +30,6 @@ from app.schemas.match import (
     QuizSubmitRequest,
     SendInterestRequest,
 )
-from app.services.matching import compute_compatibility
 
 router = APIRouter(tags=["matches"])
 logger = get_logger(__name__)
@@ -62,77 +61,115 @@ async def get_daily_matches(
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_slug: str = Depends(get_current_tenant_slug),
 ):
-    """Returns today's curated matches. Generated daily at 06:00 UK time."""
-    today_str = date.today().isoformat()
-    next_refresh = f"{date.today().isoformat()}T06:00:00+00:00"  # 06:00 UK (GMT)
-    user_id_raw = current_user.get("sub", "")
+    """
+    "My Matches" feed — a ranked list (best first, up to DAILY_MATCH_COUNT) of
+    admin-approved, opposite-gender members scored against the caller's
+    profile + partner preferences. Members inside every stated preference come
+    first ("preferred"); if there are too few, the closest remaining members
+    are appended as "broader" matches, labelled with what they fall outside.
 
-    # Validate UUID — if not valid (demo-placeholder etc), return empty feed
-    try:
-        user_uuid = uuid.UUID(user_id_raw)
-    except (ValueError, AttributeError):
-        feed = DailyMatchFeed(matches=[], refreshes_at=next_refresh, remaining_today=5)
+    Computed live on each request (so newly approved members appear
+    immediately) and persisted best-effort into `matches` for history.
+    """
+    from datetime import timedelta
+    from app.models.user import UserProfile
+    from app.services.matching import (
+        DAILY_MATCH_COUNT,
+        build_profile_card,
+        has_any_preference,
+        load_feed_candidates,
+        normalize_partner_prefs,
+        persist_daily_matches,
+        rank_candidates,
+    )
+
+    now = datetime.now(timezone.utc)
+    next_refresh = (now + timedelta(days=1)).date().isoformat() + "T06:00:00+00:00"
+
+    def _empty(reason: str | None) -> APIResponse:
+        return APIResponse(success=True, data=DailyMatchFeed(
+            matches=[], refreshes_at=next_refresh, remaining_today=0, empty_reason=reason,
+        ))
+
+    user_uuid = _get_user_uuid(current_user)
+    if user_uuid is None:
+        return _empty("invalid_session")
+
+    tenant_uuid = await _resolve_tenant(db, tenant_slug)
+
+    viewer = (await db.execute(
+        select(UserProfile).where(
+            UserProfile.user_id == user_uuid,
+            UserProfile.deleted_at.is_(None),
+        )
+    )).scalar_one_or_none()
+    if viewer is None:
+        return _empty("no_profile")
+
+    candidates = await load_feed_candidates(viewer, tenant_uuid, db)
+    ranked = rank_candidates(viewer, candidates, limit=DAILY_MATCH_COUNT)
+    if not ranked:
+        feed = DailyMatchFeed(
+            matches=[], refreshes_at=next_refresh, remaining_today=0,
+            has_preferences=has_any_preference(normalize_partner_prefs(viewer.partner_prefs)),
+            candidates_considered=len(candidates),
+            empty_reason="no_candidates",
+        )
         return APIResponse(success=True, data=feed)
 
-    result = await db.execute(
-        select(Match).where(
-            and_(
-                or_(Match.user_a_id == user_uuid, Match.user_b_id == user_uuid),
-                Match.match_date == today_str,
-                Match.status == MatchStatus.PENDING,
-                Match.deleted_at.is_(None),
-            )
+    persisted = await persist_daily_matches(user_uuid, tenant_uuid, ranked, db)
+
+    # Which of these members has the caller already sent interest to?
+    cand_ids = [e["profile"].user_id for e in ranked]
+    sent_ids = set((await db.execute(
+        select(Interest.receiver_id).where(
+            Interest.sender_id == user_uuid,
+            Interest.receiver_id.in_(cand_ids),
+            Interest.tenant_id == tenant_uuid,
+            Interest.deleted_at.is_(None),
         )
-    )
-    matches = result.scalars().all()
+    )).scalars().all())
 
-    # Fallback: generate matches inline if none exist for today (new user or pre-Celery)
-    if not matches:
-        from app.models.user import User
-        from app.services.matching import generate_daily_matches
-        user_obj_result = await db.execute(
-            select(User).where(User.id == user_uuid, User.deleted_at.is_(None))
-        )
-        user_obj = user_obj_result.scalar_one_or_none()
-        if user_obj and user_obj.tenant_id:
-            await generate_daily_matches(user_uuid, user_obj.tenant_id, db)
-            # Re-query after generation
-            result2 = await db.execute(
-                select(Match).where(
-                    and_(
-                        or_(Match.user_a_id == user_uuid, Match.user_b_id == user_uuid),
-                        Match.match_date == today_str,
-                        Match.status == MatchStatus.PENDING,
-                        Match.deleted_at.is_(None),
-                    )
-                )
-            )
-            matches = result2.scalars().all()
+    today_str = now.date().isoformat()
+    items: list[MatchRead] = []
+    for e in ranked:
+        prof = e["profile"]
+        row = persisted.get(prof.user_id)
+        items.append(MatchRead(
+            # Stable synthetic id when persistence was unavailable.
+            id=row.id if row is not None else uuid.uuid5(
+                uuid.NAMESPACE_URL, f"m4m-match:{user_uuid}:{prof.user_id}"),
+            created_at=row.created_at if row is not None else now,
+            updated_at=row.updated_at if row is not None else now,
+            user_a_id=user_uuid,
+            user_b_id=prof.user_id,
+            compatibility_score=float(e["score"]),
+            compatibility_breakdown={k: float(v) for k, v in e["breakdown"].items()},
+            status=MatchStatus.PENDING,
+            match_date=today_str,
+            a_super_liked=bool(row.a_super_liked) if row is not None else False,
+            b_super_liked=bool(row.b_super_liked) if row is not None else False,
+            mutual_at=row.mutual_at if row is not None else None,
+            other_profile=build_profile_card(prof),
+            match_tier=e["tier"],
+            reasons=e["reasons"],
+            relaxed_on=e["relaxed"],
+            interest_sent=prof.user_id in sent_ids,
+        ))
 
-    # Show only matches whose counterpart profile is admin-approved (mirrors the
-    # Browse gate). generate_daily_matches already scores only approved
-    # candidates, but this also hides any pre-existing / stale match — or a
-    # profile that was approved when matched and un-approved later.
-    if matches:
-        from app.models.user import UserProfile
-
-        def _counterpart(m):
-            return m.user_b_id if m.user_a_id == user_uuid else m.user_a_id
-
-        other_ids = {_counterpart(m) for m in matches}
-        approved_ids = set((await db.execute(
-            select(UserProfile.user_id).where(
-                UserProfile.user_id.in_(other_ids),
-                UserProfile.verification_status == "approved",
-                UserProfile.deleted_at.is_(None),
-            )
-        )).scalars().all())
-        matches = [m for m in matches if _counterpart(m) in approved_ids]
-
+    preferred_count = sum(1 for e in ranked if e["tier"] == "preferred")
     feed = DailyMatchFeed(
-        matches=[MatchRead.model_validate(m) for m in matches],
+        matches=items,
         refreshes_at=next_refresh,
-        remaining_today=max(0, 5 - len(matches)),
+        remaining_today=0,
+        preferred_count=preferred_count,
+        broader_count=len(ranked) - preferred_count,
+        has_preferences=has_any_preference(normalize_partner_prefs(viewer.partner_prefs)),
+        candidates_considered=len(candidates),
+    )
+    logger.info(
+        "match_feed_built", user_id=str(user_uuid), shown=len(items),
+        preferred=preferred_count, pool=len(candidates),
     )
     return APIResponse(success=True, data=feed)
 

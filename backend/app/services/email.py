@@ -78,6 +78,159 @@ def _html_to_plain(html: str) -> str:
     return text.strip()
 
 
+# ── Account & security emails (password reset, email change, notices) ────────
+#
+# Used by app/routers/auth.py. Kept together so the account-security mail all
+# shares one branded shell.
+
+
+def _account_email_shell(heading: str, body_html: str, footnote: str = "") -> str:
+    """Branded shell for account/security emails (same palette as verification)."""
+    import html as _html
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{_html.escape(heading)}</title></head>
+<body style="font-family: Arial, sans-serif; background: #f9f6f1; margin: 0; padding: 0;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9f6f1; padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0"
+             style="background:#ffffff; border-radius:12px; overflow:hidden;
+                    box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:#c0392b; padding:32px; text-align:center;">
+            <h1 style="color:#ffffff; margin:0; font-size:24px; letter-spacing:1px;">Match4Marriage</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 40px;">
+            <h2 style="font-size:19px; color:#222222; margin:0 0 18px;">{_html.escape(heading)}</h2>
+            {body_html}
+            {f'<p style="font-size:13px; color:#888888; line-height:1.5; margin:24px 0 0;">{footnote}</p>' if footnote else ''}
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f4f0ec; padding:20px 40px; text-align:center;">
+            <p style="margin:0; font-size:12px; color:#aaaaaa;">
+              &copy; Match4Marriage &middot; This is an automated security message.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+"""
+
+
+async def send_password_reset_email(
+    email: str,
+    reset_url: str,
+    user_name: str,
+    expires_minutes: int = 60,
+    subject: str | None = None,
+    html_override: str | None = None,
+    text_override: str | None = None,
+) -> bool:
+    """
+    Send a password-reset link. `subject` / `html_override` / `text_override`
+    let the caller supply an admin-managed `password_reset` mail template
+    (already rendered); otherwise the built-in branded copy is used.
+    """
+    import html as _html
+    safe_name = _html.escape(user_name or "there")
+    safe_url = _html.escape(reset_url, quote=True)
+    subj = subject or "Reset your Match4Marriage password"
+    if html_override and "<html" not in html_override.lower():
+        # Admin templates are usually body fragments — wrap in the house shell.
+        html_override = _account_email_shell("Reset your password", html_override)
+    html = html_override or _account_email_shell(
+        "Reset your password",
+        f"""
+            <p style="font-size:15px; color:#555555; line-height:1.6; margin:0 0 16px;">Hello {safe_name},</p>
+            <p style="font-size:15px; color:#555555; line-height:1.6; margin:0 0 28px;">
+              We received a request to reset the password for your Match4Marriage account.
+              Choose a new password using the button below.
+            </p>
+            <p style="text-align:center; margin:0 0 28px;">
+              <a href="{safe_url}"
+                 style="display:inline-block; background:#c0392b; color:#ffffff; text-decoration:none;
+                        font-weight:bold; font-size:15px; padding:14px 30px; border-radius:8px;">
+                Choose a new password
+              </a>
+            </p>
+            <p style="font-size:13px; color:#888888; line-height:1.5; margin:0 0 8px;">
+              This link expires in {int(expires_minutes)} minutes and can only be used once.
+              If the button doesn't work, copy this address into your browser:
+            </p>
+            <p style="font-size:12px; color:#c0392b; word-break:break-all; margin:0;">{safe_url}</p>
+        """,
+        footnote="If you didn't ask to reset your password, you can safely ignore this email. "
+                 "Your password won't change.",
+    )
+    plain = text_override or (
+        f"Hello {user_name or 'there'},\n\n"
+        "We received a request to reset your Match4Marriage password.\n"
+        f"Choose a new password here (expires in {int(expires_minutes)} minutes, single use):\n\n"
+        f"{reset_url}\n\n"
+        "If you didn't ask for this, ignore this email. Your password won't change."
+    )
+    return await asyncio.to_thread(_resend_post, email, user_name, subj, html, plain)
+
+
+async def send_email_change_code(email: str, token: str, user_name: str) -> bool:
+    """Send a 6-digit code to a NEW email address to confirm an email change."""
+    import html as _html
+    safe_name = _html.escape(user_name or "there")
+    html = _account_email_shell(
+        "Confirm your new email address",
+        f"""
+            <p style="font-size:15px; color:#555555; line-height:1.6; margin:0 0 16px;">Hello {safe_name},</p>
+            <p style="font-size:15px; color:#555555; line-height:1.6; margin:0 0 24px;">
+              You asked to use this address for your Match4Marriage account.
+              Enter the code below in Settings to confirm the change.
+            </p>
+            <div style="background:#f4f0ec; border-radius:8px; padding:24px; text-align:center; margin:0 0 8px;">
+              <span style="font-size:36px; font-weight:bold; color:#c0392b; letter-spacing:6px;">{_html.escape(token)}</span>
+              <p style="margin:12px 0 0; font-size:12px; color:#aaaaaa;">Expires in 10 minutes</p>
+            </div>
+        """,
+        footnote="If you didn't request this, ignore this email. Your account email won't change. "
+                 "Never share this code with anyone.",
+    )
+    plain = (
+        f"Hello {user_name or 'there'},\n\n"
+        f"Your Match4Marriage email-change code is: {token}\n\n"
+        "It expires in 10 minutes. If you didn't request this, ignore this email."
+    )
+    return await asyncio.to_thread(
+        _resend_post, email, user_name, "Confirm your new Match4Marriage email", html, plain
+    )
+
+
+async def send_security_notice_email(email: str, user_name: str, title: str, message: str) -> bool:
+    """
+    Short "something changed on your account" notice (password changed, email
+    changed, account deactivated/deleted). `message` is plain text.
+    """
+    import html as _html
+    safe_name = _html.escape(user_name or "there")
+    html = _account_email_shell(
+        title,
+        f"""
+            <p style="font-size:15px; color:#555555; line-height:1.6; margin:0 0 16px;">Hello {safe_name},</p>
+            <p style="font-size:15px; color:#555555; line-height:1.6; margin:0;">{_html.escape(message)}</p>
+        """,
+        footnote="If this wasn't you, reset your password straight away and reply to this email "
+                 "so our team can secure your account.",
+    )
+    plain = (
+        f"Hello {user_name or 'there'},\n\n{message}\n\n"
+        "If this wasn't you, reset your password straight away and reply to this email."
+    )
+    return await asyncio.to_thread(_resend_post, email, user_name, f"Match4Marriage: {title}", html, plain)
+
+
 # ── Public async API ──────────────────────────────────────────────────────────
 
 
@@ -511,3 +664,121 @@ async def send_interest_notification_email(
     return await asyncio.to_thread(
         _resend_post, email, recipient_name, subject, html, plain
     )
+
+
+# ── Admin → member messages (CRM) ─────────────────────────────────────────────
+#
+# Used by app/routers/admin_crm.py. The admin writes the body (plain text or
+# HTML from a mail template); we wrap it in the house email shell. Unlike the
+# helpers above these return a detail dict so the communication log can record
+# the provider id or the exact failure reason.
+
+
+def render_admin_message_html(subject: str, body_html: str) -> str:
+    """Wrap an admin-authored body in the branded Match4Marriage email shell."""
+    import html as _html
+    safe_subject = _html.escape(subject or "")
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{safe_subject}</title></head>
+<body style="font-family: Arial, sans-serif; background: #f9f6f1; margin: 0; padding: 0;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9f6f1; padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0"
+             style="background:#ffffff; border-radius:12px; overflow:hidden;
+                    box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:#1a0a14; padding:26px 32px; text-align:center;">
+            <h1 style="color:#ffffff; margin:0; font-size:22px; letter-spacing:1px;">Match4Marriage</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:34px 40px; font-size:15px; color:#444444; line-height:1.65;">
+            {body_html}
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f4f0ec; padding:18px 40px; text-align:center;">
+            <p style="margin:0; font-size:12px; color:#999999; line-height:1.5;">
+              You are receiving this because you are a registered member of Match4Marriage.<br>
+              Simply reply to this email to reach our team.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+"""
+
+
+def _admin_send_one(params: dict[str, Any]) -> dict[str, Any]:
+    if not settings.RESEND_API_KEY:
+        return {"ok": False, "id": None, "error": "Email provider not configured (RESEND_API_KEY is not set)"}
+    _configure_resend()
+    try:
+        res = resend.Emails.send(params)
+        return {"ok": True, "id": (res or {}).get("id"), "error": None}
+    except Exception as exc:  # provider / network error
+        logger.error("admin_email_error", error=str(exc))
+        return {"ok": False, "id": None, "error": str(exc)[:500]}
+
+
+def _admin_params(to_email: str, subject: str, html: str, text: str, reply_to: str | None) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "from": f"Match4Marriage <{settings.RESEND_FROM_EMAIL}>",
+        "to": [to_email],
+        "subject": subject,
+        "html": html,
+        "text": text or _html_to_plain(html),
+    }
+    if reply_to:
+        params["reply_to"] = reply_to
+    return params
+
+
+async def send_admin_message_email(
+    to_email: str,
+    subject: str,
+    html: str,
+    text: str = "",
+    reply_to: str | None = None,
+) -> dict[str, Any]:
+    """Send one admin-authored email. Returns {ok, id, error}."""
+    params = _admin_params(to_email, subject, html, text, reply_to)
+    return await asyncio.to_thread(_admin_send_one, params)
+
+
+def _admin_send_batch(chunk: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not settings.RESEND_API_KEY:
+        return [{"ok": False, "id": None, "error": "Email provider not configured (RESEND_API_KEY is not set)"} for _ in chunk]
+    _configure_resend()
+    try:
+        res = resend.Batch.send(chunk)  # up to 100 messages per call
+        data = (res or {}).get("data") or []
+        out = []
+        for i in range(len(chunk)):
+            mid = data[i].get("id") if i < len(data) and isinstance(data[i], dict) else None
+            out.append({"ok": True, "id": mid, "error": None})
+        return out
+    except Exception as exc:
+        logger.error("admin_batch_email_error", error=str(exc), size=len(chunk))
+        return [{"ok": False, "id": None, "error": str(exc)[:500]} for _ in chunk]
+
+
+async def send_admin_batch_emails(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Send many admin-authored emails using Resend's batch endpoint (100 per
+    request) so a broadcast to a few thousand members doesn't trip the
+    per-second rate limit. Each message: {to, subject, html, text, reply_to}.
+    Returns one {ok, id, error} per message, in order.
+    """
+    results: list[dict[str, Any]] = []
+    for i in range(0, len(messages), 100):
+        chunk = [
+            _admin_params(m["to"], m["subject"], m["html"], m.get("text", ""), m.get("reply_to"))
+            for m in messages[i:i + 100]
+        ]
+        results.extend(await asyncio.to_thread(_admin_send_batch, chunk))
+    return results

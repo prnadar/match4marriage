@@ -1,20 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  Users, UserCheck, Clock, ShieldCheck, AlertTriangle,
-  CheckCircle2, XCircle, RefreshCw, ChevronRight, ArrowUpRight, ArrowDownRight,
-  Wallet, CreditCard, CalendarClock, Crown, TrendingUp, Heart,
+  AlertTriangle, ArrowRight, CalendarClock, CheckCircle2, Clock, CreditCard, Flag,
+  HeartHandshake, Inbox, RefreshCw, ScrollText, ShieldCheck, TrendingUp, UserPlus, Users, Wallet, XCircle,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { adminApi, ApiError } from "@/lib/api";
+import { formatGBP, planLabel } from "@/lib/plans";
 import { cn } from "@/lib/utils";
-import { planLabel, formatGBP } from "@/lib/plans";
+import { Button } from "@/components/admin/PageShell";
+import {
+  Delta, EmptyState, Panel, Pill, Segmented, Skeleton, hoursSince, pctChange, relTime, waitingLabel,
+} from "@/components/admin/primitives";
+import { describeAction } from "@/components/admin/audit-labels";
+import {
+  BarList, ColumnChart, Funnel, RUBY_RAMP, SERIES, SegmentBar, denseDaily, denseMonths, weekly,
+} from "@/components/admin/charts";
+
+// ─── Types (all extended fields optional: older backends degrade cleanly) ────
 
 interface Stats {
   users: { total: number; active: number; suspended: number; new_today: number; new_7d: number; new_30d: number };
@@ -24,55 +29,30 @@ interface Stats {
   plan_distribution?: Array<{ plan: string; count: number }>;
   renewals_due?: Array<{ user_id: string; name: string; plan: string; amount_paise: number; current_period_end: string | null }>;
   registration_trend: Array<{ date: string; count: number }>;
+  registration_trend_90d?: Array<{ date: string; count: number }>;
   religion_distribution: Array<{ religion: string; count: number }>;
   recent_activity: Array<{ user_id: string; name: string; status: string; submitted_at: string | null; reviewed_at: string | null }>;
+  deltas?: { new_prev_7d: number; new_prev_30d: number; revenue_prev_month_paise: number; interests_prev_30d: number; messages_prev_30d: number };
+  funnel?: { profile_complete: number; submitted: number; paid: number };
+  engagement?: { interests_30d: number; mutual_matches_total: number; mutual_matches_30d: number; messages_30d: number };
+  active_subscriptions_by_plan?: Array<{ plan: string; count: number; amount_paise: number }>;
+  gender_distribution?: Array<{ gender: string; count: number }>;
+  country_distribution?: Array<{ country: string; count: number }>;
+  verification_sla?: {
+    avg_review_hours_30d: number | null;
+    oldest_pending: Array<{ user_id: string; name: string; submitted_at: string | null; waiting_hours: number | null; completeness_score: number }>;
+  };
+  enquiries?: { new: number };
+  recent_admin_actions?: Array<{ created_at: string | null; actor_email: string | null; action: string; target_type: string | null; target_id: string | null; target_label: string | null; summary: string | null }>;
 }
 
-// Brand-aware plan meta. Each tier gets a distinct hue from the existing
-// rose/gold palette so plan distribution reads at a glance. Labels come from
-// the shared planLabel() map (Basic / Premium / Elite).
-const PLAN_META: Record<string, { label: string; color: string; bg: string }> = {
-  free:     { label: planLabel("free"),     color: "#A78A8F", bg: "bg-[#F4ECEC]" },
-  silver:   { label: planLabel("silver"),   color: "#7D8A93", bg: "bg-[#EDEFF1]" },
-  gold:     { label: planLabel("gold"),     color: "#C9954A", bg: "bg-gold-100" },
-  platinum: { label: planLabel("platinum"), color: "#7D0A35", bg: "bg-rose-100" },
-};
-
-function shortMonth(yyyymm: string): string {
-  const [, m] = yyyymm.split("-");
-  const idx = Math.max(0, Math.min(11, parseInt(m || "1", 10) - 1));
-  return ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][idx];
-}
-
-function daysUntil(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const days = Math.ceil((d.getTime() - Date.now()) / 86400000);
-  if (days <= 0) return "today";
-  if (days === 1) return "tomorrow";
-  return `in ${days}d`;
-}
-
-function formatRel(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const diff = Date.now() - d.getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
+const SLA_HOURS = 48;
 
 function greetingFor(now = new Date()): string {
   const h = now.getHours();
-  if (h < 5)  return "Working late";
+  if (h < 5) return "Working late";
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
-  if (h < 21) return "Good evening";
   return "Good evening";
 }
 
@@ -81,548 +61,436 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [range, setRange] = useState<"30" | "90">("30");
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setError(null);
     try {
       const res = await adminApi.getStats();
       setStats((res.data as any)?.data);
+      setUpdatedAt(new Date());
     } catch (e) {
       setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Failed to load stats");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
   const refresh = () => { setRefreshing(true); load(); };
-
   const greeting = useMemo(() => greetingFor(), []);
+  const today = useMemo(() => new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }), []);
 
-  if (loading) return <DashboardSkeleton />;
+  const header = (
+    <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 className="font-display text-[24px] font-semibold leading-tight tracking-[-0.01em] text-foreground sm:text-[28px]">{greeting}</h1>
+        <p className="mt-1 text-[13px] text-muted2-foreground">
+          {today}{updatedAt && <> · updated {relTime(updatedAt.toISOString())}</>}
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={refresh} disabled={refreshing} ariaLabel="Refresh dashboard">
+          <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} aria-hidden /> Refresh
+        </Button>
+        <Link href="/admin/verifications" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary bg-primary px-3 text-[12.5px] font-medium text-primary-foreground shadow-[0_1px_2px_rgba(160,21,60,0.25)] transition-colors hover:bg-[#C21933] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1">
+          Review queue <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+        </Link>
+      </div>
+    </header>
+  );
+
+  if (loading) return <div className="mx-auto max-w-[1400px]">{header}<DashboardSkeleton /></div>;
 
   if (error || !stats) {
     return (
-      <>
-        <DashboardHero greeting={greeting} refresh={refresh} refreshing={refreshing} />
-        <Card className="border-destructive/30">
-          <CardContent className="flex items-start gap-3 text-destructive py-8">
-            <AlertTriangle className="w-4 h-4 mt-0.5" />
-            <span className="text-sm">{error || "No data"}</span>
-          </CardContent>
-        </Card>
-      </>
+      <div className="mx-auto max-w-[1400px]">
+        {header}
+        <Panel>
+          <EmptyState
+            icon={AlertTriangle}
+            title="Couldn't load the dashboard"
+            description={error || "The stats endpoint returned no data."}
+            action={<Button size="sm" onClick={refresh}>Try again</Button>}
+          />
+        </Panel>
+      </div>
     );
   }
 
-  const earnings = stats.earnings;
-  const planDist = stats.plan_distribution || [];
-  const totalPlan = planDist.reduce((s, x) => s + x.count, 0);
-  const renewals = stats.renewals_due || [];
-  const earningsSeries = earnings?.monthly_series || [];
-  const maxEarn = Math.max(1, ...earningsSeries.map((d) => d.paise));
-  const maxDay = Math.max(1, ...stats.registration_trend.map((d) => d.count));
-  const totalRelig = stats.religion_distribution.reduce((s, x) => s + x.count, 0);
+  return (
+    <div className="mx-auto max-w-[1400px]">
+      {header}
+      <DashboardBody stats={stats} range={range} setRange={setRange} />
+    </div>
+  );
+}
 
-  const todayVs7d = stats.users.new_7d > 0 ? (stats.users.new_today * 7 / stats.users.new_7d - 1) * 100 : 0;
+function DashboardBody({ stats, range, setRange }: { stats: Stats; range: "30" | "90"; setRange: (r: "30" | "90") => void }) {
+  const d = stats.deltas;
+  const eng = stats.engagement;
+  const earnings = stats.earnings;
+  const funnel = stats.funnel;
+  const sla = stats.verification_sla;
+  const activeByPlan = stats.active_subscriptions_by_plan || [];
+  const paidMembers = funnel?.paid ?? activeByPlan.reduce((s, p) => s + p.count, 0);
+
+  const daily = useMemo(
+    () => denseDaily(stats.registration_trend_90d || stats.registration_trend, range === "30" ? 30 : 91),
+    [stats.registration_trend_90d, stats.registration_trend, range],
+  );
+  const signupSeries = range === "30" ? daily : weekly(daily);
+  const signupTotal = daily.reduce((s, x) => s + x.value, 0);
+  const months = useMemo(() => denseMonths(earnings?.monthly_series || []), [earnings?.monthly_series]);
+  const revenue12m = months.reduce((s, m) => s + m.value, 0);
+
+  const oldestWaitH = sla?.oldest_pending?.[0]?.waiting_hours ?? hoursSince(sla?.oldest_pending?.[0]?.submitted_at);
+  const overdue = (sla?.oldest_pending || []).filter((p) => (p.waiting_hours ?? 0) >= SLA_HOURS).length;
 
   return (
-    <>
-      <DashboardHero
-        greeting={greeting}
-        refresh={refresh}
-        refreshing={refreshing}
-        totalUsers={stats.users.total}
-        newToday={stats.users.new_today}
-        pending={stats.profiles.pending}
-      />
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }} className="space-y-4">
+      {/* ── KPI strip ─────────────────────────────────────────────────────── */}
+      <section aria-label="Key metrics" className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border/70 bg-border/60 shadow-[0_1px_2px_rgba(26,10,20,0.04)] md:grid-cols-3 xl:grid-cols-6">
+        <Kpi
+          label="Members" value={stats.users.total.toLocaleString("en-GB")} href="/admin/users"
+          foot={<Delta value={d ? pctChange(stats.users.new_30d, d.new_prev_30d) : undefined} suffix={`${stats.users.new_30d} new in 30d`} />}
+        />
+        <Kpi
+          label="New sign-ups · 7d" value={stats.users.new_7d.toLocaleString("en-GB")}
+          foot={<Delta value={d ? pctChange(stats.users.new_7d, d.new_prev_7d) : undefined} suffix="vs prior 7d" />}
+        />
+        <Kpi
+          label="Approved profiles" value={stats.profiles.approved.toLocaleString("en-GB")} href="/admin/verifications"
+          foot={<span>{stats.users.total ? Math.round((stats.profiles.approved / stats.users.total) * 100) : 0}% of members · {stats.profiles.pending} pending</span>}
+        />
+        <Kpi
+          label="Paid members" value={paidMembers.toLocaleString("en-GB")} href="/admin/subscriptions"
+          foot={<span>{activeByPlan.filter((p) => p.count > 0).map((p) => `${p.count} ${planLabel(p.plan)}`).join(" · ") || "No active plans"}</span>}
+        />
+        <Kpi
+          label="Revenue · this month" value={formatGBP(earnings?.this_month_paise || 0)} href="/admin/payments"
+          foot={<span>Last month {formatGBP(d?.revenue_prev_month_paise || 0)}</span>}
+        />
+        <Kpi
+          label="Mutual matches · 30d" value={(eng?.mutual_matches_30d ?? 0).toLocaleString("en-GB")}
+          foot={<span>{(eng?.mutual_matches_total ?? 0).toLocaleString("en-GB")} all-time</span>}
+        />
+      </section>
 
-      {/* KPI grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <KpiCard
-          label="Total members"
-          value={stats.users.total.toLocaleString()}
-          hint={`${stats.users.active.toLocaleString()} active`}
-          icon={Users}
-          href="/admin/users"
-        />
-        <KpiCard
-          label="New today"
-          value={stats.users.new_today.toLocaleString()}
-          hint={`${stats.users.new_7d} this week`}
-          icon={TrendingUp}
-          trend={todayVs7d}
-          tone="good"
-        />
-        <KpiCard
-          label="Pending verifications"
-          value={stats.profiles.pending.toLocaleString()}
-          hint="Awaiting review"
-          icon={ShieldCheck}
-          tone={stats.profiles.pending > 0 ? "warn" : "neutral"}
-          href="/admin/verifications"
-        />
-        <KpiCard
-          label="Open reports"
-          value={stats.reports.open.toLocaleString()}
-          hint="Need attention"
-          icon={AlertTriangle}
-          tone={stats.reports.open > 0 ? "danger" : "neutral"}
-          href="/admin/reports"
-        />
+      {/* ── Sign-ups + needs attention ───────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Panel
+          className="lg:col-span-2"
+          title="New sign-ups"
+          description={`${signupTotal.toLocaleString("en-GB")} in the last ${range} days${range === "90" ? " · weekly" : " · daily"}`}
+          actions={
+            <Segmented<"30" | "90">
+              size="sm" layoutId="dash-range" ariaLabel="Date range"
+              value={range} onChange={setRange}
+              options={[{ value: "30", label: "30d" }, { value: "90", label: "90d" }]}
+            />
+          }
+        >
+          {signupTotal === 0
+            ? <EmptyState compact icon={UserPlus} title="No sign-ups in this window" description="New registrations will chart here day by day." />
+            : <ColumnChart data={signupSeries} ariaLabel={`New sign-ups, last ${range} days`} valueLabel="Sign-ups" formatValue={(v) => `${v} sign-up${v === 1 ? "" : "s"}`} highlightLast={range === "90"} />}
+        </Panel>
+
+        <Panel
+          title="Needs attention"
+          description="Work waiting on the team"
+          bodyClassName="px-2 pb-2"
+        >
+          <ul className="divide-y divide-border/50">
+            <AttentionRow
+              href="/admin/verifications" icon={ShieldCheck}
+              label="Profiles awaiting review" count={stats.profiles.pending}
+              detail={stats.profiles.pending > 0
+                ? `Oldest waiting ${waitingLabel(oldestWaitH ?? null)}${overdue ? ` · ${overdue} over ${SLA_HOURS}h` : ""}`
+                : "Queue is clear"}
+              tone={overdue > 0 ? "bad" : stats.profiles.pending > 0 ? "warn" : "good"}
+            />
+            <AttentionRow
+              href="/admin/reports" icon={Flag}
+              label="Open reports" count={stats.reports.open}
+              detail={stats.reports.open > 0 ? "Members flagged content or behaviour" : "Nothing flagged"}
+              tone={stats.reports.open > 0 ? "bad" : "good"}
+            />
+            <AttentionRow
+              href="/admin/enquiries" icon={Inbox}
+              label="New enquiries" count={stats.enquiries?.new ?? 0}
+              detail={(stats.enquiries?.new ?? 0) > 0 ? "Unanswered contact-form messages" : "Inbox zero"}
+              tone={(stats.enquiries?.new ?? 0) > 0 ? "warn" : "good"}
+            />
+            <AttentionRow
+              href="/admin/subscriptions" icon={CalendarClock}
+              label="Renewals in 14 days" count={(stats.renewals_due || []).length}
+              detail={(stats.renewals_due || []).length > 0 ? "Follow up to reduce churn" : "None coming up"}
+              tone={(stats.renewals_due || []).length > 0 ? "info" : "good"}
+            />
+          </ul>
+          {sla?.avg_review_hours_30d != null && (
+            <p className="mt-2 px-3 text-[12px] text-muted2-foreground">
+              Average review time (30d): <span className="font-medium text-foreground">{waitingLabel(sla.avg_review_hours_30d)}</span>
+              {" "}· target {SLA_HOURS}h
+            </p>
+          )}
+        </Panel>
       </div>
 
-      {/* Revenue strip */}
-      {earnings && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-          <KpiCard label="Lifetime earnings" value={formatGBP(earnings.total_paise)} hint="All paid plans" icon={Wallet} tone="good" />
-          <KpiCard label="This month" value={formatGBP(earnings.this_month_paise)} hint={`${earningsSeries.length} months tracked`} icon={CalendarClock} tone="gold" />
-          <KpiCard label="Renewals · 14d" value={renewals.length.toLocaleString()} hint={renewals.length > 0 ? "Send reminders" : "All clear"} icon={CreditCard} tone={renewals.length > 0 ? "warn" : "neutral"} />
+      {/* ── Revenue + plans ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Panel
+          className="lg:col-span-2"
+          title="Revenue"
+          description={`${formatGBP(revenue12m)} billed over the last 12 months · ${formatGBP(earnings?.total_paise || 0)} lifetime`}
+          actions={<Link href="/admin/payments" className="text-[12px] font-medium text-primary hover:underline">Payments</Link>}
+        >
+          {revenue12m === 0
+            ? <EmptyState compact icon={Wallet} title="No paid subscriptions yet" description="Monthly billings will appear here once members upgrade." />
+            : <ColumnChart
+                data={months} color={SERIES.blue} ariaLabel="Revenue by month, last 12 months" valueLabel="Revenue"
+                formatValue={(v) => formatGBP(v)} formatTick={(v) => formatGBP(v)} highlightLast tickEvery={1}
+              />}
+        </Panel>
+
+        <Panel title="Active subscriptions" description="By plan, currently in period">
+          {paidMembers === 0 ? (
+            <EmptyState compact icon={CreditCard} title="No active subscriptions" description="Basic, Premium and Elite members will be counted here." />
+          ) : (
+            <SegmentBar
+              ariaLabel="Active subscriptions by plan"
+              segments={["silver", "gold", "platinum"].map((p, i) => {
+                const row = activeByPlan.find((x) => x.plan === p);
+                return { key: p, label: planLabel(p), value: row?.count || 0, color: RUBY_RAMP[i], hint: row?.amount_paise ? formatGBP(row.amount_paise) : undefined };
+              })}
+            />
+          )}
+          <div className="mt-4 border-t border-border/60 pt-3">
+            <div className="mb-2 text-[12px] font-medium text-muted2-foreground">All members by tier</div>
+            <SegmentBar
+              ariaLabel="Members by tier"
+              segments={(stats.plan_distribution || []).map((p) => ({
+                key: p.plan, label: planLabel(p.plan), value: p.count,
+                color: p.plan === "free" ? SERIES.neutral : RUBY_RAMP[Math.max(0, ["silver", "gold", "platinum"].indexOf(p.plan))],
+              }))}
+            />
+          </div>
+        </Panel>
+      </div>
+
+      {/* ── Funnel + engagement ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Panel className="lg:col-span-2" title="Member journey" description="From sign-up to paying member (all-time)">
+          <Funnel
+            stages={[
+              { key: "reg", label: "Registered", value: stats.users.total },
+              { key: "complete", label: "Completed profile", value: funnel?.profile_complete ?? 0 },
+              { key: "submitted", label: "Submitted for verification", value: funnel?.submitted ?? (stats.profiles.pending + stats.profiles.approved + stats.profiles.rejected) },
+              { key: "approved", label: "Approved", value: stats.profiles.approved },
+              { key: "paid", label: "Paid plan", value: paidMembers },
+            ]}
+          />
+        </Panel>
+
+        <Panel title="Engagement" description="Last 30 days vs the 30 before">
+          <dl className="divide-y divide-border/50">
+            <EngRow icon={HeartHandshake} label="Interests sent" value={eng?.interests_30d ?? 0} delta={d && eng ? pctChange(eng.interests_30d, d.interests_prev_30d) : undefined} />
+            <EngRow icon={CheckCircle2} label="Mutual matches" value={eng?.mutual_matches_30d ?? 0} />
+            <EngRow icon={TrendingUp} label="Messages sent" value={eng?.messages_30d ?? 0} delta={d && eng ? pctChange(eng.messages_30d, d.messages_prev_30d) : undefined} />
+            <EngRow icon={Users} label="Suspended members" value={stats.users.suspended} goodWhen="down" />
+          </dl>
+          <Link href="/admin/matchmaking" className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-primary hover:underline">
+            Suggest a match <ArrowRight className="h-3 w-3" aria-hidden />
+          </Link>
+        </Panel>
+      </div>
+
+      {/* ── Audience ────────────────────────────────────────────────────── */}
+      <Panel title="Audience" description="Who's on the platform (active profiles)">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div>
+            <h3 className="mb-3 text-[12px] font-medium text-muted2-foreground">Gender</h3>
+            {(stats.gender_distribution || []).length === 0
+              ? <p className="text-[12.5px] text-muted2-foreground">No data yet</p>
+              : <SegmentBar
+                  ariaLabel="Profiles by gender"
+                  segments={(stats.gender_distribution || []).map((g) => ({
+                    key: g.gender,
+                    label: g.gender === "male" ? "Men" : g.gender === "female" ? "Women" : g.gender === "other" ? "Other" : "Not set",
+                    value: g.count,
+                    color: g.gender === "male" ? SERIES.blue : g.gender === "female" ? SERIES.ruby : g.gender === "other" ? SERIES.gold : SERIES.neutral,
+                  }))}
+                />}
+          </div>
+          <div>
+            <h3 className="mb-3 text-[12px] font-medium text-muted2-foreground">Top countries</h3>
+            {(stats.country_distribution || []).length === 0
+              ? <p className="text-[12.5px] text-muted2-foreground">No data yet</p>
+              : <BarList ariaLabel="Profiles by country" items={(stats.country_distribution || []).map((c) => ({ key: c.country, label: c.country, value: c.count }))} max={6} />}
+          </div>
+          <div>
+            <h3 className="mb-3 text-[12px] font-medium text-muted2-foreground">Religion</h3>
+            {stats.religion_distribution.length === 0
+              ? <p className="text-[12.5px] text-muted2-foreground">No data yet</p>
+              : <BarList ariaLabel="Profiles by religion" items={stats.religion_distribution.map((r) => ({ key: r.religion, label: r.religion.toLowerCase(), value: r.count }))} max={6} />}
+          </div>
         </div>
-      )}
+      </Panel>
 
-      {/* Earnings + plan distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        {earnings && (
-          <Card className="lg:col-span-2 overflow-hidden">
-            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/40 to-transparent pointer-events-none" />
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Monthly earnings</CardTitle>
-                  <CardDescription>Last 12 months</CardDescription>
-                </div>
-                <Badge variant="gold">{formatGBP(earnings.this_month_paise)} MTD</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {earningsSeries.length === 0 ? (
-                <EmptyState icon={Wallet} text="No paid subscriptions yet" />
-              ) : (
-                <div className="flex items-end gap-1.5 h-44 pt-7">
-                  {earningsSeries.map((d, i) => {
-                    const pct = (d.paise / maxEarn) * 100;
-                    return (
-                      <div key={d.month} className="flex-1 flex flex-col items-center gap-1.5 min-w-0 group">
-                        <div className="relative w-full flex-1 flex flex-col justify-end">
-                          {d.paise > 0 && (
-                            <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-foreground/70 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-                              {formatGBP(d.paise)}
-                            </span>
-                          )}
-                          <motion.div
-                            initial={{ height: 0 }}
-                            animate={{ height: `${Math.max(pct, 1.5)}%` }}
-                            transition={{ delay: 0.15 + i * 0.04, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                            className="w-full rounded-t-sm bg-gradient-to-t from-gold-dark via-gold to-gold-200 group-hover:from-gold-dark group-hover:via-gold-dark group-hover:to-gold transition-colors"
-                          />
-                        </div>
-                        <span className="text-[10px] text-muted2-foreground tabular-nums">{shortMonth(d.month)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Plan distribution</CardTitle>
-            <CardDescription>Members by tier</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {planDist.length === 0 || totalPlan === 0 ? (
-              <EmptyState icon={Crown} text="No members yet" />
-            ) : (
-              planDist.map((r, i) => {
-                const meta = PLAN_META[r.plan] || { label: planLabel(r.plan), color: "#A78A8F", bg: "bg-secondary" };
-                const pct = totalPlan > 0 ? (r.count / totalPlan) * 100 : 0;
+      {/* ── Queue + activity ────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Panel
+          title="Longest waiting"
+          description={`Oldest profiles in the verification queue · SLA ${SLA_HOURS}h`}
+          actions={<Link href="/admin/verifications" className="text-[12px] font-medium text-primary hover:underline">Open queue</Link>}
+          bodyClassName="px-2 pb-2"
+        >
+          {(sla?.oldest_pending || []).length === 0 ? (
+            <EmptyState compact icon={ShieldCheck} title="Queue is clear" description="Every submitted profile has been reviewed." />
+          ) : (
+            <ul>
+              {(sla?.oldest_pending || []).map((p) => {
+                const h = p.waiting_hours ?? hoursSince(p.submitted_at);
+                const over = (h ?? 0) >= SLA_HOURS;
                 return (
-                  <div key={r.plan}>
-                    <div className="flex justify-between items-baseline mb-1.5">
-                      <span className="text-[12.5px] font-medium text-foreground">{meta.label}</span>
-                      <span className="text-[12px] text-muted2-foreground tabular-nums">
-                        <span className="font-semibold text-foreground">{r.count}</span>
-                        <span className="ml-1.5">{pct.toFixed(0)}%</span>
-                      </span>
-                    </div>
-                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${pct}%` }}
-                        transition={{ delay: 0.2 + i * 0.06, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-                        className="h-full rounded-full"
-                        style={{ background: meta.color }}
-                      />
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Renewals + recent activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Renewals due</CardTitle>
-                <CardDescription>Next 14 days</CardDescription>
-              </div>
-              {renewals.length > 0 && <Badge variant="warning">{renewals.length}</Badge>}
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {renewals.length === 0 ? (
-              <EmptyState icon={CalendarClock} text="No renewals coming up" />
-            ) : (
-              <ul className="-mx-2">
-                {renewals.map((r, i) => {
-                  const meta = PLAN_META[r.plan] || { label: planLabel(r.plan), color: "#A78A8F", bg: "bg-secondary" };
-                  return (
-                    <motion.li
-                      key={r.user_id + (r.current_period_end || "")}
-                      initial={{ opacity: 0, x: -4 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.05 + i * 0.03, duration: 0.25 }}
-                    >
-                      <Link
-                        href={`/admin/users/${r.user_id}`}
-                        className="flex items-center justify-between gap-3 px-2 py-2 rounded-md hover:bg-secondary group transition-colors"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className={cn("w-8 h-8 rounded-md grid place-items-center shrink-0", meta.bg)}>
-                            <CreditCard className="w-3.5 h-3.5" style={{ color: meta.color }} />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-[13px] font-medium text-foreground truncate">{r.name}</div>
-                            <div className="text-[11px] text-muted2-foreground">
-                              {meta.label} · {formatGBP(r.amount_paise)}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <Badge variant="warning">{daysUntil(r.current_period_end)}</Badge>
-                          <ChevronRight className="w-3.5 h-3.5 text-muted2-foreground/40 group-hover:text-muted2-foreground transition-colors" />
-                        </div>
-                      </Link>
-                    </motion.li>
-                  );
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Recent verification activity</CardTitle>
-                <CardDescription>Last 20 events</CardDescription>
-              </div>
-              <Link href="/admin/verifications" className="text-[11px] font-medium text-primary hover:underline inline-flex items-center gap-1">
-                View queue <ChevronRight size={11} strokeWidth={2.2} />
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {stats.recent_activity.length === 0 ? (
-              <EmptyState icon={Clock} text="No activity yet" />
-            ) : (
-              <ul className="-mx-2 max-h-80 overflow-y-auto">
-                {stats.recent_activity.slice(0, 8).map((a, i) => (
-                  <motion.li
-                    key={a.user_id + (a.reviewed_at || a.submitted_at || "")}
-                    initial={{ opacity: 0, x: -4 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.05 + i * 0.03, duration: 0.25 }}
-                  >
-                    <Link
-                      href="/admin/verifications"
-                      className="flex items-center justify-between gap-3 px-2 py-2 rounded-md hover:bg-secondary group transition-colors"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <ActivityIcon status={a.status} />
-                        <div className="min-w-0">
-                          <div className="text-[13px] font-medium text-foreground truncate">{a.name}</div>
-                          <div className="text-[11px] text-muted2-foreground capitalize">
-                            {a.status.replace(/_/g, " ")}
-                          </div>
-                        </div>
-                      </div>
-                      <span className="text-[11px] text-muted2-foreground/70 tabular-nums shrink-0">
-                        {formatRel(a.reviewed_at || a.submitted_at)}
-                      </span>
+                  <li key={p.user_id}>
+                    <Link href={`/admin/verifications?open=${p.user_id}`} className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-secondary/60">
+                      <Clock className={cn("h-4 w-4 shrink-0", over ? "text-[#B42343]" : "text-muted2-foreground")} aria-hidden />
+                      <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{p.name}</span>
+                      <span className="text-[12px] tabular-nums text-muted2-foreground">{p.completeness_score}% complete</span>
+                      <Pill tone={over ? "bad" : "warn"}>{waitingLabel(h ?? null)}</Pill>
                     </Link>
-                  </motion.li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Registrations + religion */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Registrations</CardTitle>
-            <CardDescription>Last 14 days</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {stats.registration_trend.length === 0 ? (
-              <EmptyState icon={TrendingUp} text="No registrations in this window" />
-            ) : (
-              <div className="flex items-end gap-1 h-32 pt-5">
-                {stats.registration_trend.map((d, i) => (
-                  <div key={d.date} className="flex-1 flex flex-col items-center gap-1.5 group">
-                    <div className="relative w-full flex-1 flex flex-col justify-end">
-                      {d.count > 0 && (
-                        <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[9.5px] font-semibold text-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {d.count}
-                        </span>
-                      )}
-                      <motion.div
-                        initial={{ height: 0 }}
-                        animate={{ height: `${(d.count / maxDay) * 100}%` }}
-                        transition={{ delay: 0.15 + i * 0.025, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                        className="w-full rounded-t-sm bg-gradient-to-t from-primary via-primary/80 to-rose-300 min-h-[2px]"
-                      />
-                    </div>
-                    <span className="text-[9.5px] text-muted2-foreground/70 tabular-nums">
-                      {new Date(d.date).getDate()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Religion distribution</CardTitle>
-            <CardDescription>Top communities</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2.5">
-            {stats.religion_distribution.length === 0 ? (
-              <EmptyState icon={Users} text="No data yet" />
-            ) : (
-              stats.religion_distribution.map((r, i) => {
-                const pct = totalRelig > 0 ? (r.count / totalRelig) * 100 : 0;
-                return (
-                  <div key={r.religion}>
-                    <div className="flex justify-between items-baseline mb-1">
-                      <span className="text-[12px] capitalize text-foreground font-medium">{r.religion}</span>
-                      <span className="text-[11px] text-muted2-foreground tabular-nums">
-                        {r.count} · {pct.toFixed(0)}%
-                      </span>
-                    </div>
-                    <div className="h-1 bg-secondary rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${pct}%` }}
-                        transition={{ delay: 0.2 + i * 0.05, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                        className="h-full rounded-full bg-gradient-to-r from-primary via-rose-400 to-gold-300"
-                      />
-                    </div>
-                  </div>
+                  </li>
                 );
-              })
-            )}
-          </CardContent>
-        </Card>
+              })}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel
+          title="Team activity"
+          description="Latest admin actions"
+          actions={<Link href="/admin/audit-log" className="text-[12px] font-medium text-primary hover:underline">Audit log</Link>}
+          bodyClassName="px-2 pb-2"
+        >
+          {(stats.recent_admin_actions || []).length > 0 ? (
+            <ul>
+              {(stats.recent_admin_actions || []).slice(0, 7).map((a, i) => (
+                <li key={`${a.created_at}-${i}`} className="flex items-start gap-3 rounded-lg px-3 py-2">
+                  <ActionIcon action={a.action} />
+                  <div className="min-w-0 flex-1 text-[13px] leading-snug">
+                    <span className="font-medium text-foreground">{(a.actor_email || "An admin").split("@")[0]}</span>
+                    <span className="text-muted2-foreground"> {describeAction(a.action)} </span>
+                    {a.target_label && (
+                      a.target_type === "user" && a.target_id
+                        ? <Link href={`/admin/users/${a.target_id}`} className="font-medium text-foreground hover:underline">{a.target_label}</Link>
+                        : <span className="font-medium text-foreground">{a.target_label}</span>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-[12px] text-muted2-foreground">{relTime(a.created_at)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : stats.recent_activity.length > 0 ? (
+            <ul>
+              {stats.recent_activity.slice(0, 7).map((a) => (
+                <li key={a.user_id + (a.reviewed_at || a.submitted_at || "")} className="flex items-center gap-3 rounded-lg px-3 py-2">
+                  <ActionIcon action={`verification.${a.status === "approved" ? "approve" : a.status === "rejected" ? "reject" : "submit"}`} />
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{a.name} <span className="text-muted2-foreground">· {a.status.replace(/_/g, " ")}</span></span>
+                  <span className="shrink-0 text-[12px] text-muted2-foreground">{relTime(a.reviewed_at || a.submitted_at)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState compact icon={ScrollText} title="No activity yet" description="Approvals, suspensions and pricing changes will show here." />
+          )}
+        </Panel>
       </div>
+    </motion.div>
+  );
+}
+
+// ─── Pieces ──────────────────────────────────────────────────────────────────
+
+function Kpi({ label, value, foot, href }: { label: string; value: string; foot?: React.ReactNode; href?: string }) {
+  const body = (
+    <>
+      <div className="text-[12px] font-medium text-muted2-foreground">{label}</div>
+      <div className="mt-1.5 text-[24px] font-semibold leading-none tracking-[-0.02em] text-foreground">{value}</div>
+      {foot && <div className="mt-2 truncate text-[11.5px] text-muted2-foreground">{foot}</div>}
     </>
   );
+  const cls = "block min-w-0 bg-card p-4";
+  return href
+    ? <Link href={href} className={cn(cls, "transition-colors hover:bg-[#FCF8F6] focus-visible:outline-none focus-visible:bg-[#FCF8F6]")}>{body}</Link>
+    : <div className={cls}>{body}</div>;
 }
 
-// ─── Hero ────────────────────────────────────────────────────────────────────
-
-function DashboardHero({
-  greeting, refresh, refreshing, totalUsers, newToday, pending,
-}: {
-  greeting: string;
-  refresh: () => void;
-  refreshing: boolean;
-  totalUsers?: number;
-  newToday?: number;
-  pending?: number;
+function AttentionRow({ href, icon: Icon, label, count, detail, tone }: {
+  href: string; icon: any; label: string; count: number; detail: string; tone: "good" | "warn" | "bad" | "info";
 }) {
   return (
-    <div className="relative overflow-hidden rounded-card mb-6 bg-gradient-to-br from-[#FBF1EE] via-[#FDF9F4] to-[#F4E6E0] border border-border/60">
-      {/* decorative aura */}
-      <div aria-hidden className="absolute -top-24 -right-24 w-64 h-64 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-      <div aria-hidden className="absolute -bottom-20 -left-16 w-48 h-48 rounded-full bg-gold/10 blur-3xl pointer-events-none" />
-
-      <div className="relative px-5 py-6 sm:px-7 sm:py-7 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-5">
-        <div className="min-w-0">
-          <div className="inline-flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-primary/80 mb-2">
-            <Heart className="w-3 h-3" fill="currentColor" />
-            <span>Match4Marriage Console</span>
-          </div>
-          <h1 className="font-display text-[26px] sm:text-[30px] leading-tight tracking-tight font-semibold text-foreground">
-            {greeting}.
-          </h1>
-          <p className="mt-1 text-[13.5px] text-muted2-foreground max-w-xl">
-            Here&apos;s what&apos;s happening on the platform today.
-          </p>
+    <li>
+      <Link href={href} className="group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-secondary/60 focus-visible:outline-none focus-visible:bg-secondary/60">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-border/70 bg-secondary/50 text-muted2-foreground">
+          <Icon className="h-4 w-4" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-medium text-foreground">{label}</div>
+          <div className="truncate text-[12px] text-muted2-foreground">{detail}</div>
         </div>
-
-        <div className="flex items-center gap-3">
-          {typeof totalUsers === "number" && (
-            <div className="hidden md:flex items-center gap-4 pr-4 mr-1 border-r border-border/70">
-              <HeroStat label="Members" value={totalUsers.toLocaleString()} />
-              {typeof newToday === "number" && <HeroStat label="Today" value={`+${newToday}`} />}
-              {typeof pending === "number" && pending > 0 && (
-                <HeroStat label="Pending" value={pending.toLocaleString()} accent />
-              )}
-            </div>
-          )}
-          <Button variant="secondary" size="sm" onClick={refresh} disabled={refreshing}>
-            <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
-            Refresh
-          </Button>
-        </div>
-      </div>
-    </div>
+        <Pill tone={count === 0 ? "good" : tone}>{count === 0 ? "Clear" : count.toLocaleString("en-GB")}</Pill>
+        <ArrowRight className="h-3.5 w-3.5 text-muted2-foreground/50 transition-transform group-hover:translate-x-0.5" aria-hidden />
+      </Link>
+    </li>
   );
 }
 
-function HeroStat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function EngRow({ icon: Icon, label, value, delta, goodWhen = "up" }: { icon: any; label: string; value: number; delta?: number | null; goodWhen?: "up" | "down" }) {
   return (
-    <div className="text-right">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted2-foreground/80">
-        {label}
-      </div>
-      <div className={cn(
-        "font-display text-[18px] leading-none font-semibold tabular-nums mt-1",
-        accent ? "text-primary" : "text-foreground",
-      )}>
-        {value}
-      </div>
+    <div className="flex items-center gap-3 py-2.5">
+      <Icon className="h-4 w-4 shrink-0 text-muted2-foreground" aria-hidden />
+      <dt className="flex-1 text-[13px] text-foreground">{label}</dt>
+      {delta !== undefined && <Delta value={delta} goodWhen={goodWhen} />}
+      <dd className="w-16 text-right text-[15px] font-semibold tabular-nums text-foreground">{value.toLocaleString("en-GB")}</dd>
     </div>
   );
 }
 
-// ─── KPI card ────────────────────────────────────────────────────────────────
-
-function KpiCard({
-  label, value, hint, icon: Icon, tone = "neutral", trend, href,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  icon: any;
-  tone?: "neutral" | "good" | "warn" | "danger" | "gold";
-  trend?: number;
-  href?: string;
-}) {
-  // Brand-aware tones: sage/gold/rose, with cream surfaces. The icon chip
-  // also picks up an accent border so the tone reads without shouting.
-  const toneIconBg = {
-    neutral: "text-muted2-foreground bg-secondary border border-border/50",
-    good:    "text-[#3F6B4A] bg-[#EAF2EB] border border-[#CFE0D3]",
-    warn:    "text-gold-dark bg-gold-100 border border-gold/30",
-    danger:  "text-destructive bg-destructive/10 border border-destructive/20",
-    gold:    "text-gold-dark bg-gold-100 border border-gold/30",
-  }[tone];
-
-  const ring = {
-    neutral: "ring-border/60",
-    good:    "ring-[#CFE0D3]",
-    warn:    "ring-gold/30",
-    danger:  "ring-destructive/20",
-    gold:    "ring-gold/30",
-  }[tone];
-
-  const inner = (
-    <Card className={cn(
-      "ring-1 transition-all relative overflow-hidden",
-      ring,
-      href && "hover:-translate-y-0.5 hover:shadow-card cursor-pointer",
-    )}>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted2-foreground/80">
-              {label}
-            </div>
-            <div className="font-display text-[26px] leading-none font-semibold text-foreground mt-2 tabular-nums">
-              {value}
-            </div>
-            {hint && (
-              <div className="text-[11.5px] text-muted2-foreground mt-1.5 flex items-center gap-1.5">
-                {trend !== undefined && Math.abs(trend) > 0.5 && (
-                  <span className={cn(
-                    "inline-flex items-center gap-0.5 font-semibold",
-                    trend > 0 ? "text-[#3F6B4A]" : "text-destructive",
-                  )}>
-                    {trend > 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                    {Math.abs(trend).toFixed(0)}%
-                  </span>
-                )}
-                <span>{hint}</span>
-              </div>
-            )}
-          </div>
-          <div className={cn("w-9 h-9 rounded-md grid place-items-center shrink-0", toneIconBg)}>
-            <Icon className="w-4 h-4" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-
-  return href ? <Link href={href}>{inner}</Link> : inner;
-}
-
-function ActivityIcon({ status }: { status: string }) {
-  const map: Record<string, { icon: any; cls: string }> = {
-    approved:  { icon: CheckCircle2, cls: "text-[#3F6B4A] bg-[#EAF2EB]" },
-    rejected:  { icon: XCircle,      cls: "text-destructive bg-destructive/10" },
-    submitted: { icon: Clock,        cls: "text-gold-dark bg-gold-100" },
-  };
-  const { icon: Icon, cls } = map[status] || { icon: UserCheck, cls: "text-muted2-foreground bg-secondary" };
+function ActionIcon({ action }: { action: string }) {
+  const map: Array<[string, any, string]> = [
+    ["verification.approve", CheckCircle2, "text-[#2F6B3F] bg-[#EAF2EB]"],
+    ["verification.reject", XCircle, "text-[#B42343] bg-[#FDECEF]"],
+    ["verification.", ShieldCheck, "text-[#7A5200] bg-[#FBF0DA]"],
+    ["user.", Users, "text-muted2-foreground bg-secondary"],
+    ["match.", HeartHandshake, "text-primary bg-primary/10"],
+    ["pricing.", Wallet, "text-[#26437F] bg-[#EBF0FB]"],
+    ["report.", Flag, "text-[#B42343] bg-[#FDECEF]"],
+  ];
+  const hit = map.find(([k]) => action === k || (k.endsWith(".") && action.startsWith(k)));
+  const Icon = hit?.[1] || ScrollText;
   return (
-    <div className={cn("w-8 h-8 rounded-md grid place-items-center shrink-0", cls)}>
-      <Icon className="w-3.5 h-3.5" />
-    </div>
-  );
-}
-
-function EmptyState({ icon: Icon, text }: { icon: any; text: string }) {
-  return (
-    <div className="py-8 text-center">
-      <div className="mx-auto mb-2 w-10 h-10 rounded-full bg-secondary grid place-items-center">
-        <Icon className="w-4 h-4 text-muted2-foreground/50" />
-      </div>
-      <p className="text-[12.5px] text-muted2-foreground">{text}</p>
-    </div>
+    <span className={cn("mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md", hit?.[2] || "text-muted2-foreground bg-secondary")}>
+      <Icon className="h-3.5 w-3.5" aria-hidden />
+    </span>
   );
 }
 
 function DashboardSkeleton() {
   return (
-    <>
-      <Skeleton className="h-[120px] rounded-card mb-6" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[108px] rounded-lg" />)}
+    <div className="space-y-4" aria-busy="true">
+      <Skeleton className="h-[98px] rounded-xl" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Skeleton className="h-[290px] rounded-xl lg:col-span-2" />
+        <Skeleton className="h-[290px] rounded-xl" />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-        {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-[108px] rounded-lg" />)}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Skeleton className="h-[280px] rounded-xl lg:col-span-2" />
+        <Skeleton className="h-[280px] rounded-xl" />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <Skeleton className="lg:col-span-2 h-72 rounded-lg" />
-        <Skeleton className="h-72 rounded-lg" />
-      </div>
-    </>
+    </div>
   );
 }
