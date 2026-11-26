@@ -312,6 +312,8 @@ async def auth_me(
     created_at: str | None = None
     try:
         import uuid as _uuid
+        from app.services.membership_expiry import expire_if_lapsed
+        await expire_if_lapsed(db, user_id)
         db_user = (await db.execute(
             select(User).where(User.id == _uuid.UUID(str(user_id)))
         )).scalar_one_or_none()

@@ -75,7 +75,7 @@ async def _count(conn, table: str) -> int | None:
         return None
 
 
-async def main(execute: bool) -> int:
+async def main(execute: bool, confirm_target: str | None = None) -> int:
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         print("ERROR: DATABASE_URL is not set (looked in backend/.env).")
@@ -112,6 +112,9 @@ async def main(execute: bool) -> int:
             if not execute:
                 print("\nDry run only. Re-run with --execute to actually delete.\n")
                 return 0
+            from _danger import confirm, db_target
+            if not confirm(db_target(), "TRUNCATE every member, profile and their data", confirm_target):
+                return 2
 
         # 2. TRUNCATE everything in a single CASCADE so FKs follow. Fresh
         #    connection via engine.begin() — the count phase above auto-began
@@ -139,5 +142,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true", help="actually delete")
     parser.add_argument("--dry-run", action="store_true", help="show counts only (default)")
+    parser.add_argument("--confirm", help="database host, required with --execute when not interactive")
     args = parser.parse_args()
-    sys.exit(asyncio.run(main(execute=args.execute)))
+    sys.exit(asyncio.run(main(execute=args.execute, confirm_target=args.confirm)))

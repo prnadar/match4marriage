@@ -217,20 +217,29 @@ export const profileApi = {
 };
 
 /* ── Chat / Messaging ─────────────────────────────────────────────────
- * Backend exposes:
- *   GET   /chats                          — list threads for the current user
- *   GET   /chats/{thread_id}/messages     — paginated history
- *   WS    /ws/chat/{thread_id}?token=...  — real-time send/receive
- *
- * NOTE: There is no REST POST endpoint for sending messages. Sending happens
- * over the WebSocket (see openChatSocket below). If WS is unavailable, the
- * UI should fall back gracefully.
+ * Plain HTTPS (the API runs on serverless hosting, which has no WebSockets):
+ * send with POST, and poll `messagesSince` every few seconds while a
+ * conversation is open.
+ *   GET  /chats                      — conversations (+ other member, preview, unread)
+ *   GET  /chats/unread-count         — total unread (nav badge)
+ *   GET  /chats/{id}                 — one conversation (header)
+ *   GET  /chats/{id}/messages        — history, newest first
+ *   GET  /chats/{id}/messages?after= — newer than a timestamp, oldest first
+ *   POST /chats/{id}/messages        — send
+ *   POST /chats/{id}/read            — mark the other member's messages read
  */
 export const chatApi = {
   listThreads: (page = 1, limit = 20) =>
     api.get(`/api/v1/chats?page=${page}&limit=${limit}`),
+  getThread: (threadId: string) => api.get(`/api/v1/chats/${threadId}`),
+  unreadCount: () => api.get("/api/v1/chats/unread-count"),
   getMessages: (threadId: string, page = 1, limit = 50) =>
     api.get(`/api/v1/chats/${threadId}/messages?page=${page}&limit=${limit}`),
+  messagesSince: (threadId: string, afterIso: string) =>
+    api.get(`/api/v1/chats/${threadId}/messages?after=${encodeURIComponent(afterIso)}&limit=100`),
+  sendMessage: (threadId: string, content: string) =>
+    api.post(`/api/v1/chats/${threadId}/messages`, { content }),
+  markRead: (threadId: string) => api.post(`/api/v1/chats/${threadId}/read`, {}),
 };
 
 /* ── Public pricing ───────────────────────────────────────────────── */
@@ -571,6 +580,7 @@ export const matchApi = {
   },
   getDailyMatches:      () => api.get("/api/v1/matches/daily"),
   getReceivedInterests: () => api.get("/api/v1/interests/received"),
+  declineInterest: (senderId: string) => api.post(`/api/v1/interests/${senderId}/decline`, {}),
   getSentInterests:     () => api.get("/api/v1/interests/sent"),
   sendInterest: (toUserId: string) => api.post(`/api/v1/interests/${toUserId}`),
   /** Caller's interest state: { sent: {id: status}, received: {id: status} }. */

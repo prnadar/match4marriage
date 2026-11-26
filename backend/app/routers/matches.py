@@ -277,23 +277,55 @@ async def send_interest(
         # was a dead end even for Premium members because /chats always
         # returned an empty list.
         a_id, b_id = sorted([sender_id, receiver_id], key=str)
-        existing_thread = await db.execute(
+        # uq_thread_pair also covers soft-deleted rows, so revive an old
+        # thread for this pair rather than inserting a duplicate.
+        thread = (await db.execute(
             select(ChatThread).where(
                 ChatThread.tenant_id == tenant_uuid,
                 ChatThread.user_a_id == a_id,
                 ChatThread.user_b_id == b_id,
-                ChatThread.deleted_at.is_(None),
             )
-        )
-        if existing_thread.scalar_one_or_none() is None:
-            db.add(ChatThread(
+        )).scalar_one_or_none()
+        if thread is None:
+            thread = ChatThread(
                 tenant_id=tenant_uuid,
                 user_a_id=a_id,
                 user_b_id=b_id,
                 match_id=payload.match_id,
-            ))
-            await db.flush()
+            )
+            db.add(thread)
+        else:
+            thread.deleted_at = None
+            thread.is_active = True
+        await db.flush()
         logger.info("mutual_interest_chat_unlocked", user_a=str(sender_id), user_b=str(receiver_id))
+
+    # Tell the other member. Accept → the original sender learns they can now
+    # message; a new interest → the receiver learns someone is interested.
+    from app.services.member_activity import first_name, notify_member
+    name = await first_name(db, sender_id)
+    if reverse_row:
+        await notify_member(
+            db, recipient_id=receiver_id, tenant_id=tenant_uuid, type="interest",
+            title=f"{name} accepted your interest",
+            body=f"You and {name} are now connected. Say hello and start the conversation.",
+            action_url=f"/messages/{thread.id}",
+            extra={"sender_id": str(sender_id), "thread_id": str(thread.id), "event": "accepted"},
+            email_kind="email_interests",
+            email_subject=f"{name} accepted your interest on Match4Marriage",
+            email_cta="Start the conversation",
+        )
+    else:
+        await notify_member(
+            db, recipient_id=receiver_id, tenant_id=tenant_uuid, type="interest",
+            title=f"{name} is interested in you",
+            body=f"{name} has expressed interest in your profile. Accept to start a conversation.",
+            action_url=f"/profile/{sender_id}",
+            extra={"sender_id": str(sender_id), "event": "received"},
+            email_kind="email_interests",
+            email_subject=f"{name} is interested in your profile",
+            email_cta="View their profile",
+        )
 
     # Flush + refresh before serialising: the status UPDATE expires the
     # server-side `updated_at`, and reading an expired attribute outside the
@@ -301,6 +333,40 @@ async def send_interest(
     await db.flush()
     await db.refresh(interest)
     logger.info("interest_sent", sender=str(sender_id), receiver=str(receiver_id), mutual=bool(reverse_row))
+    return APIResponse(success=True, data=InterestRead.model_validate(interest))
+
+
+@router.post("/interests/{sender_id}/decline", response_model=APIResponse[InterestRead])
+async def decline_interest(
+    sender_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[dict, Depends(get_current_user)],
+    tenant_slug: str = Depends(get_current_tenant_slug),
+):
+    """Decline an interest another member sent you. No notification is sent —
+    the sender simply sees it as declined. Idempotent."""
+    me = _get_user_uuid(current_user)
+    if not me:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user session")
+    tenant_uuid = await _resolve_tenant(db, tenant_slug)
+    interest = (await db.execute(
+        select(Interest).where(
+            Interest.sender_id == sender_id,
+            Interest.receiver_id == me,
+            Interest.tenant_id == tenant_uuid,
+            Interest.deleted_at.is_(None),
+        )
+    )).scalar_one_or_none()
+    if interest is None:
+        raise HTTPException(status_code=404, detail="Interest not found")
+    if interest.status == InterestStatus.ACCEPTED:
+        raise HTTPException(status_code=409, detail="You've already accepted this interest.")
+    if interest.status != InterestStatus.DECLINED:
+        interest.status = InterestStatus.DECLINED
+        interest.responded_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        await db.flush()
+        await db.refresh(interest)
+    logger.info("interest_declined", receiver=str(me), sender=str(sender_id))
     return APIResponse(success=True, data=InterestRead.model_validate(interest))
 
 

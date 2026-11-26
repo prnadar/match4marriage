@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Heart, MessageCircle, X, CheckCircle, Clock, Star, Filter, Loader2 } from "lucide-react";
-import { matchApi } from "@/lib/api";
+import { matchApi, ApiError, apiErrorMessage } from "@/lib/api";
 import { ApprovalGate } from "@/components/ApprovalGate";
 
 type Tab = "received" | "sent" | "mutual";
@@ -152,9 +152,11 @@ function InterestsContent() {
           const list: any[] = (sentRes.value.data as any)?.data ?? [];
           setSentList(list.map((row, i) => mapInterest(row, i, "sent")));
         }
+        if (recRes.status === "rejected" && sentRes.status === "rejected") {
+          setError(apiErrorMessage(recRes.reason, "We couldn't load your interests. Please refresh to try again."));
+        }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Failed to load interests";
-        setError(msg);
+        setError(apiErrorMessage(err, "We couldn't load your interests. Please refresh to try again."));
       } finally {
         setLoading(false);
       }
@@ -162,22 +164,40 @@ function InterestsContent() {
     load();
   }, []);
 
-  const dismiss = (id: string) => setDismissed((prev) => new Set(Array.from(prev).concat(id)));
-  const accept = (id: string) => {
-    setAccepted((prev) => new Set(Array.from(prev).concat(id)));
-    matchApi.sendInterest(id).catch(() => {
-      setAccepted((prev) => {
-        const s = new Set(prev);
-        s.delete(id);
-        return s;
-      });
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Decline is saved; the row hides immediately and comes back if it fails.
+  const dismiss = (id: string) => {
+    setActionError(null);
+    setDismissed((prev) => new Set(Array.from(prev).concat(id)));
+    matchApi.declineInterest(id).catch((err) => {
+      setDismissed((prev) => { const s = new Set(prev); s.delete(id); return s; });
+      setActionError(apiErrorMessage(err, "We couldn't decline that interest. Please try again."));
     });
   };
+  const accept = (id: string) => {
+    setActionError(null);
+    setAccepted((prev) => new Set(Array.from(prev).concat(id)));
+    matchApi.sendInterest(id).catch((err) => {
+      // 409: already connected — that is the truthful state.
+      if (err instanceof ApiError && err.status === 409) return;
+      setAccepted((prev) => { const s = new Set(prev); s.delete(id); return s; });
+      setActionError(apiErrorMessage(err, "We couldn't accept that interest. Please try again."));
+    });
+  };
+  // Accepted per the server (either side), or accepted in this session.
+  const isConnected = (p: InterestProfile) =>
+    accepted.has(p.id) || p.status === "accepted" || sentList.some((s) => s.id === p.id && s.status === "accepted");
 
-  const mutualList = receivedList.filter((r) => sentList.some((s) => s.id === r.id));
+  // Connected either way: they accepted mine, or I accepted theirs.
+  const mutualList = [
+    ...receivedList.filter(isConnected),
+    ...sentList.filter((s) => s.status === "accepted" && !receivedList.some((r) => r.id === s.id)),
+  ];
+  const visibleReceived = receivedList.filter((p) => !dismissed.has(p.id) && p.status !== "declined");
 
   const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: "received", label: "Received",  count: receivedList.length },
+    { key: "received", label: "Received",  count: visibleReceived.length },
     { key: "sent",     label: "Sent",      count: sentList.length },
     { key: "mutual",   label: "Mutual",    count: mutualList.length },
   ];
@@ -269,13 +289,19 @@ function InterestsContent() {
         </div>
       )}
 
+      {actionError && (
+        <div role="alert" style={{ margin: "0 0 12px", padding: "10px 14px", borderRadius: "12px", background: "rgba(251,191,36,0.10)", border: "1px solid rgba(251,191,36,0.3)", color: "#fcd34d", fontSize: "12.5px" }}>
+          {actionError}
+        </div>
+      )}
+
       {!loading && !error && (
         <>
           {/* ── Received Tab ── */}
           {tab === "received" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              {receivedList.filter((p) => !dismissed.has(p.id)).map((profile) => {
-                const isAccepted = accepted.has(profile.id);
+              {receivedList.filter((p) => !dismissed.has(p.id) && p.status !== "declined").map((profile) => {
+                const isAccepted = isConnected(profile);
                 return (
                   <div
                     key={profile.id}

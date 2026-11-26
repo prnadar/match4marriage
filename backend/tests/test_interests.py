@@ -72,3 +72,24 @@ async def test_cannot_send_interest_to_self(client, db):
     a = await member(db, t)
     as_member(a)
     assert (await client.post(f"/api/v1/interests/{a.id}", headers=H)).status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_decline_is_saved_and_cannot_then_be_accepted_by_mistake(client, db):
+    t = await tenant(db)
+    a, b = await member(db, t), await member(db, t)
+    as_member(a)
+    await client.post(f"/api/v1/interests/{b.id}", headers=H)
+
+    as_member(b)
+    r = await client.post(f"/api/v1/interests/{a.id}/decline", headers=H)
+    assert r.status_code == 200 and r.json()["data"]["status"] == "declined"
+    assert (await client.post(f"/api/v1/interests/{a.id}/decline", headers=H)).status_code == 200  # idempotent
+    s = (await client.get("/api/v1/interests/status", headers=H)).json()["data"]
+    assert s["received"][str(a.id)] == "declined"
+
+    as_member(a)
+    s = (await client.get("/api/v1/interests/status", headers=H)).json()["data"]
+    assert s["sent"][str(b.id)] == "declined"
+    # Nobody else's interest can be declined on their behalf.
+    assert (await client.post(f"/api/v1/interests/{b.id}/decline", headers=H)).status_code == 404

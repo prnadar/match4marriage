@@ -50,7 +50,7 @@ async def create_notification(
         title=title,
         body=body,
         action_url=action_url,
-        metadata=metadata,
+        extra_data=metadata,
         is_read=False,
         read_at=None,
     )

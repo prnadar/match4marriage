@@ -15,7 +15,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -159,7 +159,19 @@ async def _activate_subscription(
     # subscriptions.current_period_* are TIMESTAMP WITHOUT TIME ZONE, so use
     # naive UTC datetimes (asyncpg rejects tz-aware values for these columns).
     now = datetime.utcnow()
-    period_end = now + timedelta(days=PLAN_TERM_DAYS.get(plan, 180))
+    # Early renewal of the SAME plan stacks onto the current term so the
+    # member never loses days they already paid for. A different plan starts
+    # now (the tier switches immediately).
+    current_end = (await db.execute(
+        select(func.max(Subscription.current_period_end)).where(
+            Subscription.user_id == user_uuid,
+            Subscription.plan == plan,
+            Subscription.status == SubscriptionStatus.ACTIVE,
+            Subscription.deleted_at.is_(None),
+        )
+    )).scalar()
+    term_start = current_end if current_end and current_end > now else now
+    period_end = term_start + timedelta(days=PLAN_TERM_DAYS.get(plan, 180))
     feat = PLAN_FEATURE_MAP.get(plan, {})
 
     db.add(Subscription(
@@ -190,7 +202,7 @@ async def _activate_subscription(
             "Enjoy hand-picked introductions and premium features."
         ),
         action_url="/subscription",
-        metadata={"plan": plan, "gateway": gateway_label, "ref": gateway_ref},
+        extra_data={"plan": plan, "gateway": gateway_label, "ref": gateway_ref},
     ))
     return True
 
@@ -487,6 +499,8 @@ async def get_feature_limits(
 
     try:
         user_uuid = uuid.UUID(user_id_str)
+        from app.services.membership_expiry import expire_if_lapsed
+        await expire_if_lapsed(db, user_uuid)
         result = await db.execute(
             select(User.subscription_tier).where(User.id == user_uuid)
         )
@@ -551,3 +565,23 @@ async def get_feature_limits(
             can_use_advanced_filters=can_use_advanced_filters(plan),
         ),
     )
+
+
+@router.get("/internal/cron/expire-memberships")
+async def cron_expire_memberships(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Daily sweep (Vercel cron, see vercel.json): move members whose paid term
+    has ended back to Basic. Idempotent and only ever applies the correct
+    state, so it is safe without a secret; if CRON_SECRET is configured,
+    Vercel's `Authorization: Bearer <secret>` is required."""
+    import os
+    from app.services.membership_expiry import expire_lapsed
+
+    secret = os.getenv("CRON_SECRET")
+    if secret and request.headers.get("authorization") != f"Bearer {secret}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    n = await expire_lapsed(db)
+    logger.info("cron_expire_memberships", expired=n)
+    return {"success": True, "expired": n}

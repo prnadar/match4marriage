@@ -46,7 +46,7 @@ def _normalise_url(raw: str) -> str:
     return raw.replace("?&", "?").rstrip("?")
 
 
-async def main(execute: bool) -> int:
+async def main(execute: bool, confirm_target: str | None = None) -> int:
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         print("ERROR: DATABASE_URL not set (backend/.env).")
@@ -112,6 +112,9 @@ async def main(execute: bool) -> int:
             if not victims:
                 print("\nNothing to remove — only the admin remains.\n")
                 return 0
+            from _danger import confirm, db_target
+            if not confirm(db_target(), f"delete {len(victims)} members and all their data", confirm_target):
+                return 2
 
         # ── Execute: single transaction, explicit non-cascade deletes first ──
         print("\nExecuting deletion …")
@@ -153,4 +156,6 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--execute", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
-    sys.exit(asyncio.run(main(execute=ap.parse_args().execute)))
+    ap.add_argument("--confirm", help="database host, required with --execute when not interactive")
+    a = ap.parse_args()
+    sys.exit(asyncio.run(main(execute=a.execute, confirm_target=a.confirm)))

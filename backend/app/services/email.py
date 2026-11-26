@@ -84,7 +84,12 @@ def _html_to_plain(html: str) -> str:
 # shares one branded shell.
 
 
-def _account_email_shell(heading: str, body_html: str, footnote: str = "") -> str:
+def _account_email_shell(
+    heading: str,
+    body_html: str,
+    footnote: str = "",
+    footer: str = "This is an automated security message.",
+) -> str:
     """Branded shell for account/security emails (same palette as verification)."""
     import html as _html
     return f"""<!DOCTYPE html>
@@ -111,7 +116,7 @@ def _account_email_shell(heading: str, body_html: str, footnote: str = "") -> st
         <tr>
           <td style="background:#f4f0ec; padding:20px 40px; text-align:center;">
             <p style="margin:0; font-size:12px; color:#aaaaaa;">
-              &copy; Match4Marriage &middot; This is an automated security message.
+              &copy; Match4Marriage &middot; {footer}
             </p>
           </td>
         </tr>
@@ -206,6 +211,44 @@ async def send_email_change_code(email: str, token: str, user_name: str) -> bool
     return await asyncio.to_thread(
         _resend_post, email, user_name, "Confirm your new Match4Marriage email", html, plain
     )
+
+
+async def send_member_activity_email(
+    email: str,
+    recipient_name: str,
+    *,
+    subject: str,
+    heading: str,
+    message: str,
+    cta_label: str,
+    cta_path: str,
+) -> bool:
+    """Member-to-member activity (new interest, accepted interest, new
+    message). All text is plain and escaped here; `cta_path` is a site path.
+    Senders must check member_wants_email() first."""
+    import html as _html
+    href = f"{settings.FRONTEND_URL.rstrip('/')}{cta_path}"
+    prefs = f"{settings.FRONTEND_URL.rstrip('/')}/settings?section=notifications"
+    html = _account_email_shell(
+        heading,
+        f"""
+            <p style="font-size:15px; color:#555555; line-height:1.6; margin:0 0 16px;">Hello {_html.escape(recipient_name or "there")},</p>
+            <p style="font-size:15px; color:#555555; line-height:1.6; margin:0 0 24px;">{_html.escape(message)}</p>
+            <a href="{_html.escape(href)}"
+               style="display:inline-block; background:#c0392b; color:#ffffff; font-size:15px;
+                      font-weight:bold; padding:13px 28px; border-radius:6px; text-decoration:none;">
+              {_html.escape(cta_label)} &rarr;
+            </a>
+        """,
+        footnote=f'You can choose which emails you receive in <a href="{_html.escape(prefs)}" '
+                 'style="color:#c0392b;">Settings → Notifications</a>.',
+        footer="You're receiving this because you're a Match4Marriage member.",
+    )
+    plain = (
+        f"Hello {recipient_name or 'there'},\n\n{message}\n\n{cta_label}: {href}\n\n"
+        f"Manage your email preferences: {prefs}\n"
+    )
+    return await asyncio.to_thread(_resend_post, email, recipient_name, subject, html, plain)
 
 
 async def send_security_notice_email(email: str, user_name: str, title: str, message: str) -> bool:

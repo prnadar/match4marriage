@@ -9,7 +9,7 @@ import {
   PanelLeftClose, PanelLeftOpen, type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion, type Variants } from "framer-motion";
-import { profileApi, api } from "@/lib/api";
+import { profileApi, api, chatApi } from "@/lib/api";
 import { clearClientState, firebaseAuth, rememberSessionUid } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 import PublicHeader from "@/components/PublicHeader";
@@ -19,8 +19,8 @@ import * as Sentry from "@sentry/nextjs";
 import ConsentPrompt from "@/components/ConsentPrompt";
 
 // Side-nav entries shown to authenticated members, grouped into labelled
-// sections. Notification badges are omitted until they're wired to real
-// counts — fake numbers erode trust (the layout has no unread data today).
+// sections. Only real counts get badges (Messages: unread from
+// GET /chats/unread-count) — fake numbers erode trust.
 // /nri-hub and /family are hidden until those features ship.
 // `exact` keeps the original matching rule for the account links (exact path
 // only); the rest also match their sub-routes.
@@ -125,6 +125,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Same hook PublicHeader uses; keeps the sidebar avatar in lock-step
   // with the top-bar avatar after a primary-photo change.
   const sidebarPhotoUrl = useProfilePhoto();
+  // Unread messages for the Messages badge. Refreshed on navigation and every
+  // 30s while visible; only for members who can message.
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  useEffect(() => {
+    if (!entitlements.canMessage) { setUnreadMessages(0); return; }
+    let cancelled = false;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      chatApi.unreadCount()
+        .then((r) => { if (!cancelled) setUnreadMessages(Number((r.data as any)?.data?.unread) || 0); })
+        .catch(() => { /* badge is best-effort */ });
+    };
+    refresh();
+    const id = setInterval(refresh, 30000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [entitlements.canMessage, pathname]);
 
   // Auth gate. Onboarding is only "complete" when BOTH steps have shipped:
   // Step 1 saves `first_name` on the profile; Step 2 links a phone number to
@@ -521,8 +537,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           whileTap={reduceMotion ? undefined : { scale: 0.98 }}
                           transition={{ duration: 0.12 }}
                         >
-                          <Icon className="m4m-side-link__icon" strokeWidth={1.5} />
+                          <span className="relative inline-flex">
+                            <Icon className="m4m-side-link__icon" strokeWidth={1.5} />
+                            {item.href === "/messages" && unreadMessages > 0 && effectiveCollapsed && (
+                              <span aria-hidden className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[#dc1e3c] ring-2 ring-[#170811]" />
+                            )}
+                          </span>
                           {!effectiveCollapsed && <span className="flex-1 truncate">{item.label}</span>}
+                          {!effectiveCollapsed && item.href === "/messages" && unreadMessages > 0 && (
+                            <span
+                              aria-label={`${unreadMessages} unread`}
+                              className="ml-auto inline-flex h-[20px] min-w-[20px] items-center justify-center rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-1.5 text-[10.5px] font-bold text-white"
+                            >
+                              {unreadMessages > 99 ? "99+" : unreadMessages}
+                            </span>
+                          )}
                         </motion.span>
                       </Link>
                     );

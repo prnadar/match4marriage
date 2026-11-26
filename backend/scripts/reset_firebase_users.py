@@ -4,7 +4,12 @@ numbers used during testing become re-registrable.
 
 Usage:
     python scripts/reset_firebase_users.py --dry-run
-    python scripts/reset_firebase_users.py --execute
+    python scripts/reset_firebase_users.py --execute            (asks you to type the project id)
+    python scripts/reset_firebase_users.py --execute --confirm-project <project-id>
+
+DANGER: backend/.env points at the LIVE Firebase project. Running --execute
+against it deletes every real member's login. It now refuses unless the
+project id is typed back (or passed with --confirm-project) exactly.
 
 Reads service-account creds from backend/.env:
     FIREBASE_PROJECT_ID
@@ -57,7 +62,7 @@ def _bootstrap_firebase() -> None:
     firebase_admin.initialize_app(cred, {"projectId": project_id})
 
 
-def main(execute: bool) -> int:
+def main(execute: bool, confirm_project: str | None = None) -> int:
     _bootstrap_firebase()
     from firebase_admin import auth as fb_auth
 
@@ -88,6 +93,19 @@ def main(execute: bool) -> int:
         print("\nDry run only. Re-run with --execute to delete every one of them.\n")
         return 0
 
+    project = os.getenv("FIREBASE_PROJECT_ID") or ""
+    print(f"\n!! This permanently deletes ALL {len(uids)} logins in Firebase project '{project}'.")
+    print("!! If this is the live project, every member loses access to their account.")
+    typed = confirm_project
+    if typed is None:
+        if not sys.stdin.isatty():
+            print("Refusing: non-interactive run without --confirm-project.\n")
+            return 2
+        typed = input(f"Type the project id ({project}) to continue: ").strip()
+    if typed != project:
+        print("Project id did not match. Nothing deleted.\n")
+        return 2
+
     # 2. Batch-delete. Firebase Admin caps each call at 1,000 uids.
     print(f"\nDeleting {len(uids)} users …")
     total_success = 0
@@ -110,5 +128,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true", help="actually delete")
     parser.add_argument("--dry-run", action="store_true", help="show users only (default)")
+    parser.add_argument("--confirm-project", help="project id, required with --execute when not interactive")
     args = parser.parse_args()
-    sys.exit(main(execute=args.execute))
+    sys.exit(main(execute=args.execute, confirm_project=args.confirm_project))

@@ -91,9 +91,15 @@ async def get_user_plan(db: "AsyncSession", user_id: uuid.UUID | str | None) -> 
         from app.models.user import User
 
         uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
-        row = (
-            await db.execute(select(User.subscription_tier).where(User.id == uid))
-        ).scalar_one_or_none()
-        return normalize_plan(row.value if row else "free")
+        tier_q = select(User.subscription_tier).where(User.id == uid)
+        row = (await db.execute(tier_q)).scalar_one_or_none()
+        plan = normalize_plan(row.value if row else "free")
+        if plan != "free":
+            # A paid term that has run out ends here (lazy expiry).
+            from app.services.membership_expiry import expire_if_lapsed
+            await expire_if_lapsed(db, uid)
+            row = (await db.execute(tier_q)).scalar_one_or_none()
+            plan = normalize_plan(row.value if row else "free")
+        return plan
     except Exception:
         return "free"

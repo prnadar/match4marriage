@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
-  Shield, Search, CheckCheck, AlertCircle, MessageCircle, Loader2,
+  Shield, Search, AlertCircle, MessageCircle, Loader2, Sparkles,
 } from "lucide-react";
-import { chatApi } from "@/lib/api";
+import { chatApi, apiErrorMessage } from "@/lib/api";
 import { ApprovalGate } from "@/components/ApprovalGate";
 import { Portrait } from "@/components/ui/portrait";
 import { useEntitlements } from "@/lib/useEntitlements";
@@ -13,6 +13,7 @@ import { UpgradePanel } from "@/components/ui/upgrade-lock";
 
 interface ChatThread {
   id: string;
+  created_at?: string | null;
   last_message_at?: string | null;
   last_message_preview?: string | null;
   unread_count?: number;
@@ -28,7 +29,8 @@ interface ChatThread {
 
 function relativeTime(iso?: string | null): string {
   if (!iso) return "";
-  const t = new Date(iso).getTime();
+  // Server timestamps are UTC; some lack an offset — never read them as local.
+  const t = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`).getTime();
   if (isNaN(t)) return "";
   const diffMs = Date.now() - t;
   const min = Math.floor(diffMs / 60_000);
@@ -58,16 +60,18 @@ function MessagesContent() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) { setLoading(true); setError(null); }
     try {
       const res = await chatApi.listThreads(1, 50);
       const items: any[] = (res.data as any)?.data ?? [];
       setThreads(items as ChatThread[]);
+      if (quiet) setError(null);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Could not load conversations");
+      // A failed background refresh keeps the list already on screen.
+      if (!quiet) setError(apiErrorMessage(err, "We couldn't load your conversations. Please try again."));
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
 
@@ -77,6 +81,17 @@ function MessagesContent() {
     if (entLoading) return;
     if (messagingLocked) { setLoading(false); return; }
     load();
+  }, [load, entLoading, messagingLocked]);
+
+  // Keep previews and unread counts fresh while the page is open.
+  useEffect(() => {
+    if (entLoading || messagingLocked) return;
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") load(true);
+    }, 15000);
+    const onVisible = () => { if (document.visibilityState === "visible") load(true); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
   }, [load, entLoading, messagingLocked]);
 
   const filtered = threads.filter((t) => {
@@ -166,7 +181,7 @@ function MessagesContent() {
               {error}
             </p>
             <button
-              onClick={load}
+              onClick={() => load()}
               className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_20px_rgba(220,30,60,0.28)] hover:shadow-[0_10px_26px_rgba(220,30,60,0.38)]"
             >
               <Loader2 className="h-3.5 w-3.5" /> Retry
@@ -225,14 +240,9 @@ function MessagesContent() {
                           {op?.first_name ?? "Member"}
                           {op?.age ? `, ${op.age}` : ""}
                         </span>
-                        <div className="flex flex-shrink-0 items-center gap-1">
-                          {unread === 0 && t.last_message_at && (
-                            <CheckCheck className="h-3 w-3 text-[#f3c9a8]" />
-                          )}
-                          <span className="text-[10px] text-white/50">
-                            {relativeTime(t.last_message_at)}
-                          </span>
-                        </div>
+                        <span className="flex-shrink-0 text-[10px] text-white/50">
+                          {relativeTime(t.last_message_at ?? t.created_at)}
+                        </span>
                       </div>
                       <p
                         className={
@@ -240,7 +250,11 @@ function MessagesContent() {
                           (unread > 0 ? "text-white/70" : "text-white/45")
                         }
                       >
-                        {t.last_message_preview ?? "Say hello and start the conversation."}
+                        {t.last_message_preview ?? (
+                          <span className="inline-flex items-center gap-1 text-[#f3c9a8]">
+                            <Sparkles className="h-3 w-3" /> New match · say hello
+                          </span>
+                        )}
                       </p>
                       {op?.city && (
                         <p className="mt-0.5 text-[10px] text-white/45">{op.city}</p>

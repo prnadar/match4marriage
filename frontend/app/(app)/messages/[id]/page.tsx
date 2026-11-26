@@ -3,10 +3,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft, Shield, Send, Lock, AlertCircle, Loader2, MessageCircle,
+  ArrowLeft, Shield, Send, Lock, AlertCircle, Loader2, MessageCircle, RotateCw,
 } from "lucide-react";
-import { chatApi, openChatSocket, ApiError } from "@/lib/api";
-import { firebaseAuth } from "@/lib/firebase";
+import { chatApi, accountApi, ApiError, apiErrorMessage } from "@/lib/api";
 import { Portrait } from "@/components/ui/portrait";
 import { useEntitlements } from "@/lib/useEntitlements";
 import { UpgradePanel } from "@/components/ui/upgrade-lock";
@@ -21,6 +20,28 @@ interface Message {
   created_at: string;
   read_at?: string | null;
   delivered_at?: string | null;
+  /** Client-only: optimistic bubble while sending, or a failed send. */
+  local?: "sending" | "failed";
+}
+
+const POLL_MS = 4000;
+const MAX_CHARS = 2000;
+
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const today = new Date();
+  const yest = new Date(); yest.setDate(today.getDate() - 1);
+  const same = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (same(d, today)) return "Today";
+  if (same(d, yest)) return "Yesterday";
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+}
+
+/** Server timestamps are UTC; older rows may lack an offset. */
+function asUtc(iso: string): string {
+  return /[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`;
 }
 
 interface OtherProfile {
@@ -55,132 +76,162 @@ export default function ChatPage({ params }: { params: { id: string } }) {
   const [meId, setMeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const [wsConnected, setWsConnected] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
-  const socketRef = useRef<WebSocket | null>(null);
+  // Newest server timestamp we hold — the polling cursor.
+  const cursorRef = useRef<string | null>(null);
 
-  /* ── Identify self ─────────────────────────────────────────────── */
-  useEffect(() => {
-    const unsub = firebaseAuth.onAuthStateChanged((user) => {
-      setMeId(user?.uid ?? null);
+  const advanceCursor = (items: Message[]) => {
+    for (const m of items) {
+      if (m.local) continue;
+      if (!cursorRef.current || new Date(asUtc(m.created_at)) > new Date(asUtc(cursorRef.current))) {
+        cursorRef.current = m.created_at;
+      }
+    }
+  };
+
+  /** Merge server messages in, de-duplicated by id, in time order. */
+  const mergeMessages = useCallback((incoming: Message[]) => {
+    if (!incoming.length) return;
+    advanceCursor(incoming);
+    setMessages((prev) => {
+      const seen = new Set(prev.map((m) => m.id));
+      const add = incoming.filter((m) => !seen.has(m.id));
+      if (!add.length) return prev;
+      return [...prev, ...add].sort(
+        (a, b) => +new Date(asUtc(a.created_at)) - +new Date(asUtc(b.created_at)),
+      );
     });
-    return unsub;
   }, []);
 
-  /* ── Load thread + history ─────────────────────────────────────── */
+  /* ── Load conversation + history ──────────────────────────────── */
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      // Pull all threads to find the matching one (cheap, list page just did this).
-      // If you have a getThread(id) endpoint later, swap this for that.
-      // Backend returns PaginatedResponse{success, data: T[], total, page, limit, has_next}
-      // — `res.data` here is the whole envelope, so the items live at `res.data.data`.
-      const threadsRes = await chatApi.listThreads(1, 50);
-      const allThreads: any[] = (threadsRes.data as any)?.data ?? [];
-      const matched = allThreads.find((t: any) => String(t.id) === params.id);
-      if (matched?.other_profile) setOther(matched.other_profile);
+      const [threadRes, msgRes, meRes] = await Promise.all([
+        chatApi.getThread(params.id),
+        chatApi.getMessages(params.id, 1, 100),
+        accountApi.me().catch(() => null),
+      ]);
+      const thread = (threadRes.data as any)?.data ?? {};
+      const otherCard: OtherProfile | null = thread.other_profile ?? null;
+      setOther(otherCard);
 
-      const msgRes = await chatApi.getMessages(params.id, 1, 100);
-      const items: any[] = (msgRes.data as any)?.data ?? [];
-      // Backend returns newest first; reverse for chronological display.
-      setMessages([...items].reverse());
+      // My account id — the id the server puts on my messages. Prefer /auth/me;
+      // otherwise it's whichever participant isn't the other member.
+      const fromMe = (meRes?.data as any)?.data?.user_id ?? (meRes?.data as any)?.user_id;
+      const fromThread = otherCard
+        ? (String(thread.user_a_id) === String(otherCard.user_id) ? thread.user_b_id : thread.user_a_id)
+        : null;
+      setMeId(fromMe ? String(fromMe) : fromThread ? String(fromThread) : null);
+
+      // History arrives newest first; show oldest first.
+      const items: Message[] = [...((msgRes.data as any)?.data ?? [])].reverse();
+      cursorRef.current = null;
+      advanceCursor(items);
+      setMessages(items);
+      chatApi.markRead(params.id).catch(() => {});
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        setError(err.status === 404 ? "Conversation not found" : err.message);
-      } else {
-        setError(err instanceof Error ? err.message : "Could not load conversation");
-      }
+      setError(
+        err instanceof ApiError && err.status === 404
+          ? "This conversation isn't available. It may have been closed."
+          : apiErrorMessage(err, "We couldn't load this conversation. Please try again."),
+      );
     } finally {
       setLoading(false);
     }
   }, [params.id]);
 
   useEffect(() => {
-    // Members who can't message hit the upgrade panel — don't fetch the
-    // thread/history. Wait until entitlements resolve before deciding.
+    // Members who can't message see the upgrade panel — don't fetch.
     if (entLoading) return;
     if (messagingLocked) { setLoading(false); return; }
     load();
   }, [load, entLoading, messagingLocked]);
 
-  /* ── Connect WebSocket for live updates + sending ──────────────── */
+  /* ── Poll for new messages while the conversation is open ─────── */
   useEffect(() => {
-    if (!params.id || !meId) return;
-    // Never open the chat socket for a member who can't message.
-    if (entLoading || messagingLocked) return;
-    let cancelled = false;
-    let socket: WebSocket | null = null;
+    if (loading || error || messagingLocked || entLoading) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-    (async () => {
-      try {
-        socket = await openChatSocket(params.id);
-        if (cancelled) { socket.close(); return; }
-        socketRef.current = socket;
-        socket.onopen = () => setWsConnected(true);
-        socket.onclose = () => setWsConnected(false);
-        socket.onerror = () => setWsConnected(false);
-        socket.onmessage = (ev) => {
-          try {
-            const data = JSON.parse(ev.data);
-            if (data.type === "message") {
-              setMessages((prev) => {
-                if (prev.some((m) => m.id === data.id)) return prev;
-                return [...prev, {
-                  id: data.id,
-                  thread_id: params.id,
-                  sender_id: data.sender_id,
-                  message_type: data.message_type ?? "text",
-                  encrypted_content: data.encrypted_content,
-                  encryption_key_id: data.encryption_key_id,
-                  created_at: data.created_at,
-                }];
-              });
-            }
-          } catch { /* ignore malformed */ }
-        };
-      } catch {
-        setWsConnected(false);
+    const tick = async () => {
+      if (stopped) return;
+      if (typeof document === "undefined" || document.visibilityState === "visible") {
+        try {
+          const since = cursorRef.current ?? "1970-01-01T00:00:00Z";
+          const res = await chatApi.messagesSince(params.id, asUtc(since));
+          const fresh: Message[] = (res.data as any)?.data ?? [];
+          if (fresh.length) {
+            mergeMessages(fresh);
+            if (fresh.some((m) => m.sender_id !== meId)) chatApi.markRead(params.id).catch(() => {});
+          }
+        } catch { /* transient — try again next tick */ }
       }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (socket && socket.readyState <= WebSocket.OPEN) socket.close();
-      socketRef.current = null;
+      if (!stopped) timer = setTimeout(tick, POLL_MS);
     };
-  }, [params.id, meId, entLoading, messagingLocked]);
+    timer = setTimeout(tick, POLL_MS);
+
+    // Catch up immediately when the member returns to the tab.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        if (timer) clearTimeout(timer);
+        tick();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [params.id, loading, error, messagingLocked, entLoading, meId, mergeMessages]);
 
   /* ── Auto-scroll on new message ────────────────────────────────── */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages.length]);
 
-  /* ── Send message via WS ──────────────────────────────────────── */
+  /* ── Send (optimistic, with retry on failure) ──────────────────── */
+  const deliver = async (tempId: string, text: string) => {
+    setSendError(null);
+    setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, local: "sending" } : m)));
+    try {
+      const res = await chatApi.sendMessage(params.id, text);
+      const saved: Message = (res.data as any)?.data;
+      advanceCursor([saved]);
+      setMessages((prev) => {
+        // The poll may already have brought the saved message in.
+        const without = prev.filter((m) => m.id !== tempId);
+        return without.some((m) => m.id === saved.id) ? without : [...without, saved];
+      });
+    } catch (err) {
+      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, local: "failed" } : m)));
+      setSendError(
+        err instanceof ApiError && err.status === 410
+          ? "This member is no longer available, so your message wasn't sent."
+          : apiErrorMessage(err, "Your message wasn't sent. Check your connection and tap it to retry."),
+      );
+    }
+  };
+
   const send = () => {
     const text = input.trim();
-    if (!text || sending) return;
-    const ws = socketRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      // No live connection — surface an error rather than silently fail.
-      setError("Live chat connection lost. Please refresh to reconnect.");
-      return;
-    }
-    setSending(true);
-    try {
-      ws.send(JSON.stringify({
-        type: "message",
-        content: text,
-        message_type: "text",
-      }));
-      setInput("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send message");
-    } finally {
-      setSending(false);
-    }
+    if (!text || text.length > MAX_CHARS) return;
+    const tempId = `local-${Date.now()}`;
+    setMessages((prev) => [...prev, {
+      id: tempId,
+      thread_id: params.id,
+      sender_id: meId ?? "me",
+      message_type: "text",
+      encrypted_content: text,
+      created_at: new Date().toISOString(),
+      local: "sending",
+    }]);
+    setInput("");
+    deliver(tempId, text);
   };
 
   /* ── Render ────────────────────────────────────────────────────── */
@@ -221,7 +272,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
               </p>
               <p className="flex items-center gap-1 text-[11px] text-white/50">
                 <Shield className="h-3 w-3 text-[#f3c9a8]" />
-                {wsConnected ? "Connected · End-to-end encrypted" : "Connecting…"}
+                Private conversation
               </p>
             </div>
           </Link>
@@ -230,7 +281,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
           <div className="flex-1">
             <p className="font-display text-[15px] font-semibold text-white">Conversation</p>
             <p className="text-[11px] text-white/50">
-              {messagingLocked ? "Premium feature" : wsConnected ? "Connected" : "Connecting…"}
+              {messagingLocked ? "Premium feature" : "Private conversation"}
             </p>
           </div>
         )}
@@ -268,9 +319,11 @@ export default function ChatPage({ params }: { params: { id: string } }) {
           <div className="relative flex-1 overflow-y-auto px-4 py-5 sm:px-6">
             <div className="mx-auto max-w-[680px] space-y-2.5">
               {/* Encryption preamble */}
-              <div className="mx-auto mb-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-400/12 px-3 py-1 text-[11px] font-medium text-emerald-200 ring-1 ring-emerald-400/25">
-                <Lock className="h-3 w-3" />
-                Messages in this conversation are end-to-end encrypted.
+              <div className="flex justify-center">
+                <div className="mb-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1 text-center text-[11px] font-medium text-white/60 ring-1 ring-white/10">
+                  <Lock className="h-3 w-3 flex-shrink-0" />
+                  Only you and {other?.first_name ?? "your match"} can see this conversation. Never send money or bank details.
+                </div>
               </div>
 
               {messages.length === 0 ? (
@@ -282,32 +335,42 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                   </p>
                 </div>
               ) : (
-                messages.map((m) => {
-                  const mine = meId !== null && m.sender_id === meId;
+                messages.map((m, i) => {
+                  const mine = m.local !== undefined || (meId !== null && String(m.sender_id) === meId);
+                  const prev = messages[i - 1];
+                  const newDay = !prev || dayLabel(asUtc(prev.created_at)) !== dayLabel(asUtc(m.created_at));
                   return (
-                    <div
-                      key={m.id}
-                      className={"flex " + (mine ? "justify-end" : "justify-start")}
-                    >
-                      <div
-                        className={
-                          "max-w-[78%] rounded-[20px] px-4 py-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.18)] " +
-                          (mine
-                            ? "rounded-br-md bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white"
-                            : "rounded-bl-md border border-white/10 bg-white/[0.06] text-[#f4eef0]")
-                        }
-                      >
-                        <p className="whitespace-pre-wrap break-words text-[14px] leading-[1.55]">
-                          {m.encrypted_content ?? "[encrypted message]"}
-                        </p>
-                        <p
+                    <div key={m.id}>
+                      {newDay && (
+                        <div className="my-3 flex justify-center">
+                          <span className="rounded-full bg-white/[0.06] px-3 py-0.5 text-[10.5px] font-medium uppercase tracking-[0.12em] text-white/45">
+                            {dayLabel(asUtc(m.created_at))}
+                          </span>
+                        </div>
+                      )}
+                      <div className={"flex " + (mine ? "justify-end" : "justify-start")}>
+                        <button
+                          type="button"
+                          disabled={m.local !== "failed"}
+                          onClick={() => m.local === "failed" && deliver(m.id, m.encrypted_content ?? "")}
                           className={
-                            "mt-1 text-right text-[10px] " +
-                            (mine ? "text-white/70" : "text-white/45")
+                            "max-w-[78%] rounded-[20px] px-4 py-2.5 text-left shadow-[0_2px_8px_rgba(0,0,0,0.18)] disabled:cursor-default " +
+                            (mine
+                              ? "rounded-br-md bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white"
+                              : "rounded-bl-md border border-white/10 bg-white/[0.06] text-[#f4eef0]") +
+                            (m.local === "sending" ? " opacity-70" : "") +
+                            (m.local === "failed" ? " ring-2 ring-amber-300/70" : "")
                           }
                         >
-                          {fmtTime(m.created_at)}
-                        </p>
+                          <p className="whitespace-pre-wrap break-words text-[14px] leading-[1.55]">
+                            {m.encrypted_content ?? ""}
+                          </p>
+                          <p className={"mt-1 flex items-center justify-end gap-1 text-[10px] " + (mine ? "text-white/70" : "text-white/45")}>
+                            {m.local === "sending" ? "Sending…"
+                              : m.local === "failed" ? (<><RotateCw className="h-3 w-3" /> Not sent · tap to retry</>)
+                              : fmtTime(asUtc(m.created_at))}
+                          </p>
+                        </button>
                       </div>
                     </div>
                   );
@@ -319,29 +382,40 @@ export default function ChatPage({ params }: { params: { id: string } }) {
 
           {/* Composer */}
           <div className="relative border-t border-white/10 bg-white/[0.04] px-4 py-3 backdrop-blur sm:px-6">
-            <div className="mx-auto flex max-w-[680px] items-center gap-2">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                placeholder={wsConnected ? "Write a message…" : "Connecting…"}
-                disabled={!wsConnected}
-                className="h-11 flex-1 rounded-2xl border border-white/[0.12] bg-white/[0.05] px-4 text-[14px] text-[#f4eef0] outline-none transition-colors placeholder:text-white/35 focus:border-white/25 disabled:opacity-60"
-              />
-              <button
-                onClick={send}
-                disabled={!input.trim() || !wsConnected || sending}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white shadow-[0_4px_14px_rgba(220,30,60,0.28)] transition-all hover:shadow-[0_8px_20px_rgba(220,30,60,0.38)] disabled:opacity-40 disabled:shadow-none"
-                aria-label="Send"
-              >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </button>
+            <div className="mx-auto max-w-[680px]">
+              {sendError && (
+                <p role="alert" className="mb-2 flex items-start gap-1.5 text-[12px] text-amber-200">
+                  <AlertCircle className="mt-px h-3.5 w-3.5 flex-shrink-0" /> {sendError}
+                </p>
+              )}
+              <div className="flex items-end gap-2">
+                <textarea
+                  rows={1}
+                  value={input}
+                  maxLength={MAX_CHARS}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      send();
+                    }
+                  }}
+                  placeholder={`Message ${other?.first_name ?? ""}…`.replace(" …", "…")}
+                  aria-label="Write a message"
+                  className="max-h-40 min-h-[44px] flex-1 resize-none rounded-2xl border border-white/[0.12] bg-white/[0.05] px-4 py-[11px] text-[14px] leading-[1.45] text-[#f4eef0] outline-none transition-colors [field-sizing:content] placeholder:text-white/35 focus:border-white/25"
+                />
+                <button
+                  onClick={send}
+                  disabled={!input.trim()}
+                  className="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#dc1e3c] to-[#a0153c] text-white shadow-[0_4px_14px_rgba(220,30,60,0.28)] transition-all hover:shadow-[0_8px_20px_rgba(220,30,60,0.38)] disabled:opacity-40 disabled:shadow-none"
+                  aria-label="Send"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              </div>
+              {input.length > MAX_CHARS - 200 && (
+                <p className="mt-1 text-right text-[10.5px] text-white/45">{input.length} / {MAX_CHARS}</p>
+              )}
             </div>
           </div>
         </>
